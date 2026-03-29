@@ -45,21 +45,13 @@ export function Navbar() {
           <Link href="/legislation" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Legislation
           </Link>
-          <Link href="/agents" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Debators
-          </Link>
           <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Pricing
           </Link>
           {user && (
-            <>
-              <Link href="/my-debator" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                My Debator
-              </Link>
-              <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-                Profile
-              </Link>
-            </>
+            <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Profile
+            </Link>
           )}
           {user?.subscription_tier === 'dev' && (
             <Link href="/admin" className="text-sm text-muted-foreground hover:text-foreground transition-colors">

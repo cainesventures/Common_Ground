@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     # Public base URL for sharing links (set this in production)
     app_base_url: str = "http://localhost:8000"
 
+    # Perspectives AI provider (plug-and-play)
+    ai_provider: str = "ollama"              # ollama | claude | openai
+    ai_model: str = "llama3"                 # model name for chosen provider
+    ai_base_url: str = "http://localhost:11434"  # Ollama default; override for others
+    ai_api_key: str = ""                     # blank for Ollama, required for Claude/OpenAI
+
     # Local / Municipal legislation (Legistar/Granicus)
     legistar_api_key: str = ""  # Optional; required by some cities (e.g. NYC)
 

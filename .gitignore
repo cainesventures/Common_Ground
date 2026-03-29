@@ -58,3 +58,4 @@ logs/
 
 # Redis
 dump.rdb
+=0.8.0

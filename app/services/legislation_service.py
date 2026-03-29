@@ -1,5 +1,6 @@
 """Legislation ingestion service."""
 
+import asyncio
 import logging
 from typing import List, Optional
 from datetime import datetime
@@ -112,17 +113,24 @@ class LegislationIngestionService:
         logger.info(f"Ingested {count} bills from {state}")
         return count
     
-    async def ingest_local_legislation(self, city: str, limit: int = 20) -> dict:
+    async def ingest_local_legislation(self, city: str, limit: int = 20, **kwargs) -> dict:
         """
-        Fetch and store local/municipal legislation via the Legistar API.
+        Fetch and store local/municipal legislation.
+
+        For Philadelphia, uses the Playwright scraper (Legistar REST API is IP-restricted).
+        For other cities, uses the Legistar REST API directly.
 
         Args:
-            city:  Legistar client slug (e.g. "Philadelphia", "nyc", "Seattle")
+            city:  Legistar client slug (e.g. "philadelphia", "nyc", "Seattle")
             limit: Number of matters to fetch
 
         Returns:
             Dict with ingested/updated counts and metadata.
         """
+        if city.lower() == "philadelphia":
+            bulk = kwargs.get("bulk", False)
+            return await self._ingest_philadelphia(limit, bulk=bulk)
+
         settings = get_settings()
         client = LegistarClient(api_key=settings.legistar_api_key)
         raw_matters = await client.get_matters(city, limit)
@@ -153,6 +161,74 @@ class LegislationIngestionService:
         self.db.commit()
         logger.info(f"Legistar [{city}]: ingested {ingested} new, updated {updated}")
         return {"ingested": ingested, "updated": updated, "source": "legistar", "city": city}
+
+    async def _ingest_philadelphia(self, limit: int = 20, bulk: bool = False) -> dict:
+        """
+        Scrape Philadelphia City Council bills from phila.legistar.com.
+
+        Two modes:
+        - bulk=True  : Excel export → all ~8,500 bills at once (no detail pages).
+                       Bills stored with title/status/date only; sponsors + full text
+                       fetched later when a bill is analyzed.
+        - bulk=False : Playwright row scrape → up to `limit` bills with full details
+                       (sponsors + PDF full text) fetched immediately.
+        """
+        from app.integrations.legistar_scraper import PhilaLegistarScraper
+        import tempfile, os
+
+        scraper = PhilaLegistarScraper(headless=True)
+        loop = asyncio.get_event_loop()
+
+        if bulk:
+            logger.info("Philadelphia bulk ingest via Excel export ...")
+            tmp = tempfile.mktemp(suffix=".xls")
+            try:
+                await loop.run_in_executor(None, lambda: scraper.export_to_excel(tmp))
+                rows = PhilaLegistarScraper.parse_excel_export(tmp)
+            finally:
+                if os.path.exists(tmp):
+                    os.unlink(tmp)
+
+            # Convert Excel rows to Legislation dicts using scraper's own parser
+            bills = [scraper._parse_row(row) for row in rows]
+        else:
+            logger.info(f"Philadelphia scrape (limit={limit}) ...")
+            fetch_details = limit <= 20
+            bills = await loop.run_in_executor(
+                None, lambda: scraper.scrape_bills(
+                    limit=limit,
+                    fetch_details=fetch_details,
+                    allowed_types=["Bill"],
+                )
+            )
+
+        ingested = 0
+        updated = 0
+
+        for parsed in bills:
+            try:
+                existing = self.db.query(Legislation).filter(
+                    Legislation.id == parsed["id"]
+                ).first()
+
+                if existing:
+                    for key, value in parsed.items():
+                        if value is not None:
+                            setattr(existing, key, value)
+                    existing.updated_at = datetime.utcnow()
+                    updated += 1
+                else:
+                    self.db.add(Legislation(**parsed))
+                    ingested += 1
+
+            except Exception as e:
+                logger.error(f"Error storing Philadelphia bill: {e}")
+                continue
+
+        self.db.commit()
+        logger.info(f"Philadelphia: ingested {ingested} new, updated {updated}")
+        source = "legistar_bulk_excel" if bulk else "legistar_scraper"
+        return {"ingested": ingested, "updated": updated, "source": source, "city": "philadelphia"}
 
     def search_legislation(self, query: str, limit: int = 20, offset: int = 0, level: str = ""):
         """

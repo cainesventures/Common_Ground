@@ -9,8 +9,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.services.legislation_service import LegislationIngestionService
-from app.models import Legislation, LegislationVote
+from app.models import Legislation, LegislationVote, BillPerspective
 from app.auth import require_dev_tier, get_optional_user
+from app.services.perspectives_service import ALL_PERSPECTIVES
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/legislation", tags=["legislation"])
@@ -72,19 +73,18 @@ _CITY_SLUG_RE = re.compile(r"^[a-zA-Z0-9\-]+$")
 @router.post("/ingest/local/{city}")
 async def ingest_local_legislation(
     city: str,
-    limit: int = Query(20, ge=1, le=250, description="Number of matters to fetch"),
+    limit: int = Query(20, ge=1, le=250, description="Number of matters to fetch (ignored when bulk=true)"),
+    bulk: bool = Query(False, description="Philadelphia only: export all ~8500 bills via Excel in one shot"),
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
-    """Fetch and ingest city/municipal legislation via the Legistar API.
+    """Fetch and ingest city/municipal legislation.
 
-    The ``city`` parameter is the Legistar client slug for the municipality, e.g.:
-    - ``Philadelphia`` for Philadelphia, PA
-    - ``nyc`` for New York City
-    - ``Seattle`` for Seattle, WA
+    For Philadelphia, pass ``bulk=true`` to export all ~8,500 bills at once via
+    Excel export (ignores ``limit``). Individual bill analysis (sponsors, full text)
+    is deferred until the Analyze button is clicked per bill.
 
-    Find a city's slug at https://webapi.legistar.com/Help or by visiting
-    https://{city}.legistar.com.
+    For other cities, uses the Legistar REST API with the city slug.
     """
     city = city.strip()
     if not city or len(city) > 50 or not _CITY_SLUG_RE.match(city):
@@ -92,13 +92,13 @@ async def ingest_local_legislation(
             status_code=422,
             detail=(
                 "Invalid city slug. Must be 1–50 alphanumeric characters or hyphens "
-                "(e.g. 'Philadelphia', 'nyc', 'los-angeles')."
+                "(e.g. 'philadelphia', 'nyc', 'los-angeles')."
             ),
         )
 
     try:
         service = LegislationIngestionService(db)
-        result = await service.ingest_local_legislation(city, limit)
+        result = await service.ingest_local_legislation(city, limit, bulk=bulk)
         return {"success": True, **result}
     except Exception as e:
         logger.error(f"Error ingesting local legislation for city={city!r}: {e}")
@@ -309,6 +309,129 @@ async def get_votes(
     }
 
 
+@router.post("/{legislation_id}/analyze")
+async def analyze_legislation(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Trigger AI analysis for a bill: summary, impact score, tags, and 3 base perspectives.
+
+    Sets analyzed_at on success. Idempotent — safe to call multiple times.
+    """
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+
+    try:
+        from app.services.bill_research_service import analyze_bill
+        from app.services.perspectives_service import generate_base_perspectives
+
+        leg = analyze_bill(leg, db)
+        perspectives = generate_base_perspectives(leg, db)
+
+        return {
+            "success": True,
+            "bill_number": leg.bill_number,
+            "summary": leg.summary,
+            "impact_score": leg.impact_score,
+            "impact_level": leg.impact_level,
+            "bill_type": leg.bill_type,
+            "tags": leg.tags,
+            "analyzed_at": leg.analyzed_at,
+            "perspectives_generated": [p.perspective_type for p in perspectives],
+        }
+    except Exception as e:
+        logger.error(f"Error analyzing legislation {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
+
+
+@router.post("/{legislation_id}/perspectives/{perspective_type}")
+async def generate_perspective(
+    legislation_id: str,
+    perspective_type: str,
+    db: Session = Depends(get_db),
+):
+    """Generate (or return cached) a single on-demand perspective for a bill.
+
+    Public endpoint — no auth required. Results are cached after first generation.
+    """
+    if perspective_type not in ALL_PERSPECTIVES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown perspective type. Valid types: {', '.join(ALL_PERSPECTIVES)}",
+        )
+
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+
+    if not leg.analyzed_at:
+        raise HTTPException(
+            status_code=400,
+            detail="Bill must be analyzed first. Use POST /analyze.",
+        )
+
+    try:
+        from app.services.perspectives_service import generate_perspective as _gen
+        persp = _gen(leg, perspective_type, db)
+        if not persp:
+            raise HTTPException(status_code=500, detail="Failed to generate perspective")
+
+        return {
+            "success": True,
+            "perspective_type": persp.perspective_type,
+            "position": persp.position,
+            "key_arguments": persp.key_arguments,
+            "concerns": persp.concerns,
+            "assessment": persp.assessment,
+            "ai_provider": persp.ai_provider,
+            "ai_model": persp.ai_model,
+            "generated_at": persp.generated_at,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error generating {perspective_type} for {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{legislation_id}/perspectives")
+async def get_perspectives(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+):
+    """Get all generated perspectives for a bill."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+
+    perspectives = db.query(BillPerspective).filter(
+        BillPerspective.bill_id == legislation_id
+    ).all()
+
+    generated = {p.perspective_type for p in perspectives}
+    pending = [t for t in ALL_PERSPECTIVES if t not in generated]
+
+    return {
+        "success": True,
+        "bill_id": legislation_id,
+        "analyzed": leg.analyzed_at is not None,
+        "perspectives": [
+            {
+                "perspective_type": p.perspective_type,
+                "position": p.position,
+                "key_arguments": p.key_arguments,
+                "concerns": p.concerns,
+                "assessment": p.assessment,
+                "generated_at": p.generated_at,
+            }
+            for p in perspectives
+        ],
+        "pending_types": pending,
+    }
+
+
 @router.get("/{legislation_id}")
 async def get_legislation(
     legislation_id: str,
@@ -334,6 +457,12 @@ async def get_legislation(
                 "level": leg.level,
                 "introduced_date": leg.introduced_date,
                 "external_url": leg.external_url,
+                "summary": leg.summary,
+                "impact_score": leg.impact_score,
+                "impact_level": leg.impact_level,
+                "bill_type": leg.bill_type,
+                "tags": leg.tags,
+                "analyzed_at": leg.analyzed_at,
             }
         }
     except HTTPException:

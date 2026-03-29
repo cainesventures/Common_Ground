@@ -52,11 +52,23 @@ class Legislation(Base):
     introduced_date = Column(DateTime)
     last_updated = Column(DateTime, default=datetime.utcnow)
     external_url = Column(String)
-    
+
+    # AI analysis fields (populated when "Analyze" is clicked)
+    summary = Column(Text)
+    impact_score = Column(Integer)        # 1-10
+    impact_level = Column(String)         # low / medium / high
+    bill_type = Column(String)            # substantive / ceremonial / procedural
+    supplementary_data = Column(Text)     # JSON — OpenDataPhilly budget/demographics context
+    news_links = Column(Text)             # JSON array of {title, url, source}
+    times_tracked = Column(Integer, default=0)
+    analyzed_at = Column(DateTime)        # NULL = not yet analyzed
+
     # Relationships
     debates = relationship("Debate", back_populates="legislation", cascade="all, delete-orphan")
     votes = relationship("LegislationVote", back_populates="legislation", cascade="all, delete-orphan")
-    
+    perspectives = relationship("BillPerspective", back_populates="legislation", cascade="all, delete-orphan")
+    tracked_by = relationship("BillTracking", back_populates="legislation", cascade="all, delete-orphan")
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -216,6 +228,81 @@ class DebateVideo(Base):
     debate = relationship("Debate", back_populates="videos")
 
 
+class BillPerspective(Base):
+    """AI-generated perspective on a bill from one of 17 viewpoints."""
+    __tablename__ = "bill_perspectives"
+
+    id = Column(String, primary_key=True)
+    bill_id = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
+    perspective_type = Column(String, nullable=False)   # progressive, conservative, etc.
+    position = Column(String)                            # support / oppose / neutral / mixed
+    key_arguments = Column(Text)                         # JSON array of strings
+    concerns = Column(Text)
+    assessment = Column(Text)                            # ~50-word summary
+    ai_provider = Column(String)                         # ollama / claude / openai
+    ai_model = Column(String)
+    generated_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("bill_id", "perspective_type", name="uq_perspective_per_bill"),)
+
+    legislation = relationship("Legislation", back_populates="perspectives")
+
+
+class Councilmember(Base):
+    """Philadelphia City Council member."""
+    __tablename__ = "councilmembers"
+
+    id = Column(String, primary_key=True)
+    name = Column(String, nullable=False)
+    district = Column(String)
+    party = Column(String)
+    email = Column(String)
+    phone = Column(String)
+    bills_sponsored = Column(Integer, default=0)
+    bills_passed = Column(Integer, default=0)
+    legistar_id = Column(Integer, unique=True, nullable=True)
+
+
+class BillTracking(Base):
+    """User tracking (saving) a bill to follow updates."""
+    __tablename__ = "bill_tracking"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    bill_id = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
+    tracked_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "bill_id", name="uq_tracking_per_user"),)
+
+    user = relationship("User", back_populates="tracked_bills")
+    legislation = relationship("Legislation", back_populates="tracked_by")
+
+
+class Donation(Base):
+    """Stripe donation record."""
+    __tablename__ = "donations"
+
+    id = Column(String, primary_key=True)
+    amount = Column(Float)
+    donor_email = Column(String)
+    donation_type = Column(String)          # one-time / monthly
+    stripe_payment_id = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AggregatedDataCache(Base):
+    """Cache for external data (OpenDataPhilly, etc.)."""
+    __tablename__ = "aggregated_data_cache"
+
+    id = Column(String, primary_key=True)
+    source = Column(String, nullable=False)   # e.g. opendataphilly_budget
+    key = Column(String, nullable=False)
+    data = Column(Text)                        # JSON
+    expires_at = Column(DateTime)
+
+    __table_args__ = (UniqueConstraint("source", "key", name="uq_cache_source_key"),)
+
+
 class User(Base):
     """Authenticated human user (Google OAuth)."""
     __tablename__ = "users"
@@ -230,6 +317,7 @@ class User(Base):
     last_login        = Column(DateTime)
 
     votes          = relationship("LegislationVote", back_populates="user")
+    tracked_bills  = relationship("BillTracking", back_populates="user", cascade="all, delete-orphan")
     personal_agent = relationship(
         "Agent",
         back_populates="owner",
