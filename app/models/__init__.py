@@ -54,6 +54,7 @@ class Legislation(Base):
     external_url = Column(String)
 
     # AI analysis fields (populated when "Analyze" is clicked)
+    plain_title = Column(String)          # short human-friendly name, AI-generated
     summary = Column(Text)
     impact_score = Column(Integer)        # 1-10
     impact_level = Column(String)         # low / medium / high
@@ -258,9 +259,13 @@ class Councilmember(Base):
     party = Column(String)
     email = Column(String)
     phone = Column(String)
+    photo_url = Column(String)
+    bio = Column(Text)
+    profile_url = Column(String)
     bills_sponsored = Column(Integer, default=0)
     bills_passed = Column(Integer, default=0)
     legistar_id = Column(Integer, unique=True, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
 
 
 class BillTracking(Base):

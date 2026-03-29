@@ -27,14 +27,49 @@ const IMPACT_COLORS: Record<string, string> = {
   low:    'bg-green-100 text-green-800',
 }
 
+function SponsorLinks({ sponsor, members }: { sponsor: string; members: any[] }) {
+  if (!sponsor) return null
+  // Split multiple sponsors by comma
+  const parts = sponsor.split(',').map((s) => s.trim()).filter(Boolean)
+  return (
+    <p className="text-sm text-muted-foreground mt-1">
+      Sponsor:{' '}
+      {parts.map((part, i) => {
+        // Match by last name
+        const lastName = part.split(' ').pop()?.toLowerCase() ?? ''
+        const match = members.find((m) => m.name.toLowerCase().includes(lastName))
+        return (
+          <span key={i}>
+            {i > 0 && ', '}
+            {match ? (
+              <Link href={`/councilmembers/${match.id}`} className="hover:underline text-foreground">
+                {part}
+              </Link>
+            ) : (
+              part
+            )}
+          </span>
+        )
+      })}
+    </p>
+  )
+}
+
 export default function LegislationPage() {
   const { id } = useParams<{ id: string }>()
   const [leg, setLeg] = useState<any>(null)
+  const [members, setMembers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    api.getLegislation(id)
-      .then((data) => setLeg(data?.data ?? null))
+    Promise.all([
+      api.getLegislation(id),
+      api.getCouncilmembers().catch(() => ({ members: [] })),
+    ])
+      .then(([legData, cmData]) => {
+        setLeg(legData?.data ?? null)
+        setMembers(cmData?.members ?? [])
+      })
       .catch(console.error)
       .finally(() => setLoading(false))
   }, [id])
@@ -77,11 +112,18 @@ export default function LegislationPage() {
           <span className="text-sm text-muted-foreground">{leg.bill_number}</span>
         </div>
 
-        <h1 className="text-2xl font-bold leading-snug">{leg.title}</h1>
+        {leg.plain_title
+          ? <>
+              <h1 className="text-2xl font-bold leading-snug">{leg.plain_title}</h1>
+              <p className="text-xs text-muted-foreground/70 mt-1 leading-snug">
+                <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Official:</span>
+                {leg.title}
+              </p>
+            </>
+          : <h1 className="text-2xl font-bold leading-snug">{leg.title}</h1>
+        }
 
-        {leg.sponsor && (
-          <p className="text-sm text-muted-foreground mt-1">Sponsor: {leg.sponsor}</p>
-        )}
+        {leg.sponsor && <SponsorLinks sponsor={leg.sponsor} members={members} />}
 
         {leg.introduced_date && (
           <p className="text-sm text-muted-foreground">
@@ -108,13 +150,16 @@ export default function LegislationPage() {
 
       {/* Description / full text */}
       {leg.description && !leg.summary && (
-        <p className="text-sm text-muted-foreground leading-relaxed">{leg.description}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          <span className="uppercase tracking-wide font-medium text-[10px] text-muted-foreground/70 mr-1">Description:</span>
+          {leg.description}
+        </p>
       )}
 
       {leg.full_text && leg.full_text !== leg.description && (
         <details>
           <summary className="text-sm font-medium cursor-pointer hover:text-foreground text-muted-foreground select-none">
-            Full bill text ▾
+            Bill Text ▾
           </summary>
           <p className="text-sm text-muted-foreground mt-2 leading-relaxed whitespace-pre-wrap border-l-2 border-muted pl-3">
             {leg.full_text}

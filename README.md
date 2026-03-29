@@ -1,30 +1,34 @@
 # Common Ground — Philadelphia City Council Tracker
 
-A free, citizen-friendly tracker for Philadelphia City Council legislation. Every bill gets a plain-language summary and 17 AI perspectives — Progressive, Conservative, Libertarian, Christian Ethicist, Conspiracy Theorist, and 12 more — so you can understand what different communities and viewpoints actually think about local legislation.
+A free, citizen-friendly tracker for Philadelphia City Council legislation. Every bill gets a plain-language name and summary, 17 AI perspectives, and filterable category tags — so any Philadelphian can understand what their City Council is actually doing.
 
 ## What It Does
 
-- **Browse bills** — search and filter all Philadelphia City Council legislation
-- **Plain-language summaries** — AI explains each bill in terms a high schooler can understand
+- **Browse bills** — search and filter all Philadelphia City Council legislation by keyword, status, impact level, analysis status, and category tag
+- **Plain-English names** — AI rewrites cryptic legal titles into plain language ("Allowing Stairway to Overhang onto Street at 611 South 7th Street" instead of "AN ORDINANCE amending Title 14...")
+- **Plain-language summaries** — AI explains each bill in plain English after analysis
+- **Category tags** — AI assigns category tags (housing, zoning, transportation, budget, etc.) for easy filtering
 - **17 AI perspectives** — Political, Policy, Demographic, and Special viewpoints generated on demand and cached
 - **Impact scoring** — each bill rated 1–10 on how broadly it affects Philadelphians
+- **Council member profiles** — browse all 17 Philadelphia City Council members and their sponsored bills
 - **Vote** — cast Support / Oppose / Neutral on any bill
 
 ## Stack
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 14 (App Router), TailwindCSS, shadcn/ui |
+| Frontend | Next.js 14 (App Router), TailwindCSS, shadcn/ui, TypeScript |
 | Backend | FastAPI (async Python), SQLAlchemy ORM |
 | Database | SQLite (dev) / PostgreSQL (production) |
-| AI | Plug-and-play: Ollama (default), Claude, or OpenAI — set via env vars |
+| AI | Plug-and-play: Ollama (default, free), Claude, or OpenAI — set via env vars |
 | Ingestion | Playwright headless browser scraper (Philadelphia Legistar) |
-| Auth | Google OAuth 2.0 + JWT |
-| Background Tasks | Celery + Redis (optional) |
+| Auth | Google OAuth 2.0 + JWT (dev-only bypass available) |
 
 ---
 
 ## Quick Start
+
+See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
 
 ### Prerequisites
 - Python 3.10+
@@ -34,11 +38,8 @@ A free, citizen-friendly tracker for Philadelphia City Council legislation. Ever
 ### 1. Install dependencies
 
 ```bash
-# Backend
 pip install -r requirements.txt
 playwright install chromium
-
-# Frontend
 cd frontend && npm install
 ```
 
@@ -49,23 +50,18 @@ cp .env.example .env
 ```
 
 Minimum required in `.env`:
-```
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
+```env
+DATABASE_URL=sqlite:///./common_ground.db
 JWT_SECRET=your_random_secret
+ENVIRONMENT=development
 
-# AI provider (defaults to Ollama)
+# AI provider (defaults to Ollama — free, local, private)
 AI_PROVIDER=ollama
-AI_MODEL=llama3
+AI_MODEL=llama3.1:8b
 AI_BASE_URL=http://localhost:11434
 ```
 
-To use Claude instead of Ollama:
-```
-AI_PROVIDER=claude
-AI_MODEL=claude-sonnet-4-6
-AI_API_KEY=your_anthropic_key
-```
+Google OAuth is optional during development — use the **Dev Login** button on the navbar instead.
 
 ### 3. Initialize the database
 
@@ -84,63 +80,48 @@ cd frontend && npm run dev
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000/docs
+- Backend API docs: http://localhost:8000/docs
 
 ---
 
-## Ingesting Philadelphia Bills
+## Admin Panel
 
-Bills are ingested via a Playwright scraper (Philadelphia's Legistar is IP-restricted).
+The admin panel at `/admin` is restricted to users with `subscription_tier = 'dev'`. In development, use the **Dev Login** button on the navbar — it automatically creates and logs in a dev user.
 
-### Small batch (via admin panel)
-1. Log in with Google
-2. Set your user's `subscription_tier = 'dev'` in the DB
-3. Go to **Admin → Local tab**, enter `philadelphia`, click **Ingest Local Bills**
+### Admin actions
 
-### Bulk ingest (all ~8,500 bills)
-Check **Bulk Export** in the admin panel — this uses the Legistar Excel export and imports everything at once. Bills are stored without analysis.
-
-### Via API
-```bash
-# 10 bills (with detail scraping)
-curl -X POST "http://localhost:8000/api/legislation/ingest/local/philadelphia?limit=10" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-
-# All bills via Excel export
-curl -X POST "http://localhost:8000/api/legislation/ingest/local/philadelphia?bulk=true" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
+| Action | Description |
+|--------|-------------|
+| **Ingest Bills** | Scrapes Philadelphia Legistar for new bills. Use **Bulk Export** to import all ~8,500 bills at once. |
+| **Generate Plain Titles** | Uses AI to write a short human-friendly name for each bill |
+| **Auto-Tag Bills** | Uses AI to assign category tags (housing, zoning, budget, etc.) |
+| **Scrape Council Members** | Scrapes phlcouncil.com for all 17 council member profiles |
+| **Analyze Bills** | Per-bill AI analysis: summary, impact score, bill type, and 3 base perspectives |
 
 ---
 
-## Analyzing Bills
+## AI Features
 
-Bills are **not** auto-analyzed on ingest — analysis is triggered manually per bill.
+All AI features use the same plug-and-play provider — switch between Ollama, Claude, or OpenAI via env vars with no code changes.
 
-### Via admin panel
-Go to **Admin → Analyze Bills**, click **Analyze** on any bill. This generates:
+### Plain-English Titles
+Short, human-friendly bill names generated by AI. Shown prominently on cards with the official legal title beneath it labeled `LEGAL TITLE:`.
+
+### Auto-Tagging
+AI assigns 1–3 category tags from a fixed list:
+`housing` · `zoning` · `transportation` · `public safety` · `budget` · `education` · `environment` · `health` · `parks` · `business` · `infrastructure` · `labor` · `technology` · `social services`
+
+Tags appear as filterable pills on the home feed, ordered by frequency.
+
+### Bill Analysis (per bill)
+Triggered from admin. Generates:
 - Plain-language summary
-- Impact score (1–10) and level (low/medium/high)
-- Bill type (substantive/ceremonial/procedural)
-- Topic tags
+- Impact score (1–10) and level (low / medium / high)
+- Bill type (substantive / ceremonial / procedural)
 - 3 base perspectives (Progressive, Conservative, Libertarian)
 
-### Via API
-```bash
-curl -X POST "http://localhost:8000/api/legislation/{id}/analyze" \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
-
-### On-demand perspectives
-The remaining 14 perspectives are generated on demand from the bill detail page (public, no auth required) and cached after first generation:
-
-```bash
-curl -X POST "http://localhost:8000/api/legislation/{id}/perspectives/urban_planning"
-```
-
----
-
-## 17 Perspective Types
+### 17 Perspectives
+Each bill can be viewed through 17 lenses:
 
 | Group | Perspectives |
 |-------|-------------|
@@ -149,18 +130,18 @@ curl -X POST "http://localhost:8000/api/legislation/{id}/perspectives/urban_plan
 | Demographic | working_class, business, youth, elderly, neighborhood |
 | Special | christian_ethicist, conspiracy_theorist |
 
+The 3 base perspectives are generated during analysis. The remaining 14 are generated on demand from the bill detail page and cached.
+
 Each perspective returns: `position` (support/oppose/neutral/mixed), `key_arguments`, `concerns`, and a 50-word `assessment`.
 
 ---
 
 ## AI Provider Configuration
 
-The AI system is fully plug-and-play — no code changes needed to switch providers:
-
 ```env
 # Ollama (default — free, local, private)
 AI_PROVIDER=ollama
-AI_MODEL=llama3
+AI_MODEL=llama3.1:8b
 AI_BASE_URL=http://localhost:11434
 
 # Claude (Anthropic)
@@ -180,13 +161,20 @@ AI_API_KEY=sk-...
 ## Key API Endpoints
 
 ```
-GET  /api/legislation/search?q=...&level=local    Search bills
-GET  /api/legislation/{id}                         Bill detail
-POST /api/legislation/{id}/analyze                 Trigger analysis (dev tier)
-GET  /api/legislation/{id}/perspectives            All perspectives for a bill
-POST /api/legislation/{id}/perspectives/{type}     Generate one perspective
-POST /api/legislation/{id}/vote                    Cast a vote
-GET  /api/legislation/{id}/votes                   Get vote tallies
+GET  /api/legislation/search?q=...&level=local&analyzed=true&tag=housing&impact=high
+GET  /api/legislation/tag-counts            Tag frequency counts for filter pills
+GET  /api/legislation/{id}                  Bill detail
+POST /api/legislation/{id}/analyze          Trigger analysis (dev tier)
+POST /api/legislation/plain-titles          Generate plain titles for all untagged bills (dev tier)
+POST /api/legislation/tag-all              Auto-tag all untagged bills (dev tier)
+GET  /api/legislation/{id}/perspectives     All perspectives for a bill
+POST /api/legislation/{id}/perspectives/{type}  Generate one perspective
+POST /api/legislation/{id}/vote             Cast a vote
+GET  /api/councilmembers                    List all council members
+GET  /api/councilmembers/{id}               Council member detail + sponsored bills
+POST /api/councilmembers/scrape             Scrape phlcouncil.com profiles (dev tier)
+GET  /api/auth/me                           Current user profile
+POST /api/auth/dev-login                    Dev-only login bypass
 ```
 
 Full interactive docs at `http://localhost:8000/docs`.
@@ -197,16 +185,17 @@ Full interactive docs at `http://localhost:8000/docs`.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `GOOGLE_CLIENT_ID` | Yes | Google OAuth |
-| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth |
-| `JWT_SECRET` | Yes | Auth token signing |
+| `DATABASE_URL` | No | Defaults to SQLite |
+| `JWT_SECRET` | Yes | Auth token signing key |
+| `ENVIRONMENT` | No | `development` (default) or `production` |
 | `AI_PROVIDER` | No | `ollama` (default), `claude`, `openai` |
-| `AI_MODEL` | No | Model name (default: `llama3`) |
+| `AI_MODEL` | No | Model name (e.g. `llama3.1:8b`) |
 | `AI_BASE_URL` | No | Provider base URL |
 | `AI_API_KEY` | No | API key (blank for Ollama) |
-| `DATABASE_URL` | No | Defaults to SQLite |
-| `CONGRESS_API_KEY` | No | Federal bill ingestion |
-| `OPENSTATES_API_KEY` | No | State bill ingestion |
+| `GOOGLE_CLIENT_ID` | Prod only | Google OAuth |
+| `GOOGLE_CLIENT_SECRET` | Prod only | Google OAuth |
+| `FRONTEND_URL` | Prod only | Public frontend URL |
+| `APP_URL` | Prod only | Public backend URL |
 | `REDIS_URL` | No | Required for Celery background tasks |
 
 ---
@@ -216,36 +205,38 @@ Full interactive docs at `http://localhost:8000/docs`.
 ```
 Common_Ground/
 ├── app/
-│   ├── api/                  # FastAPI route handlers
-│   │   ├── legislation_routes.py
-│   │   └── auth_routes.py
+│   ├── api/
+│   │   ├── legislation_routes.py     # Bill CRUD, search, analyze, perspectives, voting
+│   │   ├── councilmember_routes.py   # Council member profiles
+│   │   └── auth_routes.py            # Google OAuth + dev login
 │   ├── integrations/
-│   │   ├── legistar.py             # Legistar REST client (non-Philly cities)
-│   │   └── legistar_scraper.py     # Playwright scraper (Philadelphia)
-│   ├── models/               # SQLAlchemy ORM models
+│   │   ├── legistar.py               # Legistar REST client (non-Philly cities)
+│   │   └── legistar_scraper.py       # Playwright scraper (Philadelphia)
+│   ├── models/
+│   │   └── __init__.py               # SQLAlchemy ORM models
 │   ├── services/
-│   │   ├── ai_provider.py          # Plug-and-play AI abstraction
-│   │   ├── bill_research_service.py  # Summary + impact analysis
-│   │   ├── legislation_service.py    # Ingestion orchestration
-│   │   └── perspectives_service.py  # 17 perspective prompts + generation
-│   ├── auth.py               # JWT + tier enforcement
-│   ├── config.py             # Pydantic settings
-│   └── celery_app.py         # Celery config
+│   │   ├── ai_provider.py            # Plug-and-play AI abstraction
+│   │   ├── bill_research_service.py  # Summary, impact, tags analysis
+│   │   ├── legislation_service.py    # Ingestion, search, auto-tagging
+│   │   ├── perspectives_service.py   # 17 perspective prompts + generation
+│   │   └── councilmember_service.py  # Playwright scraper for phlcouncil.com
+│   ├── auth.py                       # JWT + tier enforcement
+│   └── config.py                     # Pydantic settings
 ├── frontend/
-│   ├── app/                  # Next.js pages (App Router)
-│   │   ├── page.tsx          # Home — bill feed
-│   │   ├── legislation/[id]/ # Bill detail + perspectives
-│   │   └── admin/            # Ingestion + analyze panel
+│   ├── app/
+│   │   ├── page.tsx                  # Home — bill feed with filters
+│   │   ├── legislation/[id]/         # Bill detail + perspectives panel
+│   │   ├── councilmembers/           # Council member list + detail pages
+│   │   └── admin/                    # Ingest, analyze, tag, scrape panel
 │   ├── components/
-│   │   ├── PerspectivesPanel.tsx
-│   │   └── Navbar.tsx
+│   │   ├── Navbar.tsx
+│   │   └── PerspectivesPanel.tsx
 │   └── lib/
-│       ├── api.ts            # API client
-│       └── auth.ts           # JWT helpers
-├── alembic/                  # Database migrations
-├── main.py                   # FastAPI entry point
-├── requirements.txt
-└── .env.example
+│       ├── api.ts                    # Typed API client
+│       └── auth.ts                   # JWT helpers
+├── alembic/                          # Database migrations
+├── main.py                           # FastAPI entry point
+└── .env
 ```
 
 ---
@@ -254,9 +245,10 @@ Common_Ground/
 
 - [ ] Set `DATABASE_URL` to PostgreSQL
 - [ ] Set `ENVIRONMENT=production` and `DEBUG=false`
-- [ ] Set `APP_BASE_URL`, `APP_URL`, `FRONTEND_URL` to your public domains
-- [ ] Set a strong random `JWT_SECRET`
+- [ ] Set `APP_URL`, `FRONTEND_URL` to your public domains
+- [ ] Generate a strong `JWT_SECRET` (`python -c "import secrets; print(secrets.token_hex(32))"`)
 - [ ] Configure `AI_PROVIDER` and `AI_API_KEY` for production model
 - [ ] Run `alembic upgrade head` against production DB
+- [ ] Set up Google OAuth and add redirect URI to Google Cloud Console
 - [ ] Set at least one user's `subscription_tier = 'dev'` in the DB
-- [ ] Configure Google OAuth redirect URI to match `APP_URL`
+- [ ] Set up HTTPS on frontend and backend

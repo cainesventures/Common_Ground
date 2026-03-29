@@ -13,6 +13,57 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+CATEGORY_TAGS = [
+    "housing", "zoning", "transportation", "public safety", "budget",
+    "education", "environment", "health", "parks", "business",
+    "infrastructure", "labor", "technology", "social services",
+]
+
+
+def _ai_plain_title(bill, provider) -> str:
+    """Ask the AI for a short, plain-English name for a bill (max ~8 words)."""
+    text = bill.title or ""
+    if bill.description:
+        text += "\n" + bill.description[:400]
+
+    system = (
+        "You rename city council bills in plain English for everyday citizens. "
+        "Given the official bill title and description, write a SHORT human-friendly name "
+        "(5-10 words max, no jargon, no bill numbers). "
+        "Respond with ONLY the plain-English name, nothing else."
+    )
+    try:
+        result = provider.complete(system_prompt=system, user_prompt=text)
+        # Strip quotes, newlines, leading/trailing whitespace
+        return result.strip().strip('"\'').strip()[:120]
+    except Exception as e:
+        logger.warning(f"Plain title failed for bill {bill.id}: {e}")
+    return ""
+
+
+def _ai_tag_bill(bill, provider) -> list:
+    """Call the AI provider to assign 1-3 category tags to a bill."""
+    import json, re
+    text = (bill.title or "")
+    if bill.description:
+        text += "\n" + bill.description[:600]
+
+    system = (
+        "You categorize city council bills. "
+        f"Pick 1-3 tags from this exact list only: {', '.join(CATEGORY_TAGS)}. "
+        'Respond with ONLY a JSON array like ["housing"] or ["budget", "infrastructure"]. '
+        "No explanation, no other text."
+    )
+    try:
+        response = provider.complete(system_prompt=system, user_prompt=text)
+        match = re.search(r"\[.*?\]", response, re.DOTALL)
+        if match:
+            tags = json.loads(match.group())
+            return [t for t in tags if t in CATEGORY_TAGS][:3]
+    except Exception as e:
+        logger.warning(f"Auto-tag failed for bill {bill.id}: {e}")
+    return []
+
 
 class LegislationIngestionService:
     """Service for fetching and storing legislation from multiple sources."""
@@ -230,19 +281,17 @@ class LegislationIngestionService:
         source = "legistar_bulk_excel" if bulk else "legistar_scraper"
         return {"ingested": ingested, "updated": updated, "source": source, "city": "philadelphia"}
 
-    def search_legislation(self, query: str, limit: int = 20, offset: int = 0, level: str = ""):
-        """
-        Search for legislation by title or bill number.
-
-        Args:
-            query: Search query
-            limit: Maximum number of results
-            offset: Number of results to skip
-            level: Filter by level (federal, state, local)
-
-        Returns:
-            Tuple of (results list, total count)
-        """
+    def search_legislation(
+        self,
+        query: str,
+        limit: int = 20,
+        offset: int = 0,
+        level: str = "",
+        analyzed: Optional[bool] = None,
+        tag: str = "",
+        impact: str = "",
+    ):
+        """Search for legislation with optional filters."""
         base_query = self.db.query(Legislation)
         if query:
             base_query = base_query.filter(
@@ -251,6 +300,76 @@ class LegislationIngestionService:
             )
         if level:
             base_query = base_query.filter(Legislation.level == level)
+        if analyzed is True:
+            base_query = base_query.filter(Legislation.analyzed_at.isnot(None))
+        elif analyzed is False:
+            base_query = base_query.filter(Legislation.analyzed_at.is_(None))
+        if tag:
+            base_query = base_query.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+        if impact:
+            base_query = base_query.filter(Legislation.impact_level == impact)
         total = base_query.count()
-        results = base_query.offset(offset).limit(limit).all()
+        results = (
+            base_query
+            .order_by(Legislation.introduced_date.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         return results, total
+
+    def tag_untagged_bills(self) -> dict:
+        """Use AI to assign category tags to all bills that have none."""
+        import json
+
+        untagged = (
+            self.db.query(Legislation)
+            .filter(
+                (Legislation.tags.is_(None))
+                | (Legislation.tags == "")
+                | (Legislation.tags == "[]")
+            )
+            .all()
+        )
+        if not untagged:
+            return {"tagged": 0, "total": 0}
+
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+        tagged = 0
+
+        for bill in untagged:
+            tags = _ai_tag_bill(bill, provider)
+            if tags:
+                bill.tags = json.dumps(tags)
+                tagged += 1
+
+        self.db.commit()
+        logger.info(f"Auto-tagged {tagged}/{len(untagged)} bills")
+        return {"tagged": tagged, "total": len(untagged)}
+
+    def generate_plain_titles(self) -> dict:
+        """Use AI to generate plain-English names for bills that don't have one yet."""
+        untitled = (
+            self.db.query(Legislation)
+            .filter(
+                (Legislation.plain_title.is_(None)) | (Legislation.plain_title == "")
+            )
+            .all()
+        )
+        if not untitled:
+            return {"generated": 0, "total": 0}
+
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+        generated = 0
+
+        for bill in untitled:
+            plain = _ai_plain_title(bill, provider)
+            if plain:
+                bill.plain_title = plain
+                generated += 1
+
+        self.db.commit()
+        logger.info(f"Generated plain titles for {generated}/{len(untitled)} bills")
+        return {"generated": generated, "total": len(untitled)}

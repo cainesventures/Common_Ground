@@ -20,7 +20,7 @@ pip install -r requirements.txt
 playwright install chromium   # headless browser for Legistar scraper
 
 # Frontend
-cd frontend && npm install
+cd frontend && npm install && cd ..
 ```
 
 ---
@@ -31,16 +31,17 @@ cd frontend && npm install
 cp .env.example .env
 ```
 
-Edit `.env` — minimum required:
+Edit `.env` — minimum required for local dev:
 
 ```env
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
+DATABASE_URL=sqlite:///./common_ground.db
 JWT_SECRET=some_random_string_here
+ENVIRONMENT=development
+DEBUG=true
 
 # AI (defaults to Ollama — free and local)
 AI_PROVIDER=ollama
-AI_MODEL=llama3
+AI_MODEL=llama3.1:8b
 AI_BASE_URL=http://localhost:11434
 ```
 
@@ -48,6 +49,8 @@ Generate a random JWT secret:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+> **Google OAuth is not required for local development.** Use the **Dev Login** button on the navbar instead. See the production checklist in README.md when you're ready to go live.
 
 See `LOCAL_AI_SETUP.md` for Ollama setup, or switch to Claude/OpenAI — see README for provider config.
 
@@ -74,63 +77,65 @@ cd frontend && npm run dev
 - **Frontend:** http://localhost:3000
 - **API docs:** http://localhost:8000/docs
 
+Or use the restart script (Windows):
+```bash
+powershell.exe -ExecutionPolicy Bypass -File restart.ps1
+```
+
 ---
 
 ## 5. First run walkthrough
 
-### Give yourself dev access
-After signing in with Google, set your account to dev tier in the DB:
+### Log in
+Click **Dev Login** on the navbar. This creates a dev user with full admin access — no Google OAuth required.
 
-```bash
-python -c "
-from app.models.database import SessionLocal
-from app.models import User
-db = SessionLocal()
-u = db.query(User).first()
-u.subscription_tier = 'dev'
-db.commit()
-print('Done:', u.email)
-db.close()
-"
-```
-
-### Ingest some bills
+### Ingest bills
 1. Go to **http://localhost:3000/admin**
-2. Click the **Local** tab
-3. City: `philadelphia`, Limit: `5`
-4. Click **Ingest Local Bills**
+2. Set **Limit** to `10` and click **Ingest Bills**
 
-The Playwright scraper will open a headless browser, navigate to phila.legistar.com, filter to Type=Bill, and import 5 real Philadelphia ordinances.
+The Playwright scraper opens a headless browser, navigates to phila.legistar.com, and imports 10 real Philadelphia ordinances. For all ~8,500 bills, check **Bulk Export** instead.
+
+### Generate plain titles
+Click **Generate Plain Titles** in the admin panel. Ollama reads each bill's title and description and writes a short, human-friendly name (e.g. "City Agrees to Buy Electricity and Fuel for a Few Years").
+
+### Auto-tag bills
+Click **Tag Untagged Bills**. Ollama assigns 1–3 category tags (housing, zoning, budget, etc.) to each bill. Tags appear as filterable pills on the home feed.
 
 ### Analyze a bill
-Once bills appear in the **Analyze Bills** section at the top of the admin page:
-1. Click **Analyze** on any bill
-2. This calls the AI to generate a plain-language summary, impact score, and 3 base perspectives
+In the **Analyze Bills** section, click **Analyze** on any bill. This generates:
+- Plain-language summary
+- Impact score (1–10) and level (low/medium/high)
+- Bill type (substantive/ceremonial/procedural)
+- 3 base perspectives (Progressive, Conservative, Libertarian)
 
-You need Ollama running with a model pulled (`ollama pull llama3`) for this step. Or set `AI_PROVIDER=claude` with your API key.
+### View bills
+Go to **http://localhost:3000** — bills appear as a list with plain titles, category tags, and status badges. Click any bill for the full detail page including perspectives.
 
-### View a bill
-Go to **http://localhost:3000** — click any bill to see the detail page with summary, impact badges, and the perspectives panel.
+### Scrape council members (optional)
+Click **Scrape Council Members** in the admin panel. Playwright scrapes all 17 council member profiles from phlcouncil.com (~2 minutes). Council members then appear at `/councilmembers` and their names link from bill detail pages.
 
 ---
 
-## 6. Bulk ingest (optional)
+## 6. Bulk ingest
 
-To pull all ~8,500 Philadelphia bills at once via Excel export:
-- In admin, check **Bulk Export** and click **Ingest Local Bills**
-- Takes 2–3 minutes; bills land in DB without analysis
-- Analyze them individually as needed
+To pull all ~8,500 Philadelphia bills at once:
+1. In admin, check **Bulk Export** and click **Ingest Bills**
+2. Takes 2–3 minutes; bills are stored without analysis
+3. Run **Generate Plain Titles** and **Tag Untagged Bills** to process them
+4. Analyze individually as needed
 
 ---
 
 ## 7. Troubleshooting
 
-**"No module named 'app'"** — run commands from the `Common_Ground/` root directory.
+**"No module named 'app'"** — run all commands from the `Common_Ground/` root directory.
 
 **Playwright timeout on Legistar** — Legistar can be slow. The scraper has a 60s timeout. Try again; it's usually a transient load issue.
 
-**AI returns empty response** — check Ollama is running (`ollama serve`) and the model is pulled (`ollama list`). Or verify your `AI_API_KEY` if using Claude/OpenAI.
+**AI returns empty response** — check Ollama is running (`ollama serve`) and the model is pulled (`ollama list`). Verify the model name in `.env` matches exactly (e.g. `llama3.1:8b` not `llama3`).
 
-**Google OAuth redirect mismatch** — ensure `APP_URL=http://localhost:8000` and your Google Cloud Console has `http://localhost:8000/api/auth/google/callback` as an authorized redirect URI.
+**Tags/plain titles not appearing** — run **Tag Untagged Bills** and **Generate Plain Titles** from the admin panel after ingesting bills.
 
 **Frontend build errors** — run `cd frontend && npm install` to ensure dependencies are up to date.
+
+**Admin panel redirects to home** — you must be logged in as a dev user. Click **Dev Login** on the navbar.

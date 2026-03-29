@@ -166,6 +166,44 @@ async def google_callback(
     }
 
 
+@router.post("/dev-login")
+async def dev_login(db: Session = Depends(get_db)):
+    """Dev-only login — returns a JWT for the dev user without OAuth.
+
+    Only works when ENVIRONMENT=development. Disabled in production.
+    """
+    settings = get_settings()
+    if settings.environment != "development":
+        raise HTTPException(status_code=404, detail="Not found")
+
+    user = db.query(User).filter(User.email == "dev@localhost").first()
+    if not user:
+        user = User(
+            id="user_dev",
+            google_id="dev",
+            email="dev@localhost",
+            display_name="Dev User",
+            subscription_tier="dev",
+            last_login=datetime.utcnow(),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    jwt_token = create_access_token(user.id)
+    return {
+        "success": True,
+        "access_token": jwt_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "subscription_tier": user.subscription_tier,
+        },
+    }
+
+
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""

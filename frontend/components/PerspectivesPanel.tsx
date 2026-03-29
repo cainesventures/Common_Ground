@@ -129,8 +129,7 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
   if (!analyzed) {
     return (
       <div className="border rounded-lg p-5 text-center text-sm text-muted-foreground">
-        This bill hasn&apos;t been analyzed yet. An admin can click Analyze in the{' '}
-        <a href="/admin" className="underline hover:no-underline">admin panel</a>.
+        This bill hasn&apos;t been analyzed yet. Perspectives will appear here once an admin runs analysis.
       </div>
     )
   }

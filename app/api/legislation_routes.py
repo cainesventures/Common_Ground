@@ -3,6 +3,7 @@
 import logging
 import re
 import uuid as _uuid
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
@@ -15,6 +16,32 @@ from app.services.perspectives_service import ALL_PERSPECTIVES
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/legislation", tags=["legislation"])
+
+_GENERIC_DESCRIPTIONS = {'bill', 'ordinance', 'resolution', 'motion', 'order', ''}
+
+def _display_description(leg) -> str | None:
+    """Return the best available short description for a bill card."""
+    if leg.description and leg.description.strip().lower() not in _GENERIC_DESCRIPTIONS:
+        return leg.description
+    if leg.full_text:
+        text = leg.full_text
+        # Skip boilerplate up to "Tally", then skip the title duplicate
+        idx = text.lower().find("tally")
+        if idx != -1:
+            text = text[idx + len("tally"):]
+            # After Tally, the title is repeated — jump to the first WHEREAS/SECTION/BE IT
+            for marker in ("WHEREAS", "SECTION", "BE IT"):
+                m = text.find(marker)
+                if m != -1:
+                    text = text[m:]
+                    break
+            else:
+                # No known marker found — skip first paragraph as fallback
+                para_end = text.find("\n\n")
+                if para_end != -1:
+                    text = text[para_end:].lstrip()
+        return text[:300].strip() or None
+    return None
 
 VALID_STATES = {
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -132,18 +159,57 @@ async def list_legislation(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.get("/tag-counts")
+async def get_tag_counts(db: Session = Depends(get_db)):
+    """Return all tags that exist in the DB with their bill counts, sorted by count desc."""
+    import json
+    from collections import Counter
+
+    rows = db.query(Legislation.tags).filter(
+        Legislation.tags.isnot(None),
+        Legislation.tags != "",
+        Legislation.tags != "[]",
+    ).all()
+
+    counter: Counter = Counter()
+    for (tags_json,) in rows:
+        try:
+            tags = json.loads(tags_json)
+            if isinstance(tags, list):
+                for t in tags:
+                    if isinstance(t, str) and t:
+                        counter[t] += 1
+        except Exception:
+            pass
+
+    return {
+        "tags": [{"tag": tag, "count": count} for tag, count in counter.most_common()]
+    }
+
+
 @router.get("/search")
 async def search_legislation(
-    q: str = Query('', max_length=200, description="Search query — omit or leave blank to list all"),
-    limit: int = Query(20, ge=1, le=100, description="Max results to return"),
-    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    q: str = Query('', max_length=200),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     level: str = Query("", max_length=20),
+    analyzed: str = Query("", description="Filter: 'true' = analyzed, 'false' = pending, '' = all"),
+    tag: str = Query("", max_length=60),
+    impact: str = Query("", max_length=20),
     db: Session = Depends(get_db)
 ):
-    """Search for legislation by title or bill number."""
+    """Search for legislation with optional filters."""
     try:
+        analyzed_filter: Optional[bool] = None
+        if analyzed == "true":
+            analyzed_filter = True
+        elif analyzed == "false":
+            analyzed_filter = False
+
         service = LegislationIngestionService(db)
-        results, total = service.search_legislation(q, limit=limit, offset=offset, level=level)
+        results, total = service.search_legislation(
+            q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact
+        )
         return {
             "success": True,
             "total": total,
@@ -154,9 +220,17 @@ async def search_legislation(
                     "id": leg.id,
                     "bill_number": leg.bill_number,
                     "title": leg.title,
+                    "plain_title": leg.plain_title,
                     "source": leg.source,
                     "status": leg.status,
                     "level": leg.level,
+                    "tags": leg.tags,
+                    "description": _display_description(leg),
+                    "summary": leg.summary,
+                    "impact_level": leg.impact_level,
+                    "impact_score": leg.impact_score,
+                    "bill_type": leg.bill_type,
+                    "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None,
                 }
                 for leg in results
             ]
@@ -164,6 +238,36 @@ async def search_legislation(
     except Exception as e:
         logger.error(f"Error searching legislation (q={q!r}): {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/plain-titles")
+async def generate_plain_titles(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Generate plain-English names for all bills that don't have one."""
+    try:
+        service = LegislationIngestionService(db)
+        result = service.generate_plain_titles()
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Error generating plain titles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tag-all")
+async def tag_all_bills(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Auto-tag all untagged bills using AI."""
+    try:
+        service = LegislationIngestionService(db)
+        result = service.tag_untagged_bills()
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Error auto-tagging bills: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class VoteRequest(BaseModel):
@@ -457,6 +561,7 @@ async def get_legislation(
                 "level": leg.level,
                 "introduced_date": leg.introduced_date,
                 "external_url": leg.external_url,
+                "plain_title": leg.plain_title,
                 "summary": leg.summary,
                 "impact_score": leg.impact_score,
                 "impact_level": leg.impact_level,

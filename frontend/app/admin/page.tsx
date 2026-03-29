@@ -6,15 +6,6 @@ import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
-  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
-]
-
-type Tab = 'federal' | 'state' | 'local'
 
 interface Result {
   ok: boolean
@@ -27,32 +18,32 @@ interface Bill {
   title: string
   level: string
   status: string
+  analyzed_at?: string
 }
 
 export default function AdminPage() {
   const router = useRouter()
   const [authorized, setAuthorized] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<Tab>('federal')
 
-  // Federal form
-  const [congress, setCongress] = useState('118')
-  const [federalLimit, setFederalLimit] = useState('1')
-  const [federalRunning, setFederalRunning] = useState(false)
-  const [federalResult, setFederalResult] = useState<Result | null>(null)
-
-  // State form
-  const [stateVal, setStateVal] = useState('PA')
-  const [stateLimit, setStateLimit] = useState('1')
-  const [stateRunning, setStateRunning] = useState(false)
-  const [stateResult, setStateResult] = useState<Result | null>(null)
-
-  // Local form
+  // Local ingest form
   const [city, setCity] = useState('philadelphia')
   const [localLimit, setLocalLimit] = useState('5')
   const [localBulk, setLocalBulk] = useState(false)
   const [localRunning, setLocalRunning] = useState(false)
   const [localResult, setLocalResult] = useState<Result | null>(null)
+
+  // Council members scrape
+  const [scrapeRunning, setScrapeRunning] = useState(false)
+  const [scrapeResult, setScrapeResult] = useState<Result | null>(null)
+
+  // Auto-tag
+  const [tagRunning, setTagRunning] = useState(false)
+  const [tagResult, setTagResult] = useState<Result | null>(null)
+
+  // Plain titles
+  const [plainTitleRunning, setPlainTitleRunning] = useState(false)
+  const [plainTitleResult, setPlainTitleResult] = useState<Result | null>(null)
 
   // Analyze queue
   const [bills, setBills] = useState<Bill[]>([])
@@ -81,7 +72,7 @@ export default function AdminPage() {
   const loadBills = useCallback(async () => {
     setBillsLoading(true)
     try {
-      const data = await api.listLegislation(50, 0)
+      const data = await api.searchLegislation('', 100, 0, 'local')
       setBills(data?.results ?? [])
       setBillsTotal(data?.total ?? 0)
     } catch {
@@ -95,39 +86,8 @@ export default function AdminPage() {
     if (authorized) loadBills()
   }, [authorized, loadBills])
 
-  const ingestFederal = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setFederalRunning(true)
-    setFederalResult(null)
-    try {
-      const data = await api.ingestFederal(Number(congress), Number(federalLimit))
-      setFederalResult({ ok: true, message: `Ingested ${data?.bills_ingested ?? 0} federal bills from Congress ${congress}.` })
-      loadBills()
-    } catch (err: any) {
-      setFederalResult({ ok: false, message: err.message })
-    } finally {
-      setFederalRunning(false)
-    }
-  }
-
-  const ingestState = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setStateRunning(true)
-    setStateResult(null)
-    try {
-      const data = await api.ingestState(stateVal, Number(stateLimit))
-      setStateResult({ ok: true, message: `Ingested ${data?.bills_ingested ?? 0} bills from ${stateVal}.` })
-      loadBills()
-    } catch (err: any) {
-      setStateResult({ ok: false, message: err.message })
-    } finally {
-      setStateRunning(false)
-    }
-  }
-
   const ingestLocal = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!city.trim()) return
     setLocalRunning(true)
     setLocalResult(null)
     try {
@@ -167,11 +127,6 @@ export default function AdminPage() {
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
   if (!authorized) return null
 
-  const tabClass = (t: Tab) =>
-    `px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-      tab === t ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
-    }`
-
   return (
     <div className="max-w-2xl space-y-8">
       <div>
@@ -179,6 +134,109 @@ export default function AdminPage() {
         <p className="text-muted-foreground mt-1">
           Ingest bills from external sources and trigger AI analysis.
         </p>
+      </div>
+
+      {/* ── Council Members ─────────────────────────────────────── */}
+      <div className="border rounded-lg p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Council Members</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Scrape all 17 current Philadelphia City Council member profiles from phlcouncil.com.
+            Takes ~2 minutes. Safe to re-run — upserts existing records.
+          </p>
+        </div>
+        {scrapeResult && (
+          <p className={`text-sm ${scrapeResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+            {scrapeResult.message}
+          </p>
+        )}
+        <Button
+          variant="outline"
+          disabled={scrapeRunning}
+          onClick={async () => {
+            setScrapeRunning(true)
+            setScrapeResult(null)
+            try {
+              const data = await api.scrapeCouncilmembers()
+              setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
+            } catch (err: any) {
+              setScrapeResult({ ok: false, message: err.message })
+            } finally {
+              setScrapeRunning(false)
+            }
+          }}
+        >
+          {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
+        </Button>
+      </div>
+
+      {/* ── Plain English Titles ────────────────────────────────── */}
+      <div className="border rounded-lg p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Plain English Titles</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Uses Ollama to generate a short, human-friendly name for each bill that doesn&apos;t have one yet.
+            Shown prominently on the home feed above the official title.
+          </p>
+        </div>
+        {plainTitleResult && (
+          <p className={`text-sm ${plainTitleResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+            {plainTitleResult.message}
+          </p>
+        )}
+        <Button
+          variant="outline"
+          disabled={plainTitleRunning}
+          onClick={async () => {
+            setPlainTitleRunning(true)
+            setPlainTitleResult(null)
+            try {
+              const data = await api.generatePlainTitles()
+              setPlainTitleResult({ ok: true, message: `Generated plain titles for ${data?.generated ?? 0} of ${data?.total ?? 0} bills.` })
+            } catch (err: any) {
+              setPlainTitleResult({ ok: false, message: err.message })
+            } finally {
+              setPlainTitleRunning(false)
+            }
+          }}
+        >
+          {plainTitleRunning ? 'Generating…' : 'Generate Plain Titles'}
+        </Button>
+      </div>
+
+      {/* ── Auto-Tag Bills ──────────────────────────────────────── */}
+      <div className="border rounded-lg p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Auto-Tag Bills</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Uses Ollama to assign category tags (housing, transportation, budget, etc.) to all
+            bills that don&apos;t have tags yet. Tags appear as filterable pills on the home feed.
+          </p>
+        </div>
+        {tagResult && (
+          <p className={`text-sm ${tagResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+            {tagResult.message}
+          </p>
+        )}
+        <Button
+          variant="outline"
+          disabled={tagRunning}
+          onClick={async () => {
+            setTagRunning(true)
+            setTagResult(null)
+            try {
+              const data = await api.tagAllBills()
+              setTagResult({ ok: true, message: `Tagged ${data?.tagged ?? 0} of ${data?.total ?? 0} untagged bills.` })
+              loadBills()
+            } catch (err: any) {
+              setTagResult({ ok: false, message: err.message })
+            } finally {
+              setTagRunning(false)
+            }
+          }}
+        >
+          {tagRunning ? 'Tagging…' : 'Tag Untagged Bills'}
+        </Button>
       </div>
 
       {/* ── Analyze Bills ───────────────────────────────────────── */}
@@ -215,8 +273,12 @@ export default function AdminPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                    {bill.level}
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                    bill.analyzed_at
+                      ? 'bg-green-100 text-green-700'
+                      : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {bill.analyzed_at ? 'Analyzed' : 'Pending'}
                   </span>
                   <Button
                     size="sm"
@@ -224,7 +286,7 @@ export default function AdminPage() {
                     onClick={() => analyzeBill(bill)}
                     disabled={isAnalyzing || analyzingId !== null}
                   >
-                    {isAnalyzing ? 'Analyzing…' : 'Analyze'}
+                    {isAnalyzing ? 'Analyzing…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
                   </Button>
                 </div>
               </div>
@@ -234,145 +296,41 @@ export default function AdminPage() {
       </div>
 
       {/* ── Legislation Ingestion ────────────────────────────────── */}
-      <div>
-        <h2 className="font-semibold mb-1">Legislation Ingestion</h2>
-        <p className="text-sm text-muted-foreground mb-4">
-          Pull bills from external sources into the database.
-        </p>
-
-        {/* Tabs */}
-        <div className="flex border-b mb-4">
-          <button className={tabClass('federal')} onClick={() => setTab('federal')}>Federal</button>
-          <button className={tabClass('state')} onClick={() => setTab('state')}>State</button>
-          <button className={tabClass('local')} onClick={() => setTab('local')}>Local</button>
+      <div className="border rounded-lg p-4 space-y-4">
+        <div>
+          <h2 className="font-semibold">Ingest Philadelphia Bills</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Fetch bills from Legistar. Enable <strong>Bulk Export</strong> to import all ~8,500 bills at once via Excel export.
+          </p>
         </div>
-
-        {/* Federal */}
-        {tab === 'federal' && (
-          <form onSubmit={ingestFederal} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Fetches bills from <strong>Congress.gov</strong>. Requires <code className="text-xs bg-muted px-1 rounded">CONGRESS_API_KEY</code>.
+        <form onSubmit={ingestLocal} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Limit <span className="text-muted-foreground">(ignored for bulk)</span></label>
+            <input
+              type="number" min={1} max={250}
+              value={localLimit}
+              onChange={(e) => setLocalLimit(e.target.value)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+          </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={localBulk}
+              onChange={(e) => setLocalBulk(e.target.checked)}
+              className="rounded border-input"
+            />
+            <span>Bulk export — exports all bills via Excel, ignores limit</span>
+          </label>
+          {localResult && (
+            <p className={`text-sm ${localResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+              {localResult.message}
             </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Congress number</label>
-                <select
-                  value={congress}
-                  onChange={(e) => setCongress(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {[119, 118, 117, 116].map((n) => (
-                    <option key={n} value={String(n)}>{n}th Congress</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Limit</label>
-                <input
-                  type="number" min={1} max={100}
-                  value={federalLimit}
-                  onChange={(e) => setFederalLimit(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-            </div>
-            {federalResult && (
-              <p className={`text-sm ${federalResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-                {federalResult.message}
-              </p>
-            )}
-            <Button type="submit" disabled={federalRunning}>
-              {federalRunning ? 'Ingesting…' : 'Ingest Federal Bills'}
-            </Button>
-          </form>
-        )}
-
-        {/* State */}
-        {tab === 'state' && (
-          <form onSubmit={ingestState} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Fetches bills from <strong>OpenStates</strong>. Requires <code className="text-xs bg-muted px-1 rounded">OPENSTATES_API_KEY</code>.
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">State</label>
-                <select
-                  value={stateVal}
-                  onChange={(e) => setStateVal(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {US_STATES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Limit</label>
-                <input
-                  type="number" min={1} max={100}
-                  value={stateLimit}
-                  onChange={(e) => setStateLimit(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-            </div>
-            {stateResult && (
-              <p className={`text-sm ${stateResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-                {stateResult.message}
-              </p>
-            )}
-            <Button type="submit" disabled={stateRunning}>
-              {stateRunning ? 'Ingesting…' : `Ingest ${stateVal} Bills`}
-            </Button>
-          </form>
-        )}
-
-        {/* Local */}
-        {tab === 'local' && (
-          <form onSubmit={ingestLocal} className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Fetches items from <strong>Legistar</strong>. Use the city slug (e.g. <code className="text-xs bg-muted px-1 rounded">philadelphia</code>, <code className="text-xs bg-muted px-1 rounded">nyc</code>).
-              For Philadelphia, enable <strong>Bulk Export</strong> to import all ~8,500 bills at once via Excel export.
-            </p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-sm font-medium">City slug</label>
-                <input
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  placeholder="e.g. philadelphia"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-sm font-medium">Limit <span className="text-muted-foreground">(ignored for bulk)</span></label>
-                <input
-                  type="number" min={1} max={250}
-                  value={localLimit}
-                  onChange={(e) => setLocalLimit(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-              </div>
-            </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input
-                type="checkbox"
-                checked={localBulk}
-                onChange={(e) => setLocalBulk(e.target.checked)}
-                className="rounded border-input"
-              />
-              <span>Bulk export (Philadelphia only — exports all bills via Excel, ignores limit)</span>
-            </label>
-            {localResult && (
-              <p className={`text-sm ${localResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-                {localResult.message}
-              </p>
-            )}
-            <Button type="submit" disabled={localRunning || !city.trim()}>
-              {localRunning ? 'Ingesting…' : 'Ingest Local Bills'}
-            </Button>
-          </form>
-        )}
+          )}
+          <Button type="submit" disabled={localRunning}>
+            {localRunning ? 'Ingesting…' : 'Ingest Bills'}
+          </Button>
+        </form>
       </div>
     </div>
   )

@@ -4,11 +4,10 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 
-const LEVEL_OPTIONS = [
-  { value: '', label: 'All Levels' },
-  { value: 'federal', label: 'Federal' },
-  { value: 'state', label: 'State' },
-  { value: 'local', label: 'Local' },
+const ANALYZED_OPTIONS = [
+  { value: '', label: 'All Bills' },
+  { value: 'true', label: 'Analyzed' },
+  { value: 'false', label: 'Pending' },
 ]
 
 const IMPACT_OPTIONS = [
@@ -38,6 +37,7 @@ interface Bill {
   id: string
   bill_number: string
   title: string
+  plain_title?: string
   source: string
   status: string
   level: string
@@ -45,6 +45,7 @@ interface Bill {
   impact_score?: number
   bill_type?: string
   tags?: string
+  description?: string
   summary?: string
   analyzed_at?: string
 }
@@ -56,41 +57,60 @@ function BillCard({ bill }: { bill: Bill }) {
   let tags: string[] = []
   try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
 
+  const isAnalyzed = Boolean(bill.analyzed_at)
+
   return (
     <Link
       href={`/legislation/${bill.id}`}
-      className="block border rounded-lg p-4 hover:border-primary/60 hover:shadow-sm transition-all space-y-2"
+      className="block border rounded-lg px-4 py-3 hover:border-primary/60 hover:bg-muted/20 transition-all"
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs text-muted-foreground font-mono">{bill.bill_number}</span>
-        <div className="flex items-center gap-1.5 flex-wrap justify-end">
-          {impactColor && (
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
-              {bill.impact_level}
-            </span>
-          )}
-          <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
-            {bill.status?.replace(/_/g, ' ')}
+      {/* Row 1: bill number + badges */}
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
+          {bill.status?.replace(/_/g, ' ')}
+        </span>
+        {impactColor && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
+            {bill.impact_level} impact
           </span>
-        </div>
+        )}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-auto ${
+          isAnalyzed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+        }`}>
+          {isAnalyzed ? 'Analyzed' : 'Pending'}
+        </span>
       </div>
 
-      <p className="text-sm font-medium leading-snug line-clamp-2">{bill.title}</p>
+      {/* Row 2: plain title (prominent) + official title (secondary) */}
+      {bill.plain_title
+        ? <>
+            <p className="text-sm font-semibold leading-snug">{bill.plain_title}</p>
+            <p className="text-xs text-muted-foreground/70 mt-0.5 leading-snug line-clamp-1">
+              <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Legal Title:</span>
+              {bill.title}
+            </p>
+          </>
+        : <p className="text-sm font-medium leading-snug">{bill.title}</p>
+      }
 
-      {bill.summary && (
-        <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{bill.summary}</p>
+      {/* Row 3: AI summary, or bill description/text from Legistar */}
+      {(bill.summary || bill.description) && (
+        <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">
+          <span className="uppercase tracking-wide font-medium text-[10px] text-muted-foreground/70 mr-1">
+            {bill.summary ? 'Summary:' : 'Description:'}
+          </span>
+          {bill.summary ?? bill.description}
+        </p>
       )}
 
+      {/* Row 4: tags */}
       {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {tags.slice(0, 3).map((tag) => (
-            <span key={tag} className="text-xs bg-muted px-1.5 py-0.5 rounded">{tag}</span>
+        <div className="flex flex-wrap gap-1 mt-2">
+          {tags.map((tag) => (
+            <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
           ))}
         </div>
-      )}
-
-      {!bill.analyzed_at && (
-        <p className="text-xs text-muted-foreground italic">Pending analysis</p>
       )}
     </Link>
   )
@@ -118,6 +138,11 @@ function Select({
   )
 }
 
+interface TagCount {
+  tag: string
+  count: number
+}
+
 export default function HomePage() {
   const [bills, setBills] = useState<Bill[]>([])
   const [total, setTotal] = useState(0)
@@ -126,12 +151,16 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
-  const [level, setLevel] = useState('')
+  const level = 'local'
+  const [analyzed, setAnalyzed] = useState('')
+  const [tag, setTag] = useState('')
+  const [impact, setImpact] = useState('')
+  const [tagCounts, setTagCounts] = useState<TagCount[]>([])
 
-  const load = useCallback((newOffset: number, q: string, l: string) => {
+  const load = useCallback((newOffset: number, q: string, l: string, a: string, t: string, imp: string) => {
     setLoading(true)
     setError(null)
-    api.searchLegislation(q, PAGE_SIZE, newOffset, l)
+    api.searchLegislation(q, PAGE_SIZE, newOffset, l, a, t, imp)
       .then((data) => {
         setBills(data?.results ?? [])
         setTotal(data?.total ?? 0)
@@ -141,14 +170,28 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    load(0, search, level)
+    api.getTagCounts().then((data) => setTagCounts(data?.tags ?? [])).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    load(0, search, level, analyzed, tag, impact)
     setOffset(0)
-  }, [search, level, load])
+  }, [search, level, analyzed, tag, impact, load])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     setSearch(searchInput)
   }
+
+  const clearAll = () => {
+    setSearch('')
+    setSearchInput('')
+    setAnalyzed('')
+    setTag('')
+    setImpact('')
+  }
+
+  const hasFilters = search || analyzed || tag || impact
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
   const currentPage = Math.floor(offset / PAGE_SIZE) + 1
@@ -163,7 +206,7 @@ export default function HomePage() {
       </div>
 
       {/* Search + filters */}
-      <form onSubmit={handleSearch} className="mb-4 flex flex-wrap items-center gap-3">
+      <form onSubmit={handleSearch} className="mb-3 flex flex-wrap items-center gap-3">
         <input
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
@@ -176,11 +219,12 @@ export default function HomePage() {
         >
           Search
         </button>
-        <Select value={level} onChange={setLevel} options={LEVEL_OPTIONS} />
-        {(search || level) && (
+        <Select value={analyzed} onChange={setAnalyzed} options={ANALYZED_OPTIONS} />
+        <Select value={impact} onChange={setImpact} options={IMPACT_OPTIONS} />
+        {hasFilters && (
           <button
             type="button"
-            onClick={() => { setSearch(''); setSearchInput(''); setLevel('') }}
+            onClick={clearAll}
             className="text-xs text-muted-foreground underline hover:no-underline"
           >
             Reset
@@ -188,10 +232,30 @@ export default function HomePage() {
         )}
       </form>
 
+      {/* Category tag pills — only shown when tags exist in DB */}
+      {tagCounts.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {tagCounts.map(({ tag: t, count }) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTag(tag === t ? '' : t)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors capitalize ${
+                tag === t
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground hover:border-primary/60 hover:text-foreground'
+              }`}
+            >
+              {t} <span className={`ml-0.5 ${tag === t ? 'opacity-80' : 'opacity-60'}`}>({count})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="h-36 rounded-lg bg-muted animate-pulse" />
+        <div className="flex flex-col gap-2">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
           ))}
         </div>
       )}
@@ -206,8 +270,8 @@ export default function HomePage() {
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg font-medium mb-2">No bills found</p>
           <p className="text-sm">
-            {search || level ? (
-              <button onClick={() => { setSearch(''); setSearchInput(''); setLevel('') }} className="underline hover:no-underline">
+            {hasFilters ? (
+              <button onClick={clearAll} className="underline hover:no-underline">
                 Clear filters
               </button>
             ) : (
@@ -223,7 +287,7 @@ export default function HomePage() {
       {!loading && bills.length > 0 && (
         <>
           <p className="text-xs text-muted-foreground mb-3">{total} bill{total !== 1 ? 's' : ''}</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="flex flex-col gap-2">
             {bills.map((bill) => (
               <BillCard key={bill.id} bill={bill} />
             ))}
@@ -235,7 +299,7 @@ export default function HomePage() {
                 onClick={() => {
                   const newOffset = Math.max(0, offset - PAGE_SIZE)
                   setOffset(newOffset)
-                  load(newOffset, search, level)
+                  load(newOffset, search, level, analyzed, tag, impact)
                 }}
                 disabled={offset === 0}
                 className="text-sm px-3 py-1.5 rounded-md border disabled:opacity-40 hover:bg-muted/40 transition-colors"
@@ -249,7 +313,7 @@ export default function HomePage() {
                 onClick={() => {
                   const newOffset = offset + PAGE_SIZE
                   setOffset(newOffset)
-                  load(newOffset, search, level)
+                  load(newOffset, search, level, analyzed, tag, impact)
                 }}
                 disabled={offset + PAGE_SIZE >= total}
                 className="text-sm px-3 py-1.5 rounded-md border disabled:opacity-40 hover:bg-muted/40 transition-colors"

@@ -35,6 +35,19 @@ export function Navbar() {
     window.location.href = '/'
   }
 
+  const handleDevLogin = async () => {
+    try {
+      const res = await fetch('/api/auth/dev-login', { method: 'POST' })
+      const data = await res.json()
+      if (data?.access_token) {
+        localStorage.setItem('cg_access_token', data.access_token)
+        window.location.reload()
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <nav className="border-b bg-white/80 backdrop-blur sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -44,6 +57,9 @@ export function Navbar() {
           </Link>
           <Link href="/legislation" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Legislation
+          </Link>
+          <Link href="/councilmembers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Council
           </Link>
           <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Pricing
@@ -75,12 +91,12 @@ export function Navbar() {
               </Button>
             </>
           ) : (
-            <a
-              href="/api/auth/google"
+            <button
+              onClick={handleDevLogin}
               className="inline-flex items-center justify-center rounded-lg px-3 h-7 text-sm font-medium bg-primary text-primary-foreground transition-colors hover:bg-primary/80"
             >
-              Sign in with Google
-            </a>
+              Dev Login
+            </button>
           )}
         </div>
       </div>

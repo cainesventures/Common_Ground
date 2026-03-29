@@ -1,0 +1,218 @@
+"""Councilmember scraper and service.
+
+Scrapes Philadelphia City Council member profiles from phlcouncil.com
+using Playwright (site has Cloudflare, so httpx doesn't work).
+
+Data collected per member:
+  - name, district, role (Council President / Councilmember / At-Large)
+  - photo_url, bio, email, phone, profile_url
+  - bills_sponsored — computed from the legislation table
+"""
+
+import logging
+import re
+import uuid
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from app.models import Councilmember, Legislation
+
+logger = logging.getLogger(__name__)
+
+# Current council members only (first 17 entries from the page, deduplicated)
+CURRENT_MEMBER_SLUGS = [
+    ("https://phlcouncil.com/kenyattajohnson/",       "Council President Kenyatta Johnson | District 2"),
+    ("https://phlcouncil.com/marksquilla/",            "Councilmember Mark Squilla | District 1"),
+    ("https://phlcouncil.com/jamiegauthier/",          "Councilmember Jamie Gauthier | District 3"),
+    ("https://phlcouncil.com/curtisjonesjr/",          "Councilmember Curtis Jones, Jr. | District 4"),
+    ("https://phlcouncil.com/jefferyyoungjr/",         "Councilmember Jeffery Young, Jr. | District 5"),
+    ("https://phlcouncil.com/michaeldriscoll/",        "Councilmember Michael Driscoll | District 6"),
+    ("https://phlcouncil.com/quetcylozada/",           "Councilmember Quetcy Lozada | District 7"),
+    ("https://phlcouncil.com/cindybass/",              "Councilmember Cindy Bass | District 8"),
+    ("https://phlcouncil.com/anthonyphillips/",        "Councilmember Anthony Phillips | District 9"),
+    ("https://phlcouncil.com/brianoneill/",            "Councilmember Brian J. O'Neill | District 10"),
+    ("https://phlcouncil.com/katherinegilmorerichardson/", "Councilmember At-Large Katherine Gilmore Richardson"),
+    ("https://phlcouncil.com/isaiahthomas/",           "Councilmember At-Large Isaiah Thomas"),
+    ("https://phlcouncil.com/jimharrity/",             "Councilmember At-Large Jim Harrity"),
+    ("https://phlcouncil.com/ninaahmad/",              "Councilmember At-Large Nina Ahmad"),
+    ("https://phlcouncil.com/ruelandau/",              "Councilmember At-Large Rue Landau"),
+    ("https://phlcouncil.com/kendrabrooks/",           "Councilmember At-Large Kendra Brooks"),
+    ("https://phlcouncil.com/nicolasorourke/",         "Councilmember At-Large Nicolas O'Rourke"),
+]
+
+
+def _parse_label(label: str) -> dict:
+    """Parse 'Councilmember Mark Squilla | District 1' into name/district/role."""
+    parts = label.split("|")
+    full_title = parts[0].strip()
+    district_raw = parts[1].strip() if len(parts) > 1 else ""
+
+    # Extract district number
+    district = ""
+    if district_raw:
+        m = re.search(r"District\s+(\d+)", district_raw)
+        district = f"District {m.group(1)}" if m else "At-Large"
+    else:
+        district = "At-Large"
+
+    # Extract name (remove title prefix including At-Large)
+    name = re.sub(r"^(Council President|Councilmember)\s+(At-Large\s+)?", "", full_title).strip()
+
+    return {"name": name, "district": district, "full_title": full_title}
+
+
+async def _scrape_profile(page, url: str) -> dict:
+    """Scrape a single phlcouncil.com profile page."""
+    await page.goto(url, wait_until="networkidle", timeout=30000)
+
+    result = {"profile_url": url, "photo_url": None, "bio": None, "email": None, "phone": None}
+
+    # Bio — first substantive paragraph in main content
+    try:
+        main = await page.query_selector(".entry-content, main article, .post-content")
+        if main:
+            paras = await main.query_selector_all("p")
+            bio_parts = []
+            for p in paras[:3]:
+                txt = (await p.inner_text()).strip()
+                if len(txt) > 50:
+                    bio_parts.append(txt)
+                if len(" ".join(bio_parts)) > 400:
+                    break
+            if bio_parts:
+                result["bio"] = " ".join(bio_parts)[:800]
+    except Exception:
+        pass
+
+    # Photo — first wp-content image that isn't a logo/icon
+    try:
+        imgs = await page.query_selector_all("img[src*='wp-content']")
+        for img in imgs:
+            src = await img.get_attribute("src") or ""
+            if any(x in src.lower() for x in ["logo", "icon", "banner", "header"]):
+                continue
+            width = await img.get_attribute("width") or "0"
+            # Skip tiny images
+            try:
+                if int(width) < 80:
+                    continue
+            except ValueError:
+                pass
+            result["photo_url"] = src
+            break
+    except Exception:
+        pass
+
+    # Email
+    try:
+        email_link = await page.query_selector("a[href^='mailto:']")
+        if email_link:
+            href = await email_link.get_attribute("href") or ""
+            result["email"] = href.replace("mailto:", "").strip()
+    except Exception:
+        pass
+
+    # Phone
+    try:
+        phone_link = await page.query_selector("a[href^='tel:']")
+        if phone_link:
+            href = await phone_link.get_attribute("href") or ""
+            result["phone"] = href.replace("tel:", "").strip()
+        else:
+            # Try text pattern
+            body_text = await page.inner_text("body")
+            m = re.search(r"\(?\d{3}\)?[\s\-\.]\d{3}[\s\-\.]\d{4}", body_text)
+            if m:
+                result["phone"] = m.group(0)
+    except Exception:
+        pass
+
+    return result
+
+
+def _bills_sponsored_count(db: Session, member_name: str) -> int:
+    """Count bills where sponsor field contains this member's last name."""
+    last_name = member_name.split()[-1]
+    return (
+        db.query(func.count(Legislation.id))
+        .filter(Legislation.sponsor.ilike(f"%{last_name}%"))
+        .scalar()
+        or 0
+    )
+
+
+async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
+    """Scrape all 17 current council member profiles and upsert into DB."""
+    from playwright.async_api import async_playwright
+
+    results = []
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        for url, label in CURRENT_MEMBER_SLUGS:
+            parsed = _parse_label(label)
+            logger.info(f"Scraping {parsed['name']} ({url})")
+
+            try:
+                profile = await _scrape_profile(page, url)
+            except Exception as e:
+                logger.warning(f"Failed to scrape {url}: {e}")
+                profile = {"profile_url": url, "photo_url": None, "bio": None, "email": None, "phone": None}
+
+            bills_count = _bills_sponsored_count(db, parsed["name"])
+
+            # Upsert by profile_url slug
+            slug = url.rstrip("/").split("/")[-1]
+            member_id = f"cm_{slug}"
+
+            existing = db.query(Councilmember).filter(Councilmember.id == member_id).first()
+            if existing:
+                cm = existing
+            else:
+                cm = Councilmember(id=member_id)
+                db.add(cm)
+
+            cm.name = parsed["name"]
+            cm.district = parsed["district"]
+            cm.party = "Democratic"  # All current Philly council members are Democratic
+            cm.email = profile["email"]
+            cm.phone = profile["phone"]
+            cm.photo_url = profile.get("photo_url")
+            cm.bio = profile.get("bio")
+            cm.profile_url = profile["profile_url"]
+            cm.bills_sponsored = bills_count
+            cm.updated_at = datetime.utcnow()
+
+            db.commit()
+            db.refresh(cm)
+            results.append(cm)
+            logger.info(f"  Upserted {cm.name} — district={cm.district}, bills_sponsored={cm.bills_sponsored}")
+
+        await browser.close()
+
+    return results
+
+
+def get_all_councilmembers(db: Session) -> list[Councilmember]:
+    return db.query(Councilmember).order_by(Councilmember.district, Councilmember.name).all()
+
+
+def get_councilmember(db: Session, member_id: str) -> Optional[Councilmember]:
+    return db.query(Councilmember).filter(Councilmember.id == member_id).first()
+
+
+def get_councilmember_bills(db: Session, member_name: str, limit: int = 20, offset: int = 0):
+    """Return bills sponsored by this council member."""
+    last_name = member_name.split()[-1]
+    query = (
+        db.query(Legislation)
+        .filter(Legislation.sponsor.ilike(f"%{last_name}%"))
+        .order_by(Legislation.introduced_date.desc())
+    )
+    total = query.count()
+    bills = query.offset(offset).limit(limit).all()
+    return bills, total
