@@ -1,224 +1,125 @@
-"""Local AI setup guide for Common Ground."""
+# Local AI Setup — Common Ground
 
-# LOCAL AI SETUP GUIDE
+Common Ground uses a plug-and-play AI provider system. The default is **Ollama** — a free, local AI runtime that runs models on your own machine with no API costs or data leaving your network.
 
-## Why Local AI?
+---
 
-**Cost-Free Alternative to Claude/OpenAI:**
-- No API costs or rate limits
-- Complete privacy and control
+## Why Ollama?
+
+- No API costs — free to run as many analyses as you want
+- Private — bill text and prompts stay on your machine
 - Works offline
-- Customizable models
+- Easy to swap to Claude or OpenAI when you're ready for production
 
-## Option 1: Ollama (Easiest)
+---
 
-### Install Ollama
+## Install Ollama
+
+### Windows
+Download from https://ollama.ai/download or via winget:
 ```bash
-# Windows
-# Download from: https://ollama.ai/download
-# Or via winget:
 winget install Ollama.Ollama
+```
 
-# Start Ollama service
+### Mac
+```bash
+brew install ollama
+```
+
+### Start the Ollama service
+```bash
 ollama serve
 ```
 
-### Download Models
+Ollama runs at `http://localhost:11434` by default.
+
+---
+
+## Pull a Model
+
 ```bash
-# Small/fast model (good for testing)
-ollama pull llama2:7b
+# Recommended — good quality, fits on most machines
+ollama pull llama3
 
-# Better quality model
-ollama pull llama2:13b
+# Smaller / faster (8GB RAM minimum)
+ollama pull llama3:8b
 
-# Or try other models
+# Larger / better quality (16GB+ RAM recommended)
+ollama pull llama3:70b
+
+# Alternative options
 ollama pull mistral
-ollama pull codellama
+ollama pull gemma3
 ```
 
-### Test Local AI
+Verify it's working:
 ```bash
-# In another terminal
-curl http://localhost:11434/api/generate -d '{
-  "model": "llama2",
-  "prompt": "Hello, how are you?"
-}'
-```
-
-## Option 2: LM Studio (GUI Alternative)
-
-### Install LM Studio
-1. Download from: https://lmstudio.ai/
-2. Install and open
-3. Download a model (GGUF format)
-4. Start local server in LM Studio
-
-### Configure Common Ground
-```python
-# Create local AI agent
-agent_data = {
-    "name": "Local AI Expert",
-    "description": "Local AI model",
-    "persona": "AI assistant",
-    "system_prompt": "You are a helpful AI assistant...",
-    "agent_type": "local",
-    "model_name": "llama2",  # or whatever model you downloaded
-    "api_url": "http://localhost:11434/api/generate"  # Ollama default
-}
-```
-
-## Option 3: Text Generation WebUI
-
-### Install
-```bash
-# Clone repository
-git clone https://github.com/oobabooga/text-generation-webui
-cd text-generation-webui
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Download model
-python download-model.py microsoft/DialoGPT-medium
-
-# Start server
-python server.py --api --listen
-```
-
-### Configure Common Ground
-```python
-agent_data = {
-    "agent_type": "byo",
-    "api_url": "http://localhost:5000/api/v1/generate",
-    "api_key": "",  # No key needed for local
-    # ... other fields
-}
-```
-
-## Testing Local AI Setup
-
-### 1. Test API Connection
-```bash
-# Ollama
+ollama list
 curl http://localhost:11434/api/tags
-
-# Should return: {"models":[{"name":"llama2:latest",...}]}
 ```
 
-### 2. Test in Common Ground
-```python
-# Create local agent via API
-import requests
+---
 
-response = requests.post("http://localhost:8000/api/agents/create", json={
-    "name": "Local AI",
-    "description": "Local AI model",
-    "persona": "AI assistant",
-    "system_prompt": "You are a helpful AI assistant.",
-    "agent_type": "local",
-    "model_name": "llama2"
-})
+## Configure Common Ground
 
-print(response.json())
+In your `.env`:
+
+```env
+AI_PROVIDER=ollama
+AI_MODEL=llama3          # must match the name you pulled
+AI_BASE_URL=http://localhost:11434
+AI_API_KEY=              # leave blank for Ollama
 ```
 
-### 3. Test Debate
-```python
-# Create debate with local agent
-debate = requests.post("http://localhost:8000/api/debates/create", json={
-    "legislation_id": "your_bill_id",
-    "topic": "Should this bill pass?",
-    "agent_ids": ["local_agent_id"],
-    "max_turns": 2
-})
+That's it. Restart the backend and Analyze will use your local model.
 
-# Run debate
-requests.post(f"http://localhost:8000/api/debates/{debate.json()['debate']['id']}/run-all")
+---
+
+## Switching to Claude or OpenAI
+
+No code changes needed — just update `.env`:
+
+```env
+# Claude (Anthropic)
+AI_PROVIDER=claude
+AI_MODEL=claude-sonnet-4-6
+AI_API_KEY=sk-ant-...
+AI_BASE_URL=             # leave blank
+
+# OpenAI
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+
+# Any OpenAI-compatible API (Together, Groq, local LM Studio, etc.)
+AI_PROVIDER=openai
+AI_MODEL=meta-llama/Llama-3-8b-chat-hf
+AI_BASE_URL=https://api.together.xyz/v1
+AI_API_KEY=your_together_key
 ```
 
-## Performance Comparison
+---
 
-| AI Type | Speed | Quality | Cost | Setup |
-|---------|-------|---------|------|-------|
-| **Claude** | Fast | Excellent | $$$ | Easy |
-| **Local Large** (13B) | Medium | Good | Free | Medium |
-| **Local Small** (7B) | Fast | Okay | Free | Easy |
+## Model Recommendations
+
+| Use case | Model | RAM needed |
+|----------|-------|------------|
+| Development / testing | `llama3:8b` | 8 GB |
+| Good quality local | `llama3` (default) | 8 GB |
+| Best local quality | `llama3:70b` | 48 GB |
+| Production (cloud) | `claude-sonnet-4-6` | — |
+
+The perspectives and analysis prompts are designed to work well with llama3. Larger models produce more nuanced perspectives; smaller models are faster but may produce shorter or less detailed output.
+
+---
 
 ## Troubleshooting
 
-### Ollama Issues
-```bash
-# Check if running
-curl http://localhost:11434/api/tags
+**"connection refused" on port 11434** — Ollama isn't running. Run `ollama serve` in a terminal.
 
-# Restart service
-ollama serve
+**"model not found"** — The model name in `.env` doesn't match what's installed. Run `ollama list` to see installed models.
 
-# List models
-ollama list
+**Slow responses** — Normal for larger models on CPU. For faster local inference, ensure Ollama is using your GPU (`ollama ps` shows active models and whether GPU is being used).
 
-# Remove and re-download model
-ollama rm llama2
-ollama pull llama2
-```
-
-### Common Errors
-- **"connection refused"**: Ollama not running
-- **"model not found"**: Wrong model name
-- **"out of memory"**: Model too big for your RAM
-
-### Memory Requirements
-- 7B models: 8GB RAM minimum
-- 13B models: 16GB RAM recommended
-- 30B+ models: 32GB+ RAM needed
-
-## Next Steps
-
-1. **Start with small model** (llama2:7b) for testing
-2. **Scale up** to larger models as needed
-3. **Mix local + cloud** - use local for development, cloud for production
-4. **Experiment** with different models and prompts
-
-## BYO AI (Bring Your Own AI)
-
-For advanced users, you can integrate any AI API:
-
-```python
-# Example: OpenAI-compatible API
-agent_data = {
-    "agent_type": "byo",
-    "api_url": "https://api.openai.com/v1/chat/completions",
-    "api_key": "your-openai-key",
-    "model_name": "gpt-3.5-turbo"
-}
-
-# Example: Custom AI service
-agent_data = {
-    "agent_type": "byo",
-    "api_url": "https://your-custom-ai.com/generate",
-    "api_key": "your-custom-key"
-}
-```
-
-The BYO AI expects a JSON API with this format:
-```json
-{
-  "task": "generate_argument|research_topic|rate_argument",
-  "legislation_title": "...",
-  "legislation_summary": "...",
-  "position": "pro|con|neutral",
-  "argument": "...",
-  "context": "...",
-  "agent_name": "...",
-  "persona": "..."
-}
-```
-
-Returns:
-```json
-{
-  "argument": "Generated argument...",
-  "research": "Research findings...",
-  "rating": {"scores": {...}, "reasoning": "..."}
-}
-```
+**Out of memory** — Switch to a smaller model (`ollama pull llama3:8b`) or use a cloud provider.

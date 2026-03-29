@@ -1,6 +1,14 @@
-# Common Ground — AI Debate Platform for Legislation
+# Common Ground — Philadelphia City Council Tracker
 
-An AI-powered platform where autonomous agents debate federal, state, and local legislation. Users can watch debates, vote on bills, build personal AI debators, and share debates to social media.
+A free, citizen-friendly tracker for Philadelphia City Council legislation. Every bill gets a plain-language summary and 17 AI perspectives — Progressive, Conservative, Libertarian, Christian Ethicist, Conspiracy Theorist, and 12 more — so you can understand what different communities and viewpoints actually think about local legislation.
+
+## What It Does
+
+- **Browse bills** — search and filter all Philadelphia City Council legislation
+- **Plain-language summaries** — AI explains each bill in terms a high schooler can understand
+- **17 AI perspectives** — Political, Policy, Demographic, and Special viewpoints generated on demand and cached
+- **Impact scoring** — each bill rated 1–10 on how broadly it affects Philadelphians
+- **Vote** — cast Support / Oppose / Neutral on any bill
 
 ## Stack
 
@@ -9,25 +17,26 @@ An AI-powered platform where autonomous agents debate federal, state, and local 
 | Frontend | Next.js 14 (App Router), TailwindCSS, shadcn/ui |
 | Backend | FastAPI (async Python), SQLAlchemy ORM |
 | Database | SQLite (dev) / PostgreSQL (production) |
-| AI | Claude (Anthropic API) |
-| Research | DuckDuckGo + Wikipedia (free) / Perplexity / Tavily (optional) |
-| Background Tasks | Celery + Redis |
+| AI | Plug-and-play: Ollama (default), Claude, or OpenAI — set via env vars |
+| Ingestion | Playwright headless browser scraper (Philadelphia Legistar) |
 | Auth | Google OAuth 2.0 + JWT |
+| Background Tasks | Celery + Redis (optional) |
 
 ---
 
-## Quick Start (Development)
+## Quick Start
 
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
-- Redis (for background tasks)
+- [Ollama](https://ollama.ai) installed and running (for local AI) — or a Claude/OpenAI API key
 
-### 1. Clone and install
+### 1. Install dependencies
 
 ```bash
 # Backend
 pip install -r requirements.txt
+playwright install chromium
 
 # Frontend
 cd frontend && npm install
@@ -36,24 +45,26 @@ cd frontend && npm install
 ### 2. Configure environment
 
 ```bash
-# Backend
 cp .env.example .env
-
-# Frontend
-cp frontend/.env.local.example frontend/.env.local
 ```
 
-Edit `.env` — at minimum set:
+Minimum required in `.env`:
 ```
-ANTHROPIC_API_KEY=your_key_here
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-JWT_SECRET=generate_a_random_string
+JWT_SECRET=your_random_secret
+
+# AI provider (defaults to Ollama)
+AI_PROVIDER=ollama
+AI_MODEL=llama3
+AI_BASE_URL=http://localhost:11434
 ```
 
-Generate a JWT secret:
-```bash
-python -c "import secrets; print(secrets.token_hex(32))"
+To use Claude instead of Ollama:
+```
+AI_PROVIDER=claude
+AI_MODEL=claude-sonnet-4-6
+AI_API_KEY=your_anthropic_key
 ```
 
 ### 3. Initialize the database
@@ -62,121 +73,141 @@ python -c "import secrets; print(secrets.token_hex(32))"
 alembic upgrade head
 ```
 
-### 4. Run all services
-
-Open four terminals:
+### 4. Run the app
 
 ```bash
-# Terminal 1 — FastAPI backend
+# Terminal 1 — backend
 uvicorn main:app --reload
 
-# Terminal 2 — Next.js frontend
+# Terminal 2 — frontend
 cd frontend && npm run dev
-
-# Terminal 3 — Celery worker (background debates)
-celery -A app.celery_app worker --loglevel=info
-
-# Terminal 4 — Celery beat (hourly auto-debate scheduler)
-celery -A app.celery_app beat --loglevel=info
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API docs: http://localhost:8000/docs
+- Backend API: http://localhost:8000/docs
 
 ---
 
-## First Test Run
+## Ingesting Philadelphia Bills
 
-For an initial smoke test with minimal API cost (~3–4 Claude calls, < $0.01):
+Bills are ingested via a Playwright scraper (Philadelphia's Legistar is IP-restricted).
 
-1. Log in with Google (you'll need dev tier — set `subscription_tier = 'dev'` in DB for your user)
-2. Go to **Admin** → run each ingest (1 federal, 1 PA state, 1 Philadelphia local)
-3. Click **Run Now** under Auto-Generate Debates
-4. Watch the Celery worker terminal for progress
-5. Go to **/** (home) to see the debate appear
+### Small batch (via admin panel)
+1. Log in with Google
+2. Set your user's `subscription_tier = 'dev'` in the DB
+3. Go to **Admin → Local tab**, enter `philadelphia`, click **Ingest Local Bills**
 
-> **Note:** State ingestion (OpenStates) requires `OPENSTATES_API_KEY`. Skip it if you don't have one yet.
+### Bulk ingest (all ~8,500 bills)
+Check **Bulk Export** in the admin panel — this uses the Legistar Excel export and imports everything at once. Bills are stored without analysis.
+
+### Via API
+```bash
+# 10 bills (with detail scraping)
+curl -X POST "http://localhost:8000/api/legislation/ingest/local/philadelphia?limit=10" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# All bills via Excel export
+curl -X POST "http://localhost:8000/api/legislation/ingest/local/philadelphia?bulk=true" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
 
 ---
 
-## Subscription Tiers
+## Analyzing Bills
 
-| Tier | Features |
-|------|---------|
-| **Free** | Browse debates, vote on legislation, share |
-| **Paid** | Create debates, create/manage AI agents, personal debator builder |
-| **Dev** | Everything above + legislation ingestion, local/BYO AI agents |
+Bills are **not** auto-analyzed on ingest — analysis is triggered manually per bill.
 
-> Tiers are set manually in the DB for now. Payment flow is on the roadmap.
+### Via admin panel
+Go to **Admin → Analyze Bills**, click **Analyze** on any bill. This generates:
+- Plain-language summary
+- Impact score (1–10) and level (low/medium/high)
+- Bill type (substantive/ceremonial/procedural)
+- Topic tags
+- 3 base perspectives (Progressive, Conservative, Libertarian)
+
+### Via API
+```bash
+curl -X POST "http://localhost:8000/api/legislation/{id}/analyze" \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+### On-demand perspectives
+The remaining 14 perspectives are generated on demand from the bill detail page (public, no auth required) and cached after first generation:
+
+```bash
+curl -X POST "http://localhost:8000/api/legislation/{id}/perspectives/urban_planning"
+```
 
 ---
 
-## Key Features
+## 17 Perspective Types
 
-### Auto-Debate Pipeline
-New legislation is automatically detected and debated by AI agents every hour via Celery beat. The pipeline:
-1. Finds legislation ingested in the last 48 hours with no debate yet
-2. Creates a debate with progressive + conservative agents
-3. Queues the full debate (research phase → turns → moderator closing) as a background task
+| Group | Perspectives |
+|-------|-------------|
+| Political | progressive, conservative, libertarian, socialist, centrist |
+| Policy | economic, civil_liberties, environmental, public_health, urban_planning |
+| Demographic | working_class, business, youth, elderly, neighborhood |
+| Special | christian_ethicist, conspiracy_theorist |
 
-### Moderator AI
-Every debate has a neutral moderator (Claude) that:
-- Introduces the bill in plain English at the start
-- Fact-checks agent arguments and interjects when needed
-- Writes a closing summary of strongest points and contested claims
+Each perspective returns: `position` (support/oppose/neutral/mixed), `key_arguments`, `concerns`, and a 50-word `assessment`.
 
-### Research & Citations
-Agents research each bill before debating using DuckDuckGo and Wikipedia (free, no API keys). Perplexity and Tavily are supported if API keys are provided. Each agent argument shows a collapsible citations panel.
+---
 
-### Personal AI Debator
-Paid users can build their own AI debator by setting stances on 6 policy dimensions (Economy, Environment, Healthcare, Immigration, Social Policy, Role of Government). The debator argues from their perspective in any debate.
+## AI Provider Configuration
 
-### Voting
-Logged-in users cast member votes. The vote tally shows member vote counts. Non-logged-in users see a login prompt.
+The AI system is fully plug-and-play — no code changes needed to switch providers:
 
-### Sharing
-Every public debate gets a shareable URL with Open Graph / Twitter Card meta tags for rich social previews. Debates can also be embedded via iframe.
+```env
+# Ollama (default — free, local, private)
+AI_PROVIDER=ollama
+AI_MODEL=llama3
+AI_BASE_URL=http://localhost:11434
+
+# Claude (Anthropic)
+AI_PROVIDER=claude
+AI_MODEL=claude-sonnet-4-6
+AI_API_KEY=sk-ant-...
+
+# OpenAI (or any compatible API)
+AI_PROVIDER=openai
+AI_MODEL=gpt-4o
+AI_BASE_URL=https://api.openai.com/v1
+AI_API_KEY=sk-...
+```
+
+---
+
+## Key API Endpoints
+
+```
+GET  /api/legislation/search?q=...&level=local    Search bills
+GET  /api/legislation/{id}                         Bill detail
+POST /api/legislation/{id}/analyze                 Trigger analysis (dev tier)
+GET  /api/legislation/{id}/perspectives            All perspectives for a bill
+POST /api/legislation/{id}/perspectives/{type}     Generate one perspective
+POST /api/legislation/{id}/vote                    Cast a vote
+GET  /api/legislation/{id}/votes                   Get vote tallies
+```
+
+Full interactive docs at `http://localhost:8000/docs`.
 
 ---
 
 ## Environment Variables
 
-See `.env.example` for the full list with descriptions. Required variables:
-
-```
-ANTHROPIC_API_KEY      # Claude API (required for all AI features)
-GOOGLE_CLIENT_ID       # Google OAuth
-GOOGLE_CLIENT_SECRET   # Google OAuth
-JWT_SECRET             # Auth token signing key
-```
-
-Optional (features degrade gracefully without them):
-```
-CONGRESS_API_KEY       # Federal bill ingestion (Congress.gov)
-OPENSTATES_API_KEY     # State bill ingestion
-LEGISTAR_API_KEY       # Municipal bill ingestion (most cities don't need this)
-PERPLEXITY_API_KEY     # Upgraded research provider
-TAVILY_API_KEY         # Upgraded research provider
-HEYGEN_API_KEY         # AI video generation
-REDIS_URL              # Required only if running Celery
-DATABASE_URL           # Defaults to SQLite; use PostgreSQL in production
-```
-
----
-
-## Production Checklist
-
-- [ ] Set `DATABASE_URL` to PostgreSQL
-- [ ] Set `ENVIRONMENT=production`
-- [ ] Set `DEBUG=false`
-- [ ] Set `APP_BASE_URL` to your public domain
-- [ ] Set `APP_URL` to your public domain (must match Google OAuth redirect URI)
-- [ ] Set `FRONTEND_URL` to your frontend domain
-- [ ] Set a strong random `JWT_SECRET`
-- [ ] Run `alembic upgrade head` against the production DB
-- [ ] Start Celery worker and beat as persistent services (systemd / supervisor / Railway worker)
-- [ ] Set at least one user's `subscription_tier = 'dev'` in the DB
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GOOGLE_CLIENT_ID` | Yes | Google OAuth |
+| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth |
+| `JWT_SECRET` | Yes | Auth token signing |
+| `AI_PROVIDER` | No | `ollama` (default), `claude`, `openai` |
+| `AI_MODEL` | No | Model name (default: `llama3`) |
+| `AI_BASE_URL` | No | Provider base URL |
+| `AI_API_KEY` | No | API key (blank for Ollama) |
+| `DATABASE_URL` | No | Defaults to SQLite |
+| `CONGRESS_API_KEY` | No | Federal bill ingestion |
+| `OPENSTATES_API_KEY` | No | State bill ingestion |
+| `REDIS_URL` | No | Required for Celery background tasks |
 
 ---
 
@@ -185,23 +216,47 @@ DATABASE_URL           # Defaults to SQLite; use PostgreSQL in production
 ```
 Common_Ground/
 ├── app/
-│   ├── api/             # FastAPI route handlers
-│   ├── agents/          # Claude debate agent + moderator
-│   ├── integrations/    # Congress.gov, OpenStates, Legistar clients
-│   ├── models/          # SQLAlchemy ORM models
-│   ├── services/        # Business logic (debate, legislation, research, persona)
-│   ├── video/           # AI video generation (HeyGen)
-│   ├── auth.py          # JWT + tier enforcement dependencies
-│   ├── celery_app.py    # Celery config + beat schedule
-│   ├── config.py        # Pydantic settings (reads from .env)
-│   └── tasks.py         # Background Celery tasks
-├── frontend/            # Next.js app
-│   ├── app/             # Pages (App Router)
-│   ├── components/      # Shared UI components
-│   └── lib/             # API client, auth helpers
-├── alembic/             # Database migrations
-├── sample_agents.py     # 16 preset agent configurations
-├── main.py              # FastAPI app entry point
+│   ├── api/                  # FastAPI route handlers
+│   │   ├── legislation_routes.py
+│   │   └── auth_routes.py
+│   ├── integrations/
+│   │   ├── legistar.py             # Legistar REST client (non-Philly cities)
+│   │   └── legistar_scraper.py     # Playwright scraper (Philadelphia)
+│   ├── models/               # SQLAlchemy ORM models
+│   ├── services/
+│   │   ├── ai_provider.py          # Plug-and-play AI abstraction
+│   │   ├── bill_research_service.py  # Summary + impact analysis
+│   │   ├── legislation_service.py    # Ingestion orchestration
+│   │   └── perspectives_service.py  # 17 perspective prompts + generation
+│   ├── auth.py               # JWT + tier enforcement
+│   ├── config.py             # Pydantic settings
+│   └── celery_app.py         # Celery config
+├── frontend/
+│   ├── app/                  # Next.js pages (App Router)
+│   │   ├── page.tsx          # Home — bill feed
+│   │   ├── legislation/[id]/ # Bill detail + perspectives
+│   │   └── admin/            # Ingestion + analyze panel
+│   ├── components/
+│   │   ├── PerspectivesPanel.tsx
+│   │   └── Navbar.tsx
+│   └── lib/
+│       ├── api.ts            # API client
+│       └── auth.ts           # JWT helpers
+├── alembic/                  # Database migrations
+├── main.py                   # FastAPI entry point
 ├── requirements.txt
 └── .env.example
 ```
+
+---
+
+## Production Checklist
+
+- [ ] Set `DATABASE_URL` to PostgreSQL
+- [ ] Set `ENVIRONMENT=production` and `DEBUG=false`
+- [ ] Set `APP_BASE_URL`, `APP_URL`, `FRONTEND_URL` to your public domains
+- [ ] Set a strong random `JWT_SECRET`
+- [ ] Configure `AI_PROVIDER` and `AI_API_KEY` for production model
+- [ ] Run `alembic upgrade head` against production DB
+- [ ] Set at least one user's `subscription_tier = 'dev'` in the DB
+- [ ] Configure Google OAuth redirect URI to match `APP_URL`

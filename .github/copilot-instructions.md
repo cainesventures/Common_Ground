@@ -1,62 +1,65 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot -->
+<!-- Workspace-specific instructions for GitHub Copilot -->
 
-## Common Ground - AI Debate Platform for Legislation
+## Common Ground — Philadelphia City Council Tracker
 
 ### Project Overview
-This is a FastAPI-based application that enables AI agents to debate legislation from federal and state sources. The platform:
-- Automatically ingests bills from Congress.gov and OpenStates APIs
-- Orchestrates debates between multiple AI agents with different personas
-- Enables agents to rate arguments on persuasiveness, logic, and accuracy
-- Stores all debates and ratings in PostgreSQL for analysis
+A citizen-friendly web app for tracking Philadelphia City Council legislation. Each bill gets a plain-language AI summary and 17 AI perspectives (Progressive, Conservative, Libertarian, Christian Ethicist, Conspiracy Theorist, and more), so users can understand what different communities think about local legislation.
 
-### Key Technologies
-- **Backend**: FastAPI + SQLAlchemy
-- **Database**: PostgreSQL
-- **AI**: Anthropic Claude API
-- **APIs**: Congress.gov, OpenStates OpenStates
-- **Task Queue**: Celery + Redis (optional)
+**Key design decisions:**
+- Bills are ingested in bulk but NOT auto-analyzed — analysis is manually triggered per bill via an Analyze button
+- AI provider is plug-and-play (Ollama by default, swappable to Claude/OpenAI via env vars — no code changes)
+- Philadelphia Legistar is IP-restricted, so ingestion uses a Playwright headless browser scraper
+- Perspectives are cached after first generation — idempotent
+
+### Stack
+- **Backend**: FastAPI + SQLAlchemy (async Python)
+- **Frontend**: Next.js 14 (App Router), TailwindCSS, shadcn/ui
+- **Database**: SQLite (dev) / PostgreSQL (production)
+- **AI**: Plug-and-play via `app/services/ai_provider.py` — Ollama, Claude, or OpenAI
+- **Ingestion**: Playwright scraper (`app/integrations/legistar_scraper.py`)
+- **Auth**: Google OAuth 2.0 + JWT
 
 ### Project Structure
-- `app/models/` - Database models (Legislation, Agent, Debate, DebateMessage, Rating)
-- `app/api/` - API routes (legislation_routes.py, debate_routes.py, agent_routes.py)
-- `app/services/` - Business logic (LegislationIngestionService, DebateService)
-- `app/agents/` - AI agent framework and debate orchestration
-- `app/integrations/` - External API integrations (Congress.gov, OpenStates)
-- `main.py` - FastAPI application entry point
-
-### Setup Instructions
-1. Install dependencies: `pip install -r requirements.txt`
-2. Copy `.env.example` to `.env` and add API keys
-3. Initialize database: `python -c "from app.models.database import init_db; init_db()"`
-4. Run server: `python main.py`
+- `app/api/legislation_routes.py` — all bill endpoints (ingest, search, analyze, perspectives, vote)
+- `app/integrations/legistar_scraper.py` — Playwright scraper for phila.legistar.com
+- `app/services/ai_provider.py` — AIProvider abstraction (Ollama/Claude/OpenAI)
+- `app/services/bill_research_service.py` — analyze_bill(): summary, impact score, tags
+- `app/services/perspectives_service.py` — 17 perspective prompts + generate functions
+- `app/services/legislation_service.py` — ingestion orchestration
+- `app/models/__init__.py` — ORM models: Legislation, BillPerspective, User, etc.
+- `frontend/app/page.tsx` — home bill feed
+- `frontend/app/legislation/[id]/page.tsx` — bill detail + perspectives panel
+- `frontend/app/admin/page.tsx` — ingestion controls + Analyze button per bill
+- `frontend/components/PerspectivesPanel.tsx` — 17 perspectives UI
 
 ### Common Development Tasks
 
-#### Adding a New Agent
+#### Ingest Philadelphia bills
 ```
-POST /api/agents/create with agent configuration
-```
-
-#### Ingesting Legislation
-```
-POST /api/legislation/ingest/federal    # Federal bills
-POST /api/legislation/ingest/state/{state}  # State bills
+POST /api/legislation/ingest/local/philadelphia?limit=10
+POST /api/legislation/ingest/local/philadelphia?bulk=true   # all ~8500 via Excel export
 ```
 
-#### Running a Debate
+#### Analyze a bill (generates summary + 3 base perspectives)
 ```
-1. POST /api/debates/create with legislation_id and agent_ids
-2. POST /api/debates/{debate_id}/run-all to execute full debate
-3. GET /api/debates/{debate_id} to view results
+POST /api/legislation/{id}/analyze
+```
+
+#### Generate an on-demand perspective
+```
+POST /api/legislation/{id}/perspectives/{perspective_type}
+```
+
+Valid perspective types: progressive, conservative, libertarian, socialist, centrist, economic, civil_liberties, environmental, public_health, urban_planning, working_class, business, youth, elderly, neighborhood, christian_ethicist, conspiracy_theorist
+
+#### Search bills
+```
+GET /api/legislation/search?q=zoning&level=local
 ```
 
 ### Important Notes
-- All debate operations are async and can take time depending on number of turns
-- Database must be PostgreSQL and initialized before running
-- Anthropic API key required for AI debate generation
-- Congress.gov and OpenStates APIs are free but may have rate limits
-
-### Help & Documentation
-- API docs: Visit `/docs` endpoint when server running
-- See README.md for detailed API endpoint documentation
-- Check config.py for environment variable configuration
+- Dev tier required for ingest and analyze endpoints (`subscription_tier = 'dev'` in DB)
+- Perspective generation is public — no auth required
+- `analyzed_at` on a Legislation row is the signal that it's been analyzed; NULL = pending
+- AI responses are JSON — `_extract_json()` in both services handles malformed output
+- The Legistar scraper uses `wait_until="load"` (not networkidle) to avoid timeouts

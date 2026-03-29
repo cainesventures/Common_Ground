@@ -1,218 +1,136 @@
-"""Getting Started with Common Ground."""
+# Getting Started — Common Ground
 
-# SETUP GUIDE
+Get the app running locally in about 10 minutes.
 
-## 1. Prerequisites
+---
 
-Before starting, ensure you have:
+## Prerequisites
+
 - Python 3.10+
-- PostgreSQL 12+ (or use Docker)
-- An Anthropic API key: https://console.anthropic.com
-- A Congress.gov API key (optional): https://api.congress.gov
+- Node.js 18+
+- [Ollama](https://ollama.ai/download) (for free local AI) — **or** a Claude/OpenAI API key
 
-## 2. Quick Start (5 minutes)
+---
 
-### Step 1: Clone/Navigate to project
+## 1. Install dependencies
+
 ```bash
-cd Common_Ground
-```
-
-### Step 2: Install dependencies
-```bash
+# Backend
 pip install -r requirements.txt
+playwright install chromium   # headless browser for Legistar scraper
+
+# Frontend
+cd frontend && npm install
 ```
 
-### Step 3: Setup environment variables
+---
+
+## 2. Set up environment
+
 ```bash
 cp .env.example .env
-# Edit .env with your API keys
 ```
 
-### Step 4: Initialize database
+Edit `.env` — minimum required:
+
+```env
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+JWT_SECRET=some_random_string_here
+
+# AI (defaults to Ollama — free and local)
+AI_PROVIDER=ollama
+AI_MODEL=llama3
+AI_BASE_URL=http://localhost:11434
+```
+
+Generate a random JWT secret:
 ```bash
-python -c "from app.models.database import init_db; init_db()"
+python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-### Step 5: Run the server
-```bash
-python main.py
-```
+See `LOCAL_AI_SETUP.md` for Ollama setup, or switch to Claude/OpenAI — see README for provider config.
 
-Server will start at: http://localhost:8000
+---
 
-### Step 6: View API documentation
-Open: http://localhost:8000/docs
-
-## 3. Running a Demo Debate
-
-Once the server is running:
-
-```bash
-# 1. Create an agent
-curl -X POST "http://localhost:8000/api/agents/create" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Policy Expert",
-    "description": "An expert on policy",
-    "persona": "A thoughtful policy analyst",
-    "system_prompt": "You are a policy expert...",
-    "expertise_areas": "policy,legislation"
-  }'
-
-# 2. Ingest legislation (requires Congress.gov API key)
-curl -X POST "http://localhost:8000/api/legislation/ingest/federal?limit=1"
-
-# 3. Create a debate
-curl -X POST "http://localhost:8000/api/debates/create" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "legislation_id": "YOUR_BILL_ID",
-    "topic": "Should this bill be passed?",
-    "agent_ids": ["AGENT_ID"],
-    "max_turns": 3
-  }'
-
-# 4. Run the debate
-curl -X POST "http://localhost:8000/api/debates/YOUR_DEBATE_ID/run-all"
-
-# 5. View results
-curl "http://localhost:8000/api/debates/YOUR_DEBATE_ID"
-```
-
-## 4. Database Setup
-
-### PostgreSQL (Recommended)
-
-If using PostgreSQL locally:
+## 3. Initialize the database
 
 ```bash
-# Create database
-createdb common_ground_db
-
-# Update .env
-DATABASE_URL=postgresql://user:password@localhost:5432/common_ground_db
-
-# Initialize
-python -c "from app.models.database import init_db; init_db()"
+alembic upgrade head
 ```
 
-### Docker PostgreSQL
+---
+
+## 4. Start the app
 
 ```bash
-docker run --name pg_common_ground \
-  -e POSTGRES_PASSWORD=password \
-  -e POSTGRES_DB=common_ground_db \
-  -p 5432:5432 \
-  -d postgres:15
+# Terminal 1 — FastAPI backend
+uvicorn main:app --reload
 
-# Update .env
-DATABASE_URL=postgresql://postgres:password@localhost:5432/common_ground_db
+# Terminal 2 — Next.js frontend
+cd frontend && npm run dev
 ```
 
-## 5. Project Components
+- **Frontend:** http://localhost:3000
+- **API docs:** http://localhost:8000/docs
 
-### Legislation Ingestion
-- Fetches bills from Congress.gov and OpenStates APIs
-- Automatically updates bill status
-- Searchable database
+---
 
-### AI Agents
-- Create agents with different personas
-- Each agent has a system prompt to guide behavior
-- Can rate and debate arguments
+## 5. First run walkthrough
 
-### Debate System
-- Create debates about specific legislation
-- Agents take turns presenting arguments
-- Configurable number of turns
-- Other agents rate argument quality
+### Give yourself dev access
+After signing in with Google, set your account to dev tier in the DB:
 
-## 6. Configuration
-
-All settings in `app/config.py`:
-
-- `database_url`: PostgreSQL connection string
-- `anthropic_api_key`: Claude API key
-- `default_model`: Claude model to use (default: claude-3-sonnet)
-- `max_debate_turns`: Maximum turns per debate
-- `temperature`: Model creativity (0-1)
-
-## 7. Advanced Usage
-
-### Creating Custom Agents
-
-```python
-from app.models import Agent
+```bash
+python -c "
 from app.models.database import SessionLocal
-
+from app.models import User
 db = SessionLocal()
-
-agent = Agent(
-    id="custom_agent_1",
-    name="Healthcare Expert",
-    persona="A healthcare policy specialist",
-    system_prompt="""You are an expert in healthcare policy...
-    Your role is to analyze healthcare legislation...
-    Focus on equity, cost, and access.""",
-    expertise_areas="healthcare,equity,cost",
-    is_active=True
-)
-
-db.add(agent)
+u = db.query(User).first()
+u.subscription_tier = 'dev'
 db.commit()
+print('Done:', u.email)
+db.close()
+"
 ```
 
-### Running Debates Programmatically
+### Ingest some bills
+1. Go to **http://localhost:3000/admin**
+2. Click the **Local** tab
+3. City: `philadelphia`, Limit: `5`
+4. Click **Ingest Local Bills**
 
-```python
-import asyncio
-from app.services.debate_service import DebateService
-from app.models.database import SessionLocal
+The Playwright scraper will open a headless browser, navigate to phila.legistar.com, filter to Type=Bill, and import 5 real Philadelphia ordinances.
 
-async def run_debate():
-    db = SessionLocal()
-    service = DebateService(db)
-    
-    debate = await service.create_debate(
-        legislation_id="bill_123",
-        topic="Should this bill pass?",
-        agent_ids=["agent_1", "agent_2", "agent_3"],
-        max_turns=5
-    )
-    
-    # Run all turns
-    while await service.run_debate_turn(debate.id):
-        pass
-    
-    print(f"Debate {debate.id} completed!")
+### Analyze a bill
+Once bills appear in the **Analyze Bills** section at the top of the admin page:
+1. Click **Analyze** on any bill
+2. This calls the AI to generate a plain-language summary, impact score, and 3 base perspectives
 
-asyncio.run(run_debate())
-```
+You need Ollama running with a model pulled (`ollama pull llama3`) for this step. Or set `AI_PROVIDER=claude` with your API key.
 
-## 8. Troubleshooting
+### View a bill
+Go to **http://localhost:3000** — click any bill to see the detail page with summary, impact badges, and the perspectives panel.
 
-### Issue: "No module named 'app'"
-**Solution**: Ensure you're in the `Common_Ground` directory
+---
 
-### Issue: "Cannot connect to PostgreSQL"
-**Solution**: Check DATABASE_URL in .env, ensure PostgreSQL is running
+## 6. Bulk ingest (optional)
 
-### Issue: "Invalid API key"
-**Solution**: Verify ANTHROPIC_API_KEY and CONGRESS_API_KEY in .env
+To pull all ~8,500 Philadelphia bills at once via Excel export:
+- In admin, check **Bulk Export** and click **Ingest Local Bills**
+- Takes 2–3 minutes; bills land in DB without analysis
+- Analyze them individually as needed
 
-### Issue: "Debate not generating arguments"
-**Solution**: Check Anthropic API is accessible and has available credits
+---
 
-## 9. Next Steps
+## 7. Troubleshooting
 
-1. Read README.md for API documentation
-2. Explore the FastAPI docs at http://localhost:8000/docs
-3. Create custom agents for your use case
-4. Run debates on topics of interest
-5. Analyze ratings to understand argument quality
+**"No module named 'app'"** — run commands from the `Common_Ground/` root directory.
 
-## 10. Support
+**Playwright timeout on Legistar** — Legistar can be slow. The scraper has a 60s timeout. Try again; it's usually a transient load issue.
 
-- Check `.github/copilot-instructions.md` for project context
-- Review `app/config.py` for configuration options
-- See integration files in `app/integrations/` for API details
+**AI returns empty response** — check Ollama is running (`ollama serve`) and the model is pulled (`ollama list`). Or verify your `AI_API_KEY` if using Claude/OpenAI.
+
+**Google OAuth redirect mismatch** — ensure `APP_URL=http://localhost:8000` and your Google Cloud Console has `http://localhost:8000/api/auth/google/callback` as an authorized redirect URI.
+
+**Frontend build errors** — run `cd frontend && npm install` to ensure dependencies are up to date.
