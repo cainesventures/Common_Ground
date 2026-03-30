@@ -89,13 +89,15 @@ async def health_db(db: Session = Depends(get_db)):
 
 @app.get("/health/ai")
 async def health_ai():
-    """Check AI provider configuration."""
+    """Check AI provider configuration and connectivity."""
     from app.services.ai_provider import get_ai_provider
     try:
         provider = get_ai_provider()
+        # Actually test connectivity with a minimal prompt
+        provider.complete(system_prompt="Reply with the word OK only.", user_prompt="ping")
         return {"status": "ok", "provider": type(provider).__name__}
     except Exception as e:
-        return {"status": "error", "reason": str(e)}
+        return {"status": "error", "provider": type(get_ai_provider()).__name__ if True else "", "reason": str(e)}
 
 
 if __name__ == "__main__":

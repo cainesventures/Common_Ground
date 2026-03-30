@@ -270,6 +270,26 @@ async def tag_all_bills(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/fetch-news-all")
+async def fetch_news_all_bills(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Fetch and store news articles for all bills."""
+    from app.services.news_service import fetch_and_store_news
+    bills = db.query(Legislation).filter(Legislation.level == "local").all()
+    fetched = 0
+    total_articles = 0
+    for bill in bills:
+        try:
+            articles = fetch_and_store_news(bill, db)
+            total_articles += len(articles)
+            fetched += 1
+        except Exception as e:
+            logger.warning(f"News fetch failed for {bill.bill_number}: {e}")
+    return {"success": True, "bills_processed": fetched, "total_articles": total_articles}
+
+
 class VoteRequest(BaseModel):
     vote: str
     voter_token: str
@@ -536,6 +556,26 @@ async def get_perspectives(
     }
 
 
+@router.post("/{legislation_id}/fetch-news")
+async def fetch_legislation_news(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Fetch and store related news articles for a bill from Google News RSS."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+
+    try:
+        from app.services.news_service import fetch_and_store_news
+        articles = fetch_and_store_news(leg, db)
+        return {"success": True, "articles_found": len(articles), "articles": articles}
+    except Exception as e:
+        logger.error(f"Error fetching news for {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"News fetch failed: {e}")
+
+
 @router.get("/{legislation_id}")
 async def get_legislation(
     legislation_id: str,
@@ -568,6 +608,7 @@ async def get_legislation(
                 "bill_type": leg.bill_type,
                 "tags": leg.tags,
                 "analyzed_at": leg.analyzed_at,
+                "news_links": leg.news_links,
             }
         }
     except HTTPException:

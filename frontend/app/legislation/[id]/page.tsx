@@ -88,6 +88,9 @@ export default function LegislationPage() {
   let tags: string[] = []
   try { tags = leg.tags ? JSON.parse(leg.tags) : [] } catch { tags = [] }
 
+  let newsLinks: { title: string; url: string; source: string; published: string }[] = []
+  try { newsLinks = leg.news_links ? JSON.parse(leg.news_links) : [] } catch { newsLinks = [] }
+
   return (
     <div className="max-w-3xl space-y-8">
       {/* Header */}
@@ -183,6 +186,41 @@ export default function LegislationPage() {
         <h2 className="text-lg font-semibold mb-4">AI Perspectives</h2>
         <PerspectivesPanel billId={id} analyzed={!!leg.analyzed_at} />
       </div>
+
+      {/* In the News */}
+      {newsLinks.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold mb-3">In the News</h2>
+          <div className="space-y-2">
+            {newsLinks.map((article, i) => (
+              <a
+                key={i}
+                href={article.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-start gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all group"
+              >
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-snug group-hover:text-primary transition-colors line-clamp-2">
+                    {article.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {article.source && (
+                      <span className="text-xs text-muted-foreground">{article.source}</span>
+                    )}
+                    {article.published && (
+                      <span className="text-xs text-muted-foreground">
+                        · {new Date(article.published).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <span className="text-muted-foreground text-sm shrink-0 mt-0.5">→</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

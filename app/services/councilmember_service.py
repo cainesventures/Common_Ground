@@ -22,6 +22,27 @@ from app.models import Councilmember, Legislation
 
 logger = logging.getLogger(__name__)
 
+# Known term start years keyed by profile slug — fallback when bio doesn't mention a year
+KNOWN_TERM_START: dict[str, int] = {
+    "kenyattajohnson":            2012,
+    "marksquilla":                2012,
+    "jamiegauthier":              2020,
+    "curtisjonesjr":              2008,
+    "jefferyyoungjr":             2022,
+    "michaeldriscoll":            2016,
+    "quetcylozada":               2022,
+    "cindybass":                  2012,
+    "anthonyphillips":            2024,
+    "brianoneill":                1980,
+    "katherinegilmorerichardson": 2020,
+    "isaiahthomas":               2020,
+    "jimharrity":                 2024,
+    "ninaahmad":                  2020,
+    "ruelandau":                  2024,
+    "kendrabrooks":               2020,
+    "nicolasorourke":             2024,
+}
+
 # Current council members only (first 17 entries from the page, deduplicated)
 CURRENT_MEMBER_SLUGS = [
     ("https://phlcouncil.com/kenyattajohnson/",       "Council President Kenyatta Johnson | District 2"),
@@ -133,6 +154,27 @@ async def _scrape_profile(page, url: str) -> dict:
     return result
 
 
+def _extract_term_start(bio: str | None, slug: str) -> int | None:
+    """Try to find the year a member first took office from their bio text, falling back to KNOWN_TERM_START."""
+    if bio:
+        # Patterns like "elected in 2012", "took office in 2020", "since 2008", "joined...council in 2016"
+        patterns = [
+            r"elected[^.]{0,40}?(\b20\d{2}\b|\b19\d{2}\b)",
+            r"took office[^.]{0,30}?(\b20\d{2}\b|\b19\d{2}\b)",
+            r"since (\b20\d{2}\b|\b19\d{2}\b)",
+            r"joined[^.]{0,40}?council[^.]{0,20}?(\b20\d{2}\b|\b19\d{2}\b)",
+            r"first elected[^.]{0,30}?(\b20\d{2}\b|\b19\d{2}\b)",
+            r"serving since[^.]{0,20}?(\b20\d{2}\b|\b19\d{2}\b)",
+        ]
+        for pattern in patterns:
+            m = re.search(pattern, bio, re.IGNORECASE)
+            if m:
+                year = int(m.group(1))
+                if 1970 <= year <= 2030:
+                    return year
+    return KNOWN_TERM_START.get(slug)
+
+
 def _bills_sponsored_count(db: Session, member_name: str) -> int:
     """Count bills where sponsor field contains this member's last name."""
     last_name = member_name.split()[-1]
@@ -185,6 +227,7 @@ async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
             cm.bio = profile.get("bio")
             cm.profile_url = profile["profile_url"]
             cm.bills_sponsored = bills_count
+            cm.term_start = _extract_term_start(profile.get("bio"), slug)
             cm.updated_at = datetime.utcnow()
 
             db.commit()

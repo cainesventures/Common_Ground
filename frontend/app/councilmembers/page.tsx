@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
+
+const DistrictMap = dynamic(
+  () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
+  { ssr: false, loading: () => <div className="h-96 rounded-lg bg-muted animate-pulse" /> }
+)
 
 interface Member {
   id: string
@@ -14,6 +20,10 @@ interface Member {
   photo_url?: string
   bills_sponsored: number
   profile_url?: string
+  term_start?: number
+  years_serving?: number
+  next_election?: number
+  years_until_election?: number
 }
 
 function MemberCard({ member }: { member: Member }) {
@@ -38,6 +48,12 @@ function MemberCard({ member }: { member: Member }) {
         </p>
         <p className="text-xs text-muted-foreground mt-1">
           {member.bills_sponsored} bill{member.bills_sponsored !== 1 ? 's' : ''} sponsored
+          {member.term_start && (
+            <span className="ml-2 text-muted-foreground/60">· since {member.term_start}</span>
+          )}
+          {member.next_election && (
+            <span className="ml-2 text-muted-foreground/60">· up {member.next_election}</span>
+          )}
         </p>
       </div>
     </Link>
@@ -67,6 +83,15 @@ export default function CouncilmembersPage() {
           17 members — 10 district seats and 7 at-large seats.
         </p>
       </div>
+
+      {/* Full-city district map — shown once members load */}
+      {!loading && !error && (
+        <DistrictMap
+          district="all"
+          members={members}
+          height={420}
+        />
+      )}
 
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

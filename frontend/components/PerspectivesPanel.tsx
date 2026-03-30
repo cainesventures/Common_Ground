@@ -80,11 +80,130 @@ function PerspectiveCard({ p }: { p: Perspective }) {
   )
 }
 
+const POSITION_LABELS: Record<string, string> = {
+  support: 'Support',
+  oppose: 'Oppose',
+  neutral: 'Neutral',
+  mixed: 'Mixed',
+}
+
+const TALLY_BAR_COLORS: Record<string, string> = {
+  support: 'bg-green-500',
+  oppose:  'bg-red-500',
+  neutral: 'bg-gray-400',
+  mixed:   'bg-yellow-400',
+}
+
+function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
+  const [expanded, setExpanded] = useState<string | null>(null)
+
+  if (perspectives.length === 0) return null
+
+  const counts: Record<string, number> = { support: 0, oppose: 0, neutral: 0, mixed: 0 }
+  for (const p of perspectives) {
+    if (counts[p.position] !== undefined) counts[p.position]++
+    else counts.neutral++
+  }
+
+  const total = perspectives.length
+  const positionOrder = ['support', 'oppose', 'neutral', 'mixed'] as const
+
+  const sorted = perspectives.slice().sort((a, b) => {
+    const order = ['support', 'oppose', 'mixed', 'neutral']
+    return order.indexOf(a.position) - order.indexOf(b.position)
+  })
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-3 border-b bg-muted/30 flex flex-wrap items-center gap-4">
+        <span className="text-sm font-semibold">
+          Tally
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">({total} perspectives)</span>
+        </span>
+        <div className="flex items-center gap-3 text-sm">
+          {positionOrder.map((pos) => counts[pos] > 0 && (
+            <span key={pos} className="flex items-center gap-1.5">
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${TALLY_BAR_COLORS[pos]}`} />
+              <span className="font-medium">{counts[pos]}</span>
+              <span className="text-muted-foreground">{POSITION_LABELS[pos]}</span>
+              <span className="text-muted-foreground/60 text-xs">({Math.round((counts[pos] / total) * 100)}%)</span>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Stacked bar */}
+      <div className="flex h-1.5">
+        {positionOrder.map((pos) => {
+          const pct = (counts[pos] / total) * 100
+          return pct > 0 ? (
+            <div key={pos} className={TALLY_BAR_COLORS[pos]} style={{ width: `${pct}%` }} />
+          ) : null
+        })}
+      </div>
+
+      {/* Rows — click to expand */}
+      <div className="divide-y">
+        {sorted.map((p) => {
+          const label = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)?.label ?? p.perspective_type
+          const posStyle = POSITION_STYLES[p.position] ?? POSITION_STYLES.neutral
+          const isOpen = expanded === p.perspective_type
+          const args: string[] = Array.isArray(p.key_arguments)
+            ? p.key_arguments
+            : (() => { try { return JSON.parse(p.key_arguments as string) } catch { return [] } })()
+
+          return (
+            <div key={p.perspective_type}>
+              <button
+                onClick={() => setExpanded(isOpen ? null : p.perspective_type)}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
+              >
+                <span className="text-muted-foreground">{label}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${posStyle}`}>
+                    {p.position}
+                  </span>
+                  <span className="text-muted-foreground text-xs">{isOpen ? '▲' : '▼'}</span>
+                </div>
+              </button>
+
+              {isOpen && (
+                <div className="px-4 pb-3 pt-1 bg-muted/10 border-t space-y-2">
+                  {p.assessment && (
+                    <p className="text-sm text-muted-foreground leading-relaxed">{p.assessment}</p>
+                  )}
+                  {args.length > 0 && (
+                    <ul className="space-y-1">
+                      {args.map((arg, i) => (
+                        <li key={i} className="text-xs text-muted-foreground flex gap-2">
+                          <span className="shrink-0 text-primary mt-0.5">•</span>
+                          <span>{arg}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {p.concerns && (
+                    <p className="text-xs text-muted-foreground border-t pt-2">
+                      <span className="font-medium text-foreground">Concerns: </span>{p.concerns}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyzed: boolean }) {
   const [perspectives, setPerspectives] = useState<Perspective[]>([])
   const [pending, setPending] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState<string | null>(null)
+  const [generateError, setGenerateError] = useState<string | null>(null)
 
   const load = async () => {
     if (!analyzed) { setLoading(false); return }
@@ -103,6 +222,7 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
 
   const generate = async (perspType: string) => {
     setGenerating(perspType)
+    setGenerateError(null)
     try {
       const data = await api.generatePerspective(billId, perspType)
       if (data?.perspective_type) {
@@ -119,8 +239,8 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
         })
         setPending((prev) => prev.filter((t) => t !== perspType))
       }
-    } catch {
-      // silent
+    } catch (err: any) {
+      setGenerateError(err?.message ?? 'Generation failed — Ollama may not be installed or could not start.')
     } finally {
       setGenerating(null)
     }
@@ -149,6 +269,14 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
 
   return (
     <div className="space-y-6">
+      {generateError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {generateError}
+        </div>
+      )}
+
+      <PerspectivesTally perspectives={perspectives} />
+
       {groups.map((group) => {
         const groupKeys = ALL_PERSPECTIVES.filter((p) => p.group === group).map((p) => p.key)
         const generated = perspectives.filter((p) => groupKeys.includes(p.perspective_type))
@@ -174,7 +302,7 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
                       disabled={isGenerating || generating !== null}
                       className="shrink-0 text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
                     >
-                      {isGenerating ? 'Generating…' : 'Generate'}
+                      {isGenerating ? 'Starting AI…' : 'Generate'}
                     </button>
                   </div>
                 )

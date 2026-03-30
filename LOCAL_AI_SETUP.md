@@ -26,7 +26,10 @@ winget install Ollama.Ollama
 brew install ollama
 ```
 
-### Start the Ollama service
+### Auto-start
+You don't need to manually run `ollama serve` before using Common Ground. The backend detects when Ollama is not running and starts it automatically, then retries the AI request. You'll see the Generate button show **"Starting AI…"** for a few seconds on the first request after a cold start.
+
+If you prefer to start it manually:
 ```bash
 ollama serve
 ```
@@ -100,6 +103,19 @@ AI_API_KEY=your_together_key
 
 ---
 
+## What AI Is Used For
+
+| Feature | Prompt type | Notes |
+|---------|------------|-------|
+| Plain English titles | Short generation | ~3–5 sec per bill |
+| Category tagging | JSON classification | ~2–4 sec per bill |
+| Bill analysis | Structured JSON | ~15–30 sec per bill |
+| Single perspective | Structured JSON | ~10–20 sec per perspective |
+
+News articles are fetched from Google News RSS — no AI or API key required.
+
+---
+
 ## Model Recommendations
 
 | Use case | Model | RAM needed |
@@ -108,22 +124,17 @@ AI_API_KEY=your_together_key
 | Best local quality | `llama3.1:70b` | 48 GB |
 | Production (cloud) | `claude-sonnet-4-6` | — |
 
-### Performance estimates (llama3.1:8b on M1 Mac)
-
-| Task | Time per bill |
-|------|--------------|
-| Plain title generation | ~3–5 sec |
-| Category tagging | ~2–4 sec |
-| Full bill analysis | ~15–30 sec |
-| Single perspective | ~10–20 sec |
-
 For bulk operations (tagging 500 bills), expect several minutes. The admin panel processes bills sequentially and shows results as they complete.
 
 ---
 
 ## Troubleshooting
 
-**"connection refused" on port 11434** — Ollama isn't running. Run `ollama serve` in a terminal.
+**Generate button shows "Starting AI…" for a long time** — Ollama is starting up. This only happens on the first request after a cold start. Subsequent requests are immediate.
+
+**"Generation failed — Ollama may not be installed"** — Ollama is not installed or not on your PATH. Download from https://ollama.ai/download and ensure `ollama` is accessible from the command line.
+
+**"connection refused" on port 11434** — Ollama auto-start failed. Try running `ollama serve` manually in a terminal and check for errors.
 
 **"model not found"** — The model name in `.env` doesn't match what's installed. Run `ollama list` to see exact names.
 

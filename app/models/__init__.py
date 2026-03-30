@@ -265,6 +265,7 @@ class Councilmember(Base):
     bills_sponsored = Column(Integer, default=0)
     bills_passed = Column(Integer, default=0)
     legistar_id = Column(Integer, unique=True, nullable=True)
+    term_start = Column(Integer, nullable=True)   # Year first took office, e.g. 2012
     updated_at = Column(DateTime, default=datetime.utcnow)
 
 

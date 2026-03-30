@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Legislation
 from app.services.ai_provider import get_ai_provider
+from app.services.news_service import fetch_and_store_news
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,12 @@ Return only the JSON object, no other text."""
         db.commit()
         db.refresh(bill)
         logger.info(f"Analyzed bill {bill.bill_number}: impact={bill.impact_score}, type={bill.bill_type}")
+
+        # Fetch related news articles (non-blocking — failures don't abort analysis)
+        try:
+            fetch_and_store_news(bill, db)
+        except Exception as e:
+            logger.warning(f"News fetch skipped for bill {bill.bill_number}: {e}")
 
     except Exception as e:
         logger.error(f"Error analyzing bill {bill.bill_number}: {e}")

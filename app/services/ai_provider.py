@@ -28,6 +28,40 @@ class OllamaProvider(AIProvider):
         self.base_url = base_url.rstrip("/")
         self.model = model
 
+    def _ensure_running(self) -> None:
+        """Start Ollama if it's not reachable, then wait until ready."""
+        import subprocess
+        import sys
+        import time
+        import httpx
+
+        health_url = f"{self.base_url}/api/tags"
+
+        # Already running?
+        try:
+            httpx.get(health_url, timeout=2).raise_for_status()
+            return
+        except Exception:
+            pass
+
+        logger.info("Ollama not reachable — attempting to start...")
+        kwargs = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+        if sys.platform == "win32":
+            kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW  # type: ignore[assignment]
+        subprocess.Popen(["ollama", "serve"], **kwargs)
+
+        # Wait up to 20 seconds for Ollama to be ready
+        for i in range(20):
+            time.sleep(1)
+            try:
+                httpx.get(health_url, timeout=2).raise_for_status()
+                logger.info(f"Ollama ready after {i + 1}s")
+                return
+            except Exception:
+                pass
+
+        raise RuntimeError("Ollama did not start within 20 seconds.")
+
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         import httpx
         url = f"{self.base_url}/api/chat"
@@ -39,9 +73,16 @@ class OllamaProvider(AIProvider):
                 {"role": "user", "content": user_prompt},
             ],
         }
-        r = httpx.post(url, json=payload, timeout=120)
-        r.raise_for_status()
-        return r.json()["message"]["content"]
+        try:
+            r = httpx.post(url, json=payload, timeout=120)
+            r.raise_for_status()
+            return r.json()["message"]["content"]
+        except (httpx.ConnectError, httpx.ConnectTimeout):
+            # Ollama not running — start it and retry once
+            self._ensure_running()
+            r = httpx.post(url, json=payload, timeout=120)
+            r.raise_for_status()
+            return r.json()["message"]["content"]
 
 
 class ClaudeProvider(AIProvider):

@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
+
+const DistrictMap = dynamic(
+  () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
+  { ssr: false, loading: () => <div className="h-80 rounded-lg bg-muted animate-pulse" /> }
+)
 
 const STATUS_COLORS: Record<string, string> = {
   introduced:      'bg-blue-100 text-blue-800',
@@ -37,7 +43,10 @@ export default function CouncilmemberPage() {
     <div className="text-center py-16 text-muted-foreground">Council member not found.</div>
   )
 
-  const { member, bills } = data
+  const { member, bills } = data as {
+    member: any & { term_start?: number; years_serving?: number; next_election?: number }
+    bills: any
+  }
 
   return (
     <div className="max-w-3xl space-y-8">
@@ -84,16 +93,31 @@ export default function CouncilmemberPage() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="border rounded-lg p-4 text-center">
           <p className="text-2xl font-bold">{member.bills_sponsored}</p>
           <p className="text-xs text-muted-foreground mt-1">Bills Sponsored</p>
         </div>
+        {member.term_start && (
+          <div className="border rounded-lg p-4 text-center">
+            <p className="text-2xl font-bold">{member.years_serving}y</p>
+            <p className="text-xs text-muted-foreground mt-1">Since {member.term_start}</p>
+          </div>
+        )}
+        {member.next_election && (
+          <div className="border rounded-lg p-4 text-center">
+            <p className="text-2xl font-bold">{member.next_election}</p>
+            <p className="text-xs text-muted-foreground mt-1">Next Election</p>
+          </div>
+        )}
         <div className="border rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold">{member.district}</p>
-          <p className="text-xs text-muted-foreground mt-1">District</p>
+          <p className="text-2xl font-bold">{member.district === 'At-Large' ? '–' : member.district.replace('District ', '')}</p>
+          <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
         </div>
       </div>
+
+      {/* District Map */}
+      <DistrictMap district={member.district} />
 
       {/* Bills */}
       <div>

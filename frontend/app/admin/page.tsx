@@ -37,6 +37,10 @@ export default function AdminPage() {
   const [scrapeRunning, setScrapeRunning] = useState(false)
   const [scrapeResult, setScrapeResult] = useState<Result | null>(null)
 
+  // Fetch news for all
+  const [newsRunning, setNewsRunning] = useState(false)
+  const [newsResult, setNewsResult] = useState<Result | null>(null)
+
   // Auto-tag
   const [tagRunning, setTagRunning] = useState(false)
   const [tagResult, setTagResult] = useState<Result | null>(null)
@@ -51,6 +55,7 @@ export default function AdminPage() {
   const [billsTotal, setBillsTotal] = useState(0)
   const [analyzingId, setAnalyzingId] = useState<string | null>(null)
   const [analyzeResults, setAnalyzeResults] = useState<Record<string, Result>>({})
+  const [fetchingNewsId, setFetchingNewsId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -124,6 +129,25 @@ export default function AdminPage() {
     }
   }
 
+  const fetchNews = async (bill: Bill) => {
+    setFetchingNewsId(bill.id)
+    setAnalyzeResults((prev) => ({ ...prev, [bill.id]: undefined as any }))
+    try {
+      const data = await api.fetchBillNews(bill.id)
+      setAnalyzeResults((prev) => ({
+        ...prev,
+        [bill.id]: { ok: true, message: `Found ${data?.articles_found ?? 0} news articles.` },
+      }))
+    } catch (err: any) {
+      setAnalyzeResults((prev) => ({
+        ...prev,
+        [bill.id]: { ok: false, message: err.message },
+      }))
+    } finally {
+      setFetchingNewsId(null)
+    }
+  }
+
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
   if (!authorized) return null
 
@@ -167,6 +191,40 @@ export default function AdminPage() {
           }}
         >
           {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
+        </Button>
+      </div>
+
+      {/* ── Fetch News ─────────────────────────────────────────── */}
+      <div className="border rounded-lg p-4 space-y-3">
+        <div>
+          <h2 className="font-semibold">Fetch News</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Search Google News for articles related to each bill and store them.
+            Runs for all local bills. Safe to re-run — overwrites previous results.
+          </p>
+        </div>
+        {newsResult && (
+          <p className={`text-sm ${newsResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+            {newsResult.message}
+          </p>
+        )}
+        <Button
+          variant="outline"
+          disabled={newsRunning}
+          onClick={async () => {
+            setNewsRunning(true)
+            setNewsResult(null)
+            try {
+              const data = await api.fetchNewsAll()
+              setNewsResult({ ok: true, message: `Fetched ${data?.total_articles ?? 0} articles across ${data?.bills_processed ?? 0} bills.` })
+            } catch (err: any) {
+              setNewsResult({ ok: false, message: err.message })
+            } finally {
+              setNewsRunning(false)
+            }
+          }}
+        >
+          {newsRunning ? 'Fetching…' : 'Fetch News for All Bills'}
         </Button>
       </div>
 
@@ -283,8 +341,16 @@ export default function AdminPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    onClick={() => fetchNews(bill)}
+                    disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}
+                  >
+                    {fetchingNewsId === bill.id ? 'Fetching…' : 'News'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
                     onClick={() => analyzeBill(bill)}
-                    disabled={isAnalyzing || analyzingId !== null}
+                    disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null}
                   >
                     {isAnalyzing ? 'Analyzing…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
                   </Button>
