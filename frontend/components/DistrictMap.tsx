@@ -62,6 +62,7 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
       if (!document.body.contains(containerRef.current)) return
 
+      try { (containerRef.current as any)._leaflet_id = undefined } catch { /* ignore */ }
       const map = L.map(containerRef.current, {
         center: PHILLY_CENTER,
         zoom: 11,
@@ -134,7 +135,10 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
 
     return () => {
       mounted = false
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
+      if (mapRef.current) {
+        try { mapRef.current.remove() } catch { /* DOM already detached */ }
+        mapRef.current = null
+      }
     }
   }, [districtNum, showAll])
 

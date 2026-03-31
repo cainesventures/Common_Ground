@@ -119,7 +119,7 @@ export default function ProfilePage() {
         {votes.length === 0 ? (
           <p className="text-muted-foreground text-sm">
             You haven&apos;t voted on any legislation yet.{' '}
-            <Link href="/" className="text-primary hover:underline">Browse debates</Link> to get started.
+            <Link href="/legislation" className="text-primary hover:underline">Browse legislation</Link> to get started.
           </p>
         ) : (
           <div className="space-y-3">

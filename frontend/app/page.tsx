@@ -1,24 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-import { isLoggedIn } from '@/lib/auth'
-
-const ANALYZED_OPTIONS = [
-  { value: '', label: 'All Bills' },
-  { value: 'true', label: 'Analyzed' },
-  { value: 'false', label: 'Pending' },
-]
-
-const IMPACT_OPTIONS = [
-  { value: '', label: 'All Impact' },
-  { value: 'high', label: 'High Impact' },
-  { value: 'medium', label: 'Medium Impact' },
-  { value: 'low', label: 'Low Impact' },
-]
-
-const PAGE_SIZE = 20
 
 const IMPACT_COLORS: Record<string, string> = {
   high:   'bg-red-100 text-red-800',
@@ -39,321 +23,256 @@ interface Bill {
   bill_number: string
   title: string
   plain_title?: string
-  source: string
   status: string
-  level: string
   impact_level?: string
-  impact_score?: number
-  bill_type?: string
-  tags?: string
-  description?: string
   summary?: string
-  analyzed_at?: string
+  tags?: string
 }
 
-function BookmarkButton({ billId, tracked, onToggle }: { billId: string; tracked: boolean; onToggle: (id: string) => void }) {
-  return (
-    <button
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(billId) }}
-      className={`shrink-0 p-1 rounded transition-colors ${tracked ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
-      title={tracked ? 'Unsave bill' : 'Save bill'}
-      aria-label={tracked ? 'Unsave bill' : 'Save bill'}
-    >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill={tracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+const FEATURES = [
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
+      </svg>
+    ),
+    title: 'Plain English',
+    body: 'Cryptic legal titles rewritten into language anyone can understand. Know what a bill actually does before reading a word of legalese.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+      </svg>
+    ),
+    title: '17 Perspectives',
+    body: 'Every analyzed bill gets viewpoints from 17 distinct lenses — progressive, conservative, working class, business owner, urban planner, and more.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+      </svg>
+    ),
+    title: 'Impact Scoring',
+    body: 'Each bill is rated on how broadly it affects Philadelphians — from low-impact procedural items to high-impact legislation that touches everyday life.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 01-2.25 2.25M16.5 7.5V18a2.25 2.25 0 002.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 002.25 2.25h13.5M6 7.5h3v3H6v-3z" />
+      </svg>
+    ),
+    title: 'In the News',
+    body: 'Related news articles surfaced automatically for each bill so you can see how local media is covering the legislation.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+      </svg>
+    ),
+    title: 'Council Members',
+    body: 'Profiles for all 17 Philadelphia City Council members — who sponsors what, their district, contact info, and every bill they\'ve introduced.',
+  },
+  {
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
       </svg>
-    </button>
-  )
-}
+    ),
+    title: 'Save & Follow',
+    body: 'Bookmark bills you care about and get a weekly email digest of newly analyzed legislation with perspectives. Free, no spam.',
+  },
+]
 
-function BillCard({ bill, trackedIds, onToggleTrack }: { bill: Bill; trackedIds?: Set<string>; onToggleTrack?: (id: string) => void }) {
-  const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
-  const statusColor = STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'
-  const isTracked = trackedIds?.has(bill.id) ?? false
+const STEPS = [
+  {
+    number: '1',
+    title: 'Bills are ingested daily',
+    body: 'New legislation introduced to Philadelphia City Council is automatically pulled from the city\'s Legistar system.',
+  },
+  {
+    number: '2',
+    title: 'AI analyzes each bill',
+    body: 'A plain-English title, summary, impact score, and category tags are generated so you can understand the bill at a glance.',
+  },
+  {
+    number: '3',
+    title: '17 perspectives are generated',
+    body: 'The bill is analyzed from 17 political, policy, and demographic viewpoints — each with a clear position and key arguments.',
+  },
+]
 
+function BillPreviewCard({ bill }: { bill: Bill }) {
   let tags: string[] = []
   try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
-
-  const isAnalyzed = Boolean(bill.analyzed_at)
+  const statusColor = STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'
+  const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
 
   return (
-    <div className="relative border rounded-lg hover:border-primary/60 hover:bg-muted/20 transition-all">
-      <Link href={`/legislation/${bill.id}`} className="block px-4 py-3">
-        {/* Row 1: bill number + badges + bookmark */}
-        <div className="flex items-center gap-2 flex-wrap mb-1 pr-7">
-          <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
-          <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
-            {bill.status?.replace(/_/g, ' ')}
-          </span>
-          {impactColor && (
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
-              {bill.impact_level} impact
-            </span>
-          )}
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-auto ${
-            isAnalyzed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-          }`}>
-            {isAnalyzed ? 'Analyzed' : 'Pending'}
-          </span>
-        </div>
-
-        {/* Row 2: plain title (prominent) + official title (secondary) */}
-        {bill.plain_title
-          ? <>
-              <p className="text-sm font-semibold leading-snug pr-6">{bill.plain_title}</p>
-              <p className="text-xs text-muted-foreground/70 mt-0.5 leading-snug line-clamp-1">
-                <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Legal Title:</span>
-                {bill.title}
-              </p>
-            </>
-          : <p className="text-sm font-medium leading-snug pr-6">{bill.title}</p>
-        }
-
-        {/* Row 3: AI summary, or bill description */}
-        {(bill.summary || bill.description) && (
-          <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">
-            <span className="uppercase tracking-wide font-medium text-[10px] text-muted-foreground/70 mr-1">
-              {bill.summary ? 'Summary:' : 'Description:'}
-            </span>
-            {bill.summary ?? bill.description}
-          </p>
-        )}
-
-        {/* Row 4: tags */}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {tags.map((tag) => (
-              <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
-            ))}
-          </div>
-        )}
-      </Link>
-
-      {/* Bookmark button — outside the Link to avoid nested interactive elements */}
-      {onToggleTrack && (
-        <div className="absolute top-3 right-3">
-          <BookmarkButton billId={bill.id} tracked={isTracked} onToggle={onToggleTrack} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Select({
-  value,
-  onChange,
-  options,
-}: {
-  value: string
-  onChange: (v: string) => void
-  options: { value: string; label: string }[]
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+    <Link
+      href={`/legislation/${bill.id}`}
+      className="block border rounded-lg px-4 py-3 hover:border-primary/60 hover:bg-muted/20 transition-all"
     >
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
-  )
-}
-
-interface TagCount {
-  tag: string
-  count: number
-}
-
-export default function HomePage() {
-  const [bills, setBills] = useState<Bill[]>([])
-  const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
-  const level = 'local'
-  const [analyzed, setAnalyzed] = useState('')
-  const [tag, setTag] = useState('')
-  const [impact, setImpact] = useState('')
-  const [tagCounts, setTagCounts] = useState<TagCount[]>([])
-  const [trackedIds, setTrackedIds] = useState<Set<string>>(new Set())
-  const loggedIn = isLoggedIn()
-
-  const load = useCallback((newOffset: number, q: string, l: string, a: string, t: string, imp: string) => {
-    setLoading(true)
-    setError(null)
-    api.searchLegislation(q, PAGE_SIZE, newOffset, l, a, t, imp)
-      .then((data) => {
-        setBills(data?.results ?? [])
-        setTotal(data?.total ?? 0)
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    api.getTagCounts().then((data) => setTagCounts(data?.tags ?? [])).catch(() => {})
-    if (loggedIn) {
-      api.getTrackedBillIds().then((data) => setTrackedIds(new Set(data?.ids ?? []))).catch(() => {})
-    }
-  }, [loggedIn])
-
-  const handleToggleTrack = useCallback(async (billId: string) => {
-    try {
-      const data = await api.toggleTrackBill(billId)
-      setTrackedIds((prev) => {
-        const next = new Set(prev)
-        if (data?.tracked) next.add(billId)
-        else next.delete(billId)
-        return next
-      })
-    } catch { /* ignore */ }
-  }, [])
-
-  useEffect(() => {
-    load(0, search, level, analyzed, tag, impact)
-    setOffset(0)
-  }, [search, level, analyzed, tag, impact, load])
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    setSearch(searchInput)
-  }
-
-  const clearAll = () => {
-    setSearch('')
-    setSearchInput('')
-    setAnalyzed('')
-    setTag('')
-    setImpact('')
-  }
-
-  const hasFilters = search || analyzed || tag || impact
-
-  const totalPages = Math.ceil(total / PAGE_SIZE)
-  const currentPage = Math.floor(offset / PAGE_SIZE) + 1
-
-  return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold tracking-tight">Philadelphia City Council</h1>
-        <p className="text-muted-foreground mt-1">
-          Browse legislation and see what different perspectives have to say.
-        </p>
+      <div className="flex items-center gap-2 flex-wrap mb-1">
+        <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
+          {bill.status?.replace(/_/g, ' ')}
+        </span>
+        {impactColor && (
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
+            {bill.impact_level} impact
+          </span>
+        )}
       </div>
-
-      {/* Search + filters */}
-      <form onSubmit={handleSearch} className="mb-3 flex flex-wrap items-center gap-3">
-        <input
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search bills…"
-          className="h-9 flex-1 min-w-48 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-        <button
-          type="submit"
-          className="h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-        >
-          Search
-        </button>
-        <Select value={analyzed} onChange={setAnalyzed} options={ANALYZED_OPTIONS} />
-        <Select value={impact} onChange={setImpact} options={IMPACT_OPTIONS} />
-        {tagCounts.length > 0 && (
-          <Select
-            value={tag}
-            onChange={setTag}
-            options={[
-              { value: '', label: 'All Tags' },
-              ...tagCounts.map(({ tag: t, count }) => ({ value: t, label: `${t} (${count})` })),
-            ]}
-          />
-        )}
-        {hasFilters && (
-          <button
-            type="button"
-            onClick={clearAll}
-            className="text-xs text-muted-foreground underline hover:no-underline"
-          >
-            Reset
-          </button>
-        )}
-      </form>
-
-      {loading && (
-        <div className="flex flex-col gap-2">
-          {[...Array(8)].map((_, i) => (
-            <div key={i} className="h-20 rounded-lg bg-muted animate-pulse" />
+      <p className="text-sm font-semibold leading-snug">
+        {bill.plain_title || bill.title}
+      </p>
+      {bill.summary && (
+        <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">{bill.summary}</p>
+      )}
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {tags.slice(0, 3).map((t) => (
+            <span key={t} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{t}</span>
           ))}
         </div>
       )}
+    </Link>
+  )
+}
 
-      {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          Could not load bills: {error}. Is the backend running?
+export default function LandingPage() {
+  const [recentBills, setRecentBills] = useState<Bill[]>([])
+
+  useEffect(() => {
+    api.searchLegislation('', 4, 0, 'local', 'true', '', 'high')
+      .then((data) => setRecentBills(data?.results ?? []))
+      .catch(() => {})
+  }, [])
+
+  return (
+    <div className="space-y-20 pb-20">
+
+      {/* ── Hero ── */}
+      <section className="pt-12 pb-4 text-center max-w-3xl mx-auto">
+        <div className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200">
+          Philadelphia City Council · Free &amp; Open
         </div>
-      )}
-
-      {!loading && !error && bills.length === 0 && (
-        <div className="text-center py-16 text-muted-foreground">
-          <p className="text-lg font-medium mb-2">No bills found</p>
-          <p className="text-sm">
-            {hasFilters ? (
-              <button onClick={clearAll} className="underline hover:no-underline">
-                Clear filters
-              </button>
-            ) : (
-              <>
-                <Link href="/admin" className="underline hover:no-underline">Ingest legislation</Link>
-                {' '}to get started.
-              </>
-            )}
-          </p>
+        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-5">
+          Understand what your City Council<br className="hidden sm:block" /> is actually doing
+        </h1>
+        <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
+          Common Ground tracks every bill introduced to Philadelphia City Council and explains it in plain English — with AI perspectives from across the political spectrum.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Link
+            href="/legislation"
+            className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors"
+          >
+            Browse legislation
+          </Link>
+          <Link
+            href="/councilmembers"
+            className="px-6 py-3 rounded-lg border font-semibold text-base hover:bg-muted/40 transition-colors"
+          >
+            View council members
+          </Link>
         </div>
-      )}
+      </section>
 
-      {!loading && bills.length > 0 && (
-        <>
-          <p className="text-xs text-muted-foreground mb-3">{total} bill{total !== 1 ? 's' : ''}</p>
-          <div className="flex flex-col gap-2">
-            {bills.map((bill) => (
-              <BillCard key={bill.id} bill={bill} trackedIds={loggedIn ? trackedIds : undefined} onToggleTrack={loggedIn ? handleToggleTrack : undefined} />
+      {/* ── How it works ── */}
+      <section className="max-w-3xl mx-auto">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground text-center mb-10">
+          How it works
+        </h2>
+        <div className="grid sm:grid-cols-3 gap-6">
+          {STEPS.map((step) => (
+            <div key={step.number} className="text-center">
+              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold text-lg flex items-center justify-center mx-auto mb-4">
+                {step.number}
+              </div>
+              <p className="font-semibold mb-2">{step.title}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{step.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Features ── */}
+      <section className="max-w-4xl mx-auto">
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground text-center mb-10">
+          What you get
+        </h2>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {FEATURES.map((f) => (
+            <div key={f.title} className="border rounded-lg px-5 py-4">
+              <div className="text-primary mb-3">{f.icon}</div>
+              <p className="font-semibold mb-1">{f.title}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{f.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ── Live bill preview ── */}
+      {recentBills.length > 0 && (
+        <section className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+              Recently analyzed
+            </h2>
+            <Link href="/legislation?analyzed=true&impact=high" className="text-sm text-primary hover:underline">
+              See all →
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3">
+            {recentBills.map((bill) => (
+              <BillPreviewCard key={bill.id} bill={bill} />
             ))}
           </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6">
-              <button
-                onClick={() => {
-                  const newOffset = Math.max(0, offset - PAGE_SIZE)
-                  setOffset(newOffset)
-                  load(newOffset, search, level, analyzed, tag, impact)
-                }}
-                disabled={offset === 0}
-                className="text-sm px-3 py-1.5 rounded-md border disabled:opacity-40 hover:bg-muted/40 transition-colors"
-              >
-                ← Previous
-              </button>
-              <span className="text-sm text-muted-foreground">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => {
-                  const newOffset = offset + PAGE_SIZE
-                  setOffset(newOffset)
-                  load(newOffset, search, level, analyzed, tag, impact)
-                }}
-                disabled={offset + PAGE_SIZE >= total}
-                className="text-sm px-3 py-1.5 rounded-md border disabled:opacity-40 hover:bg-muted/40 transition-colors"
-              >
-                Next →
-              </button>
-            </div>
-          )}
-        </>
+        </section>
       )}
+
+      {/* ── Perspectives callout ── */}
+      <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">
+        <h2 className="text-2xl font-bold tracking-tight mb-3">
+          17 perspectives on every bill
+        </h2>
+        <p className="text-muted-foreground leading-relaxed max-w-xl mx-auto mb-6">
+          We don't tell you what to think. Instead, we show you how different communities — from progressive activists to business owners to conspiracy theorists — see each piece of legislation. Make up your own mind.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2 mb-8 text-xs">
+          {['Progressive', 'Conservative', 'Libertarian', 'Socialist', 'Working Class', 'Business', 'Urban Planner', 'Public Health', 'Youth', 'Elderly', 'Neighborhood', 'Christian Ethicist', '+ more'].map((p) => (
+            <span key={p} className="px-3 py-1 rounded-full border bg-background font-medium">{p}</span>
+          ))}
+        </div>
+        <Link
+          href="/legislation?analyzed=true"
+          className="inline-block px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors"
+        >
+          Read the perspectives
+        </Link>
+      </section>
+
+      {/* ── Mission ── */}
+      <section className="max-w-2xl mx-auto text-center">
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Built for Philadelphians</h2>
+        <p className="text-muted-foreground leading-relaxed mb-4">
+          City Council passes hundreds of bills every year — zoning changes, budget allocations, public safety measures, labor rules. Most residents never hear about them until they're already law.
+        </p>
+        <p className="text-muted-foreground leading-relaxed mb-8">
+          Common Ground is a free, independent civic tool with no ads and no agenda. If it's useful to you, consider supporting it.
+        </p>
+        <Link
+          href="/donate"
+          className="inline-block px-5 py-2.5 rounded-lg border font-semibold text-sm hover:bg-muted/40 transition-colors"
+        >
+          Support the project →
+        </Link>
+      </section>
+
     </div>
   )
 }
