@@ -319,6 +319,7 @@ class User(Base):
     display_name = Column(String)
     avatar_url   = Column(String)                                            # Google profile photo URL
     subscription_tier = Column(String, default="free", nullable=False)      # "free" | "paid" | "dev"
+    digest_enabled    = Column(Boolean, default=False, nullable=False)       # weekly email digest opt-in
     created_at        = Column(DateTime, default=datetime.utcnow)
     last_login        = Column(DateTime)
 

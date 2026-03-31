@@ -10,9 +10,15 @@ import { getToken, clearToken } from '@/lib/auth'
 interface User {
   id: string
   display_name: string
-  avatar_url: string
+  avatar_url: string | null
   email: string
   subscription_tier?: string
+}
+
+function avatarSrc(user: User): string {
+  if (user.avatar_url) return user.avatar_url
+  if (user.subscription_tier === 'dev') return `https://flagcdn.com/us.svg`
+  return `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(user.id)}`
 }
 
 export function Navbar() {
@@ -61,12 +67,22 @@ export function Navbar() {
           <Link href="/councilmembers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
             Council
           </Link>
-          <Link href="/pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-            Pricing
+          <Link href="/donate" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            Donate
           </Link>
+          {user && (
+            <Link href="/my-bills" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              My Bills
+            </Link>
+          )}
           {user && (
             <Link href="/profile" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Profile
+            </Link>
+          )}
+          {user?.subscription_tier === 'dev' && (
+            <Link href="/dashboard" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+              Dashboard
             </Link>
           )}
           {user?.subscription_tier === 'dev' && (
@@ -81,7 +97,7 @@ export function Navbar() {
             <>
               <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src={user.avatar_url} alt={user.display_name} />
+                  <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
                   <AvatarFallback>{user.display_name?.[0] ?? 'U'}</AvatarFallback>
                 </Avatar>
                 <span className="text-sm hidden sm:block">{user.display_name}</span>

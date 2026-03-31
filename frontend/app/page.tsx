@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { isLoggedIn } from '@/lib/auth'
 
 const ANALYZED_OPTIONS = [
   { value: '', label: 'All Bills' },
@@ -50,9 +51,25 @@ interface Bill {
   analyzed_at?: string
 }
 
-function BillCard({ bill }: { bill: Bill }) {
+function BookmarkButton({ billId, tracked, onToggle }: { billId: string; tracked: boolean; onToggle: (id: string) => void }) {
+  return (
+    <button
+      onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle(billId) }}
+      className={`shrink-0 p-1 rounded transition-colors ${tracked ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+      title={tracked ? 'Unsave bill' : 'Save bill'}
+      aria-label={tracked ? 'Unsave bill' : 'Save bill'}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill={tracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+      </svg>
+    </button>
+  )
+}
+
+function BillCard({ bill, trackedIds, onToggleTrack }: { bill: Bill; trackedIds?: Set<string>; onToggleTrack?: (id: string) => void }) {
   const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
   const statusColor = STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'
+  const isTracked = trackedIds?.has(bill.id) ?? false
 
   let tags: string[] = []
   try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
@@ -60,59 +77,65 @@ function BillCard({ bill }: { bill: Bill }) {
   const isAnalyzed = Boolean(bill.analyzed_at)
 
   return (
-    <Link
-      href={`/legislation/${bill.id}`}
-      className="block border rounded-lg px-4 py-3 hover:border-primary/60 hover:bg-muted/20 transition-all"
-    >
-      {/* Row 1: bill number + badges */}
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
-        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
-          {bill.status?.replace(/_/g, ' ')}
-        </span>
-        {impactColor && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
-            {bill.impact_level} impact
+    <div className="relative border rounded-lg hover:border-primary/60 hover:bg-muted/20 transition-all">
+      <Link href={`/legislation/${bill.id}`} className="block px-4 py-3">
+        {/* Row 1: bill number + badges + bookmark */}
+        <div className="flex items-center gap-2 flex-wrap mb-1 pr-7">
+          <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
+            {bill.status?.replace(/_/g, ' ')}
           </span>
+          {impactColor && (
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
+              {bill.impact_level} impact
+            </span>
+          )}
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-auto ${
+            isAnalyzed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
+          }`}>
+            {isAnalyzed ? 'Analyzed' : 'Pending'}
+          </span>
+        </div>
+
+        {/* Row 2: plain title (prominent) + official title (secondary) */}
+        {bill.plain_title
+          ? <>
+              <p className="text-sm font-semibold leading-snug pr-6">{bill.plain_title}</p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5 leading-snug line-clamp-1">
+                <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Legal Title:</span>
+                {bill.title}
+              </p>
+            </>
+          : <p className="text-sm font-medium leading-snug pr-6">{bill.title}</p>
+        }
+
+        {/* Row 3: AI summary, or bill description */}
+        {(bill.summary || bill.description) && (
+          <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">
+            <span className="uppercase tracking-wide font-medium text-[10px] text-muted-foreground/70 mr-1">
+              {bill.summary ? 'Summary:' : 'Description:'}
+            </span>
+            {bill.summary ?? bill.description}
+          </p>
         )}
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ml-auto ${
-          isAnalyzed ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'
-        }`}>
-          {isAnalyzed ? 'Analyzed' : 'Pending'}
-        </span>
-      </div>
 
-      {/* Row 2: plain title (prominent) + official title (secondary) */}
-      {bill.plain_title
-        ? <>
-            <p className="text-sm font-semibold leading-snug">{bill.plain_title}</p>
-            <p className="text-xs text-muted-foreground/70 mt-0.5 leading-snug line-clamp-1">
-              <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Legal Title:</span>
-              {bill.title}
-            </p>
-          </>
-        : <p className="text-sm font-medium leading-snug">{bill.title}</p>
-      }
+        {/* Row 4: tags */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {tags.map((tag) => (
+              <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
+            ))}
+          </div>
+        )}
+      </Link>
 
-      {/* Row 3: AI summary, or bill description/text from Legistar */}
-      {(bill.summary || bill.description) && (
-        <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">
-          <span className="uppercase tracking-wide font-medium text-[10px] text-muted-foreground/70 mr-1">
-            {bill.summary ? 'Summary:' : 'Description:'}
-          </span>
-          {bill.summary ?? bill.description}
-        </p>
-      )}
-
-      {/* Row 4: tags */}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {tags.map((tag) => (
-            <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
-          ))}
+      {/* Bookmark button — outside the Link to avoid nested interactive elements */}
+      {onToggleTrack && (
+        <div className="absolute top-3 right-3">
+          <BookmarkButton billId={bill.id} tracked={isTracked} onToggle={onToggleTrack} />
         </div>
       )}
-    </Link>
+    </div>
   )
 }
 
@@ -156,6 +179,8 @@ export default function HomePage() {
   const [tag, setTag] = useState('')
   const [impact, setImpact] = useState('')
   const [tagCounts, setTagCounts] = useState<TagCount[]>([])
+  const [trackedIds, setTrackedIds] = useState<Set<string>>(new Set())
+  const loggedIn = isLoggedIn()
 
   const load = useCallback((newOffset: number, q: string, l: string, a: string, t: string, imp: string) => {
     setLoading(true)
@@ -171,6 +196,21 @@ export default function HomePage() {
 
   useEffect(() => {
     api.getTagCounts().then((data) => setTagCounts(data?.tags ?? [])).catch(() => {})
+    if (loggedIn) {
+      api.getTrackedBillIds().then((data) => setTrackedIds(new Set(data?.ids ?? []))).catch(() => {})
+    }
+  }, [loggedIn])
+
+  const handleToggleTrack = useCallback(async (billId: string) => {
+    try {
+      const data = await api.toggleTrackBill(billId)
+      setTrackedIds((prev) => {
+        const next = new Set(prev)
+        if (data?.tracked) next.add(billId)
+        else next.delete(billId)
+        return next
+      })
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
@@ -221,6 +261,16 @@ export default function HomePage() {
         </button>
         <Select value={analyzed} onChange={setAnalyzed} options={ANALYZED_OPTIONS} />
         <Select value={impact} onChange={setImpact} options={IMPACT_OPTIONS} />
+        {tagCounts.length > 0 && (
+          <Select
+            value={tag}
+            onChange={setTag}
+            options={[
+              { value: '', label: 'All Tags' },
+              ...tagCounts.map(({ tag: t, count }) => ({ value: t, label: `${t} (${count})` })),
+            ]}
+          />
+        )}
         {hasFilters && (
           <button
             type="button"
@@ -231,26 +281,6 @@ export default function HomePage() {
           </button>
         )}
       </form>
-
-      {/* Category tag pills — only shown when tags exist in DB */}
-      {tagCounts.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-1.5">
-          {tagCounts.map(({ tag: t, count }) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTag(tag === t ? '' : t)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors capitalize ${
-                tag === t
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-muted-foreground hover:border-primary/60 hover:text-foreground'
-              }`}
-            >
-              {t} <span className={`ml-0.5 ${tag === t ? 'opacity-80' : 'opacity-60'}`}>({count})</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {loading && (
         <div className="flex flex-col gap-2">
@@ -289,7 +319,7 @@ export default function HomePage() {
           <p className="text-xs text-muted-foreground mb-3">{total} bill{total !== 1 ? 's' : ''}</p>
           <div className="flex flex-col gap-2">
             {bills.map((bill) => (
-              <BillCard key={bill.id} bill={bill} />
+              <BillCard key={bill.id} bill={bill} trackedIds={loggedIn ? trackedIds : undefined} onToggleTrack={loggedIn ? handleToggleTrack : undefined} />
             ))}
           </div>
 

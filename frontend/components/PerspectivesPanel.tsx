@@ -4,23 +4,23 @@ import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 
 const ALL_PERSPECTIVES = [
-  { key: 'progressive',         label: 'Progressive',          group: 'Political' },
-  { key: 'conservative',        label: 'Conservative',         group: 'Political' },
-  { key: 'libertarian',         label: 'Libertarian',          group: 'Political' },
-  { key: 'socialist',           label: 'Socialist',            group: 'Political' },
-  { key: 'centrist',            label: 'Centrist',             group: 'Political' },
-  { key: 'economic',            label: 'Economic',             group: 'Policy' },
-  { key: 'civil_liberties',     label: 'Civil Liberties',      group: 'Policy' },
-  { key: 'environmental',       label: 'Environmental',        group: 'Policy' },
-  { key: 'public_health',       label: 'Public Health',        group: 'Policy' },
-  { key: 'urban_planning',      label: 'Urban Planning',       group: 'Policy' },
-  { key: 'working_class',       label: 'Working Class',        group: 'Demographic' },
-  { key: 'business',            label: 'Business',             group: 'Demographic' },
-  { key: 'youth',               label: 'Youth',                group: 'Demographic' },
-  { key: 'elderly',             label: 'Elderly',              group: 'Demographic' },
-  { key: 'neighborhood',        label: 'Neighborhood',         group: 'Demographic' },
-  { key: 'christian_ethicist',  label: 'Christian Ethicist',   group: 'Special' },
-  { key: 'conspiracy_theorist', label: 'Conspiracy Theorist',  group: 'Special' },
+  { key: 'progressive',         label: 'Progressive',          group: 'Political',    icon: '🌹' },
+  { key: 'conservative',        label: 'Conservative',         group: 'Political',    icon: '🦅' },
+  { key: 'libertarian',         label: 'Libertarian',          group: 'Political',    icon: '🗽' },
+  { key: 'socialist',           label: 'Socialist',            group: 'Political',    icon: '✊' },
+  { key: 'centrist',            label: 'Centrist',             group: 'Political',    icon: '⚖️' },
+  { key: 'economic',            label: 'Economic',             group: 'Policy',       icon: '💰' },
+  { key: 'civil_liberties',     label: 'Civil Liberties',      group: 'Policy',       icon: '📜' },
+  { key: 'environmental',       label: 'Environmental',        group: 'Policy',       icon: '🌿' },
+  { key: 'public_health',       label: 'Public Health',        group: 'Policy',       icon: '🏥' },
+  { key: 'urban_planning',      label: 'Urban Planning',       group: 'Policy',       icon: '🏙️' },
+  { key: 'working_class',       label: 'Working Class',        group: 'Demographic',  icon: '🔨' },
+  { key: 'business',            label: 'Business',             group: 'Demographic',  icon: '💼' },
+  { key: 'youth',               label: 'Youth',                group: 'Demographic',  icon: '🎓' },
+  { key: 'elderly',             label: 'Elderly',              group: 'Demographic',  icon: '🧓' },
+  { key: 'neighborhood',        label: 'Neighborhood',         group: 'Demographic',  icon: '🏘️' },
+  { key: 'christian_ethicist',  label: 'Christian Ethicist',   group: 'Special',      icon: '🕊️' },
+  { key: 'conspiracy_theorist', label: 'Conspiracy Theorist',  group: 'Special',      icon: '🕵️' },
 ]
 
 const POSITION_STYLES: Record<string, string> = {
@@ -45,12 +45,17 @@ function PerspectiveCard({ p }: { p: Perspective }) {
     ? p.key_arguments
     : (() => { try { return JSON.parse(p.key_arguments as string) } catch { return [] } })()
 
-  const label = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)?.label ?? p.perspective_type
+  const meta = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)
+  const label = meta?.label ?? p.perspective_type
+  const icon = meta?.icon
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-sm">{label}</span>
+        <span className="font-medium text-sm flex items-center gap-1.5">
+          {icon && <span className="text-base leading-none">{icon}</span>}
+          {label}
+        </span>
         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${posStyle}`}>
           {p.position}
         </span>
@@ -106,10 +111,11 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
   }
 
   const total = perspectives.length
-  const positionOrder = ['support', 'oppose', 'neutral', 'mixed'] as const
+  // Tug-of-war order: support ←── neutral ──→ oppose
+  const positionOrder = ['support', 'neutral', 'mixed', 'oppose'] as const
 
   const sorted = perspectives.slice().sort((a, b) => {
-    const order = ['support', 'oppose', 'mixed', 'neutral']
+    const order = ['support', 'neutral', 'mixed', 'oppose']
     return order.indexOf(a.position) - order.indexOf(b.position)
   })
 
@@ -118,7 +124,7 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
       {/* Header */}
       <div className="px-4 py-3 border-b bg-muted/30 flex flex-wrap items-center gap-4">
         <span className="text-sm font-semibold">
-          Tally
+          AI Tally
           <span className="ml-1.5 text-xs font-normal text-muted-foreground">({total} perspectives)</span>
         </span>
         <div className="flex items-center gap-3 text-sm">
@@ -146,7 +152,9 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
       {/* Rows — click to expand */}
       <div className="divide-y">
         {sorted.map((p) => {
-          const label = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)?.label ?? p.perspective_type
+          const tallyMeta = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)
+          const label = tallyMeta?.label ?? p.perspective_type
+          const icon = tallyMeta?.icon
           const posStyle = POSITION_STYLES[p.position] ?? POSITION_STYLES.neutral
           const isOpen = expanded === p.perspective_type
           const args: string[] = Array.isArray(p.key_arguments)
@@ -159,7 +167,10 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
                 onClick={() => setExpanded(isOpen ? null : p.perspective_type)}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
               >
-                <span className="text-muted-foreground">{label}</span>
+                <span className="text-muted-foreground flex items-center gap-1.5">
+                  {icon && <span className="text-base leading-none">{icon}</span>}
+                  {label}
+                </span>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${posStyle}`}>
                     {p.position}
@@ -198,12 +209,13 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
   )
 }
 
-export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyzed: boolean }) {
+export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billId: string; analyzed: boolean; isAdmin?: boolean }) {
   const [perspectives, setPerspectives] = useState<Perspective[]>([])
   const [pending, setPending] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
+  const [bulkRunning, setBulkRunning] = useState<'all' | 'clear' | null>(null)
 
   const load = async () => {
     if (!analyzed) { setLoading(false); return }
@@ -219,6 +231,33 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
   }
 
   useEffect(() => { load() }, [billId, analyzed])
+
+  const generateAll = async () => {
+    setBulkRunning('all')
+    setGenerateError(null)
+    try {
+      await api.generateAllPerspectives(billId)
+      await load()
+    } catch (err: any) {
+      setGenerateError(err?.message ?? 'Failed to generate all perspectives.')
+    } finally {
+      setBulkRunning(null)
+    }
+  }
+
+  const clearAll = async () => {
+    setBulkRunning('clear')
+    setGenerateError(null)
+    try {
+      await api.clearPerspectives(billId)
+      setPerspectives([])
+      setPending(await api.getPerspectives(billId).then((d) => d?.pending_types ?? []))
+    } catch (err: any) {
+      setGenerateError(err?.message ?? 'Failed to clear perspectives.')
+    } finally {
+      setBulkRunning(null)
+    }
+  }
 
   const generate = async (perspType: string) => {
     setGenerating(perspType)
@@ -267,11 +306,33 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
   // Group generated perspectives
   const groups = ['Political', 'Policy', 'Demographic', 'Special']
 
+  const isBusy = generating !== null || bulkRunning !== null
+
   return (
     <div className="space-y-6">
       {generateError && (
         <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {generateError}
+        </div>
+      )}
+
+      {/* Bulk actions — admin only */}
+      {isAdmin && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={generateAll}
+            disabled={isBusy}
+            className="text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
+          >
+            {bulkRunning === 'all' ? 'Generating…' : 'Generate All'}
+          </button>
+          <button
+            onClick={clearAll}
+            disabled={isBusy}
+            className="text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-red-50 hover:border-red-300 hover:text-red-700 disabled:opacity-50"
+          >
+            {bulkRunning === 'clear' ? 'Clearing…' : 'Clear All'}
+          </button>
         </div>
       )}
 
@@ -292,18 +353,25 @@ export function PerspectivesPanel({ billId, analyzed }: { billId: string; analyz
                 <PerspectiveCard key={p.perspective_type} p={p} />
               ))}
               {pendingInGroup.map((t) => {
-                const label = ALL_PERSPECTIVES.find((x) => x.key === t)?.label ?? t
+                const pendingMeta = ALL_PERSPECTIVES.find((x) => x.key === t)
+                const label = pendingMeta?.label ?? t
+                const pendingIcon = pendingMeta?.icon
                 const isGenerating = generating === t
                 return (
                   <div key={t} className="border border-dashed rounded-lg p-4 flex items-center justify-between gap-3">
-                    <span className="text-sm text-muted-foreground">{label}</span>
-                    <button
-                      onClick={() => generate(t)}
-                      disabled={isGenerating || generating !== null}
-                      className="shrink-0 text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
-                    >
-                      {isGenerating ? 'Starting AI…' : 'Generate'}
-                    </button>
+                    <span className="text-sm text-muted-foreground flex items-center gap-1.5">
+                      {pendingIcon && <span className="text-base leading-none">{pendingIcon}</span>}
+                      {label}
+                    </span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => generate(t)}
+                        disabled={isGenerating || isBusy}
+                        className="shrink-0 text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
+                      >
+                        {isGenerating ? 'Starting AI…' : 'Generate'}
+                      </button>
+                    )}
                   </div>
                 )
               })}

@@ -60,6 +60,16 @@ class Settings(BaseSettings):
     # Default: dark podcast-studio look. Override in .env with any public image URL.
     video_background_url: str = "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=1280&q=80"
 
+    # Email (Resend)
+    resend_api_key: str = ""                    # Get from resend.com
+    email_from: str = "Common Ground <digest@commonground.philly>"
+    frontend_base_url: str = "http://localhost:3000"  # Used in email links
+
+    # Stripe Donations
+    stripe_secret_key: str = ""                 # sk_live_... or sk_test_...
+    stripe_publishable_key: str = ""            # pk_live_... or pk_test_...
+    stripe_webhook_secret: str = ""             # whsec_... from Stripe dashboard
+
     # Google OAuth + JWT
     google_client_id: str = ""
     google_client_secret: str = ""

@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.database import init_db, get_db
-from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes
+from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes
 
 settings = get_settings()
 
@@ -58,6 +58,8 @@ app.include_router(auth_routes.router)
 app.include_router(user_routes.router)
 app.include_router(legislation_routes.router)
 app.include_router(councilmember_routes.router)
+app.include_router(metrics_routes.router)
+app.include_router(donation_routes.router)
 
 
 @app.get("/")

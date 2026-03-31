@@ -23,7 +23,7 @@ from app.services.ai_provider import get_ai_provider
 logger = logging.getLogger(__name__)
 
 # Perspectives generated automatically on Analyze
-BASE_PERSPECTIVES = ["progressive", "conservative", "libertarian"]
+BASE_PERSPECTIVES = ["centrist"]
 
 # All 17 perspective types
 ALL_PERSPECTIVES = [
@@ -152,7 +152,7 @@ STATUS: {status}
 SUMMARY: {summary}
 FULL TEXT:
 {full_text}
-
+{city_context}
 Return a JSON object with exactly these fields:
 {{
   "position": "<support|oppose|neutral|mixed>",
@@ -161,7 +161,7 @@ Return a JSON object with exactly these fields:
   "assessment": "50-word max summary of your overall view"
 }}
 
-Be specific to this bill's actual content. Return only the JSON object."""
+Be specific to this bill's actual content and the Philadelphia context above where relevant. Return only the JSON object."""
 
 
 def _extract_json(text: str) -> dict:
@@ -203,8 +203,29 @@ def generate_perspective(
             return existing
 
     from app.config import get_settings
+    from app.services.opendataphilly_service import get_bill_context
     settings = get_settings()
     provider = get_ai_provider()
+
+    # Build Philadelphia context block from stored supplementary_data (or live)
+    city_context = ""
+    try:
+        if bill.supplementary_data:
+            import json as _json
+            sections = _json.loads(bill.supplementary_data)
+            if sections:
+                lines = ["\nPHILADELPHIA CITY CONTEXT (for reference):"]
+                for sec in sections:
+                    lines.append(f"\n{sec['label']}:")
+                    for k, v in sec["stats"].items():
+                        lines.append(f"  - {k}: {v}")
+                city_context = "\n".join(lines) + "\n"
+        else:
+            ai_ctx, _ = get_bill_context(bill)
+            if ai_ctx:
+                city_context = "\n" + ai_ctx + "\n"
+    except Exception:
+        pass
 
     system_prompt = PERSPECTIVE_PROMPTS[perspective_type]
     user_prompt = _USER_PROMPT_TEMPLATE.format(
@@ -214,6 +235,7 @@ def generate_perspective(
         status=bill.status,
         summary=bill.summary or "(not yet summarized)",
         full_text=(bill.full_text or bill.description or bill.title)[:3000],
+        city_context=city_context,
     )
 
     try:
@@ -258,11 +280,11 @@ def generate_perspective(
         return None
 
 
-def generate_base_perspectives(bill: Legislation, db: Session) -> list[BillPerspective]:
-    """Generate the 3 base perspectives (progressive, conservative, libertarian)."""
+def generate_base_perspectives(bill: Legislation, db: Session, force: bool = False) -> list[BillPerspective]:
+    """Generate the base perspective(s). Pass force=True to regenerate even if cached."""
     results = []
     for ptype in BASE_PERSPECTIVES:
-        persp = generate_perspective(bill, ptype, db)
+        persp = generate_perspective(bill, ptype, db, force=force)
         if persp:
             results.append(persp)
     return results

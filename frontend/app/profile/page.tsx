@@ -14,19 +14,13 @@ const VOTE_STYLES: Record<string, string> = {
   neutral: 'bg-yellow-100 text-yellow-800',
 }
 
-const DEBATE_STATUS_COLORS: Record<string, string> = {
-  completed: 'bg-green-100 text-green-700',
-  active: 'bg-blue-100 text-blue-700',
-  researching: 'bg-yellow-100 text-yellow-700',
-  failed: 'bg-red-100 text-red-700',
-}
-
 export default function ProfilePage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [votes, setVotes] = useState<any[]>([])
-  const [myDebates, setMyDebates] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [digestEnabled, setDigestEnabled] = useState(false)
+  const [digestSaving, setDigestSaving] = useState(false)
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -37,16 +31,26 @@ export default function ProfilePage() {
     Promise.all([
       api.getMe(),
       api.getMyVotes(),
-      api.getMyDebates(),
-    ]).then(([meData, voteData, debateData]) => {
+    ]).then(([meData, voteData]) => {
       setUser(meData?.user ?? null)
+      setDigestEnabled(meData?.user?.digest_enabled ?? false)
       setVotes(voteData?.votes ?? [])
-      setMyDebates(debateData?.debates ?? [])
     }).catch(() => {
       clearToken()
       router.replace('/')
     }).finally(() => setLoading(false))
   }, [router])
+
+  const handleDigestToggle = async () => {
+    const next = !digestEnabled
+    setDigestSaving(true)
+    try {
+      await api.updatePreferences({ digest_enabled: next })
+      setDigestEnabled(next)
+    } catch { /* ignore */ } finally {
+      setDigestSaving(false)
+    }
+  }
 
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
   if (!user) return null
@@ -54,8 +58,17 @@ export default function ProfilePage() {
   return (
     <div className="max-w-2xl space-y-8">
       <div className="flex items-center gap-4">
-        <Avatar className="h-16 w-16">
-          <AvatarImage src={user.avatar_url} alt={user.display_name} />
+        <Avatar className="h-16 w-16 shrink-0">
+          <AvatarImage
+            src={
+              user.avatar_url
+                ? user.avatar_url
+                : user.subscription_tier === 'dev'
+                  ? `https://flagcdn.com/us.svg`
+                  : `https://api.dicebear.com/9.x/thumbs/svg?seed=${encodeURIComponent(user.id)}`
+            }
+            alt={user.display_name}
+          />
           <AvatarFallback className="text-xl">{user.display_name?.[0] ?? 'U'}</AvatarFallback>
         </Avatar>
         <div>
@@ -67,42 +80,38 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* My Debates */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">My Debates</h2>
-          <Link href="/debates/new" className="text-sm text-primary hover:underline">+ New Debate</Link>
+      {/* My Saved Bills */}
+      <div className="flex items-center justify-between border rounded-lg px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold">Saved Bills</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Bills you&apos;ve bookmarked</p>
         </div>
-        {myDebates.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            You haven&apos;t created any debates yet.{' '}
-            <Link href="/debates/new" className="text-primary hover:underline">Create one</Link> to get started.
+        <Link href="/my-bills" className="text-sm text-primary hover:underline shrink-0">
+          View all →
+        </Link>
+      </div>
+
+      {/* Email Preferences */}
+      <div className="border rounded-lg px-4 py-3 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold">Weekly Digest</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Get a weekly email summary of new Philadelphia City Council bills with AI perspectives.
           </p>
-        ) : (
-          <div className="divide-y border rounded-lg overflow-hidden">
-            {myDebates.map((d: any) => (
-              <Link
-                key={d.id}
-                href={`/debates/${d.id}`}
-                className="flex items-start gap-3 p-4 bg-background hover:bg-muted/40 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  {d.legislation_title && (
-                    <p className="text-xs text-muted-foreground mb-0.5 truncate">{d.legislation_title}</p>
-                  )}
-                  <p className="text-sm font-medium line-clamp-1">{d.topic || d.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {d.turn_count}/{d.max_turns} turns
-                    {d.created_at && <> · {new Date(d.created_at).toLocaleDateString()}</>}
-                  </p>
-                </div>
-                <span className={`text-xs px-1.5 py-0.5 rounded shrink-0 mt-0.5 ${DEBATE_STATUS_COLORS[d.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                  {d.status}
-                </span>
-              </Link>
-            ))}
-          </div>
-        )}
+        </div>
+        <button
+          onClick={handleDigestToggle}
+          disabled={digestSaving}
+          className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+            digestEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+          } ${digestSaving ? 'opacity-50' : ''}`}
+          role="switch"
+          aria-checked={digestEnabled}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+            digestEnabled ? 'translate-x-6' : 'translate-x-1'
+          }`} />
+        </button>
       </div>
 
       <div>

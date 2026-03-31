@@ -387,6 +387,54 @@ class PhilaLegistarScraper:
 
         return results
 
+    def fetch_details_for_bill(self, file_number: str) -> Optional[Dict[str, Any]]:
+        """
+        Look up a bill by file number on the Legistar list page, extract matter_id/guid,
+        then fetch detail page + full text PDF.
+
+        Returns a parsed dict (same shape as _parse_detail) or None on failure.
+        """
+        from playwright.sync_api import sync_playwright
+
+        matter_id = guid = None
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page()
+            try:
+                page.goto(f"{BASE_URL}/Legislation.aspx", wait_until="networkidle", timeout=30000)
+                self._apply_filters_and_search(page)
+
+                for row in page.query_selector_all("tr.rgRow, tr.rgAltRow"):
+                    cells = row.query_selector_all("td")
+                    if not cells:
+                        continue
+                    cell_text = cells[0].inner_text().strip()
+                    if cell_text.strip().lower() == file_number.strip().lower():
+                        link = cells[0].query_selector("a")
+                        href = link.get_attribute("href") if link else ""
+                        mid = re.search(r"ID=(\d+)", href or "")
+                        gid = re.search(r"GUID=([A-F0-9\-]{36})", href or "", re.IGNORECASE)
+                        if mid:
+                            matter_id = mid.group(1)
+                        if gid:
+                            guid = gid.group(1)
+                        break
+            except Exception as e:
+                logger.error(f"Error searching list for {file_number}: {e}")
+            finally:
+                browser.close()
+
+        if not matter_id:
+            logger.warning(f"Could not find matter_id for bill {file_number}")
+            return None
+
+        detail = self.scrape_detail(matter_id, guid or "")
+        if not detail:
+            return None
+        full_text = self.fetch_full_text(matter_id, guid or "")
+        return self._parse_detail(detail, matter_id, guid or "", full_text)
+
     def _parse_detail(
         self,
         detail: Dict[str, Any],

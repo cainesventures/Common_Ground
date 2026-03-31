@@ -1,10 +1,129 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
+
+// ── SSE streaming hook ────────────────────────────────────────────────────────
+type StreamEvent = {
+  current: number
+  total: number
+  message: string
+  done: boolean
+}
+
+function useStreamProgress() {
+  const [progress, setProgress] = useState<StreamEvent | null>(null)
+  const [running, setRunning] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const start = useCallback(async (path: string) => {
+    if (abortRef.current) abortRef.current.abort()
+    const ctrl = new AbortController()
+    abortRef.current = ctrl
+    setRunning(true)
+    setProgress(null)
+    const token = typeof window !== 'undefined' ? localStorage.getItem('cg_access_token') : null
+    // Call backend directly to bypass Next.js proxy buffering (SSE requires streaming passthrough)
+    const url = `http://localhost:8000${path}`
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }))
+        setProgress({ current: 0, total: 0, message: err.detail ?? 'Request failed', done: true })
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const ev: StreamEvent = JSON.parse(line.slice(6))
+              setProgress(ev)
+            } catch { /* ignore malformed */ }
+          }
+        }
+      }
+    } catch (e: any) {
+      if (e?.name !== 'AbortError') {
+        setProgress({ current: 0, total: 0, message: String(e), done: true })
+      }
+    } finally {
+      setRunning(false)
+    }
+  }, [])
+
+  const stop = useCallback(() => {
+    abortRef.current?.abort()
+    setRunning(false)
+  }, [])
+
+  return { progress, running, start, stop }
+}
+
+function useElapsed(running: boolean) {
+  const [elapsed, setElapsed] = useState(0)
+  const startRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (running) {
+      startRef.current = Date.now()
+      setElapsed(0)
+      const id = setInterval(() => setElapsed(Math.floor((Date.now() - startRef.current!) / 1000)), 1000)
+      return () => clearInterval(id)
+    } else {
+      startRef.current = null
+    }
+  }, [running])
+
+  return elapsed
+}
+
+function formatElapsed(s: number) {
+  if (s < 60) return `${s}s`
+  return `${Math.floor(s / 60)}m ${s % 60}s`
+}
+
+function ProgressBar({ progress, running, className = '' }: { progress: StreamEvent | null; running: boolean; className?: string }) {
+  const elapsed = useElapsed(running)
+  if (!progress) return null
+  const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : (progress.done ? 100 : 0)
+  const isError = progress.done && progress.message.toLowerCase().includes('failed') && progress.current === 0
+  const isDone = progress.done && !isError
+
+  return (
+    <div className={`space-y-1.5 ${className}`}>
+      <div className="flex justify-between items-center text-xs text-muted-foreground">
+        <span className={isDone ? 'text-green-600 font-medium' : ''}>{progress.message}</span>
+        <div className="flex items-center gap-3 shrink-0 ml-2 tabular-nums">
+          {progress.total > 0 && <span>{progress.current} / {progress.total}</span>}
+          {(running || isDone) && <span className="text-muted-foreground/60">{formatElapsed(elapsed)}</span>}
+        </div>
+      </div>
+      <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: '#e5e7eb' }}>
+        <div
+          className="h-full rounded-full transition-all duration-300"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: isError ? '#ef4444' : isDone ? '#22c55e' : '#3b82f6',
+          }}
+        />
+      </div>
+    </div>
+  )
+}
 
 
 interface Result {
@@ -36,18 +155,6 @@ export default function AdminPage() {
   // Council members scrape
   const [scrapeRunning, setScrapeRunning] = useState(false)
   const [scrapeResult, setScrapeResult] = useState<Result | null>(null)
-
-  // Fetch news for all
-  const [newsRunning, setNewsRunning] = useState(false)
-  const [newsResult, setNewsResult] = useState<Result | null>(null)
-
-  // Auto-tag
-  const [tagRunning, setTagRunning] = useState(false)
-  const [tagResult, setTagResult] = useState<Result | null>(null)
-
-  // Plain titles
-  const [plainTitleRunning, setPlainTitleRunning] = useState(false)
-  const [plainTitleResult, setPlainTitleResult] = useState<Result | null>(null)
 
   // Analyze queue
   const [bills, setBills] = useState<Bill[]>([])
@@ -160,6 +267,12 @@ export default function AdminPage() {
         </p>
       </div>
 
+      {/* ── Metrics ─────────────────────────────────────────────── */}
+      <MetricsSection />
+
+      {/* ── Send Digest ──────────────────────────────────────────── */}
+      <DigestSection />
+
       {/* ── Council Members ─────────────────────────────────────── */}
       <div className="border rounded-lg p-4 space-y-3">
         <div>
@@ -195,171 +308,25 @@ export default function AdminPage() {
       </div>
 
       {/* ── Fetch News ─────────────────────────────────────────── */}
-      <div className="border rounded-lg p-4 space-y-3">
-        <div>
-          <h2 className="font-semibold">Fetch News</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Search Google News for articles related to each bill and store them.
-            Runs for all local bills. Safe to re-run — overwrites previous results.
-          </p>
-        </div>
-        {newsResult && (
-          <p className={`text-sm ${newsResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-            {newsResult.message}
-          </p>
-        )}
-        <Button
-          variant="outline"
-          disabled={newsRunning}
-          onClick={async () => {
-            setNewsRunning(true)
-            setNewsResult(null)
-            try {
-              const data = await api.fetchNewsAll()
-              setNewsResult({ ok: true, message: `Fetched ${data?.total_articles ?? 0} articles across ${data?.bills_processed ?? 0} bills.` })
-            } catch (err: any) {
-              setNewsResult({ ok: false, message: err.message })
-            } finally {
-              setNewsRunning(false)
-            }
-          }}
-        >
-          {newsRunning ? 'Fetching…' : 'Fetch News for All Bills'}
-        </Button>
-      </div>
+      <FetchNewsSection />
+
+      {/* ── Fetch Full Text ──────────────────────────────────────── */}
+      <FetchDetailsSection />
+
+      {/* ── Philadelphia Context ─────────────────────────────────── */}
+      <CityContextSection />
 
       {/* ── Plain English Titles ────────────────────────────────── */}
-      <div className="border rounded-lg p-4 space-y-3">
-        <div>
-          <h2 className="font-semibold">Plain English Titles</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Uses Ollama to generate a short, human-friendly name for each bill that doesn&apos;t have one yet.
-            Shown prominently on the home feed above the official title.
-          </p>
-        </div>
-        {plainTitleResult && (
-          <p className={`text-sm ${plainTitleResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-            {plainTitleResult.message}
-          </p>
-        )}
-        <Button
-          variant="outline"
-          disabled={plainTitleRunning}
-          onClick={async () => {
-            setPlainTitleRunning(true)
-            setPlainTitleResult(null)
-            try {
-              const data = await api.generatePlainTitles()
-              setPlainTitleResult({ ok: true, message: `Generated plain titles for ${data?.generated ?? 0} of ${data?.total ?? 0} bills.` })
-            } catch (err: any) {
-              setPlainTitleResult({ ok: false, message: err.message })
-            } finally {
-              setPlainTitleRunning(false)
-            }
-          }}
-        >
-          {plainTitleRunning ? 'Generating…' : 'Generate Plain Titles'}
-        </Button>
-      </div>
+      <PlainTitlesSection />
 
       {/* ── Auto-Tag Bills ──────────────────────────────────────── */}
-      <div className="border rounded-lg p-4 space-y-3">
-        <div>
-          <h2 className="font-semibold">Auto-Tag Bills</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Uses Ollama to assign category tags (housing, transportation, budget, etc.) to all
-            bills that don&apos;t have tags yet. Tags appear as filterable pills on the home feed.
-          </p>
-        </div>
-        {tagResult && (
-          <p className={`text-sm ${tagResult.ok ? 'text-green-600' : 'text-destructive'}`}>
-            {tagResult.message}
-          </p>
-        )}
-        <Button
-          variant="outline"
-          disabled={tagRunning}
-          onClick={async () => {
-            setTagRunning(true)
-            setTagResult(null)
-            try {
-              const data = await api.tagAllBills()
-              setTagResult({ ok: true, message: `Tagged ${data?.tagged ?? 0} of ${data?.total ?? 0} untagged bills.` })
-              loadBills()
-            } catch (err: any) {
-              setTagResult({ ok: false, message: err.message })
-            } finally {
-              setTagRunning(false)
-            }
-          }}
-        >
-          {tagRunning ? 'Tagging…' : 'Tag Untagged Bills'}
-        </Button>
-      </div>
+      <AutoTagSection onDone={loadBills} />
 
       {/* ── Analyze Bills ───────────────────────────────────────── */}
-      <div className="border rounded-lg p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-semibold">Analyze Bills</h2>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {billsTotal} bills in DB. Click Analyze to generate summary, impact score, and 3 base perspectives.
-            </p>
-          </div>
-          <Button variant="outline" size="sm" onClick={loadBills} disabled={billsLoading}>
-            {billsLoading ? 'Loading…' : 'Refresh'}
-          </Button>
-        </div>
+      <AnalyzeBillsSection bills={bills} billsTotal={billsTotal} billsLoading={billsLoading} loadBills={loadBills} analyzingId={analyzingId} fetchingNewsId={fetchingNewsId} analyzeResults={analyzeResults} analyzeBill={analyzeBill} fetchNews={fetchNews} />
 
-        {bills.length === 0 && !billsLoading && (
-          <p className="text-sm text-muted-foreground">No bills yet. Ingest some below.</p>
-        )}
-
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {bills.map((bill) => {
-            const result = analyzeResults[bill.id]
-            const isAnalyzing = analyzingId === bill.id
-            return (
-              <div key={bill.id} className="flex items-start gap-3 py-2 border-b last:border-0">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{bill.bill_number}</p>
-                  <p className="text-xs text-muted-foreground truncate">{bill.title}</p>
-                  {result && (
-                    <p className={`text-xs mt-1 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
-                      {result.message}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                    bill.analyzed_at
-                      ? 'bg-green-100 text-green-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {bill.analyzed_at ? 'Analyzed' : 'Pending'}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => fetchNews(bill)}
-                    disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}
-                  >
-                    {fetchingNewsId === bill.id ? 'Fetching…' : 'News'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => analyzeBill(bill)}
-                    disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null}
-                  >
-                    {isAnalyzing ? 'Analyzing…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
+      {/* ── All Perspectives ────────────────────────────────────── */}
+      <AllPerspectivesSection />
 
       {/* ── Legislation Ingestion ────────────────────────────────── */}
       <div className="border rounded-lg p-4 space-y-4">
@@ -398,6 +365,332 @@ export default function AdminPage() {
           </Button>
         </form>
       </div>
+    </div>
+  )
+}
+
+function AnalyzeBillsSection({
+  bills, billsTotal, billsLoading, loadBills,
+  analyzingId, fetchingNewsId, analyzeResults, analyzeBill, fetchNews,
+}: {
+  bills: Bill[]
+  billsTotal: number
+  billsLoading: boolean
+  loadBills: () => void
+  analyzingId: string | null
+  fetchingNewsId: string | null
+  analyzeResults: Record<string, Result>
+  analyzeBill: (bill: Bill) => void
+  fetchNews: (bill: Bill) => void
+}) {
+  const { progress, running, start } = useStreamProgress()
+  const [activeKey, setActiveKey] = useState<string | null>(null)
+
+  const run = (key: string, force: boolean, forcePerspectives: boolean) => {
+    setActiveKey(key)
+    start(`/api/legislation/stream/analyze-all?force=${force}&force_perspectives=${forcePerspectives}`)
+      .then(() => loadBills())
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4">
+      <div>
+        <h2 className="font-semibold">Analyze Bills</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {billsTotal} bills in DB. Click Analyze to generate summary, impact score, and 1 base perspective (Centrist).
+        </p>
+      </div>
+
+      {/* Bulk action buttons */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Button variant="outline" size="sm" disabled={running} onClick={() => run('new', false, false)}>
+          {running && activeKey === 'new' ? 'Analyzing…' : 'Analyze Unanalyzed'}
+        </Button>
+        <Button variant="outline" size="sm" disabled={running} onClick={() => run('all', true, false)}>
+          {running && activeKey === 'all' ? 'Re-analyzing…' : 'Re-analyze All'}
+        </Button>
+        <Button variant="outline" size="sm" disabled={running} onClick={() => run('full', true, true)}>
+          {running && activeKey === 'full' ? 'Re-analyzing…' : 'Re-analyze All + Perspectives'}
+        </Button>
+        <Button variant="outline" size="sm" onClick={loadBills} disabled={billsLoading || running}>
+          {billsLoading ? 'Loading…' : 'Refresh'}
+        </Button>
+      </div>
+
+      {/* Progress bar — shown while streaming */}
+      <ProgressBar progress={progress} running={running} />
+
+      {bills.length === 0 && !billsLoading && (
+        <p className="text-sm text-muted-foreground">No bills yet. Ingest some below.</p>
+      )}
+
+      <div className="space-y-2 max-h-96 overflow-y-auto">
+        {bills.map((bill) => {
+          const result = analyzeResults[bill.id]
+          const isAnalyzing = analyzingId === bill.id
+          return (
+            <div key={bill.id} className="flex items-start gap-3 py-2 border-b last:border-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{bill.bill_number}</p>
+                <p className="text-xs text-muted-foreground truncate">{bill.title}</p>
+                {result && (
+                  <p className={`text-xs mt-1 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
+                    {result.message}
+                  </p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                  bill.analyzed_at ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {bill.analyzed_at ? 'Analyzed' : 'Pending'}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => fetchNews(bill)}
+                  disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}>
+                  {fetchingNewsId === bill.id ? 'Fetching…' : 'News'}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => analyzeBill(bill)}
+                  disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null || running}>
+                  {isAnalyzing ? 'Analyzing…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AllPerspectivesSection() {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Generate All Perspectives</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Generate all 17 perspectives for every analyzed bill. Skips already-cached perspectives.
+          Run this after bulk analysis to fill out the full set.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/generate-all-perspectives')}
+      >
+        {running ? 'Generating…' : 'Generate All Perspectives'}
+      </Button>
+    </div>
+  )
+}
+
+function MetricsSection() {
+  const [metrics, setMetrics] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const data = await api.getMetrics()
+      setMetrics(data?.metrics ?? null)
+    } catch { /* ignore */ } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const statTile = (label: string, value: number | string, sub?: string) => (
+    <div key={label} className="border rounded-lg p-3 text-center">
+      <p className="text-2xl font-bold">{value}</p>
+      <p className="text-xs font-medium text-muted-foreground mt-0.5">{label}</p>
+      {sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{sub}</p>}
+    </div>
+  )
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold">Metrics</h2>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>
+          {loading ? 'Loading…' : 'Refresh'}
+        </Button>
+      </div>
+      {metrics ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {statTile('Bills', metrics.bills.total)}
+          {statTile('Analyzed', metrics.bills.analyzed, `${metrics.bills.analysis_rate_pct}% of total`)}
+          {statTile('Perspectives', metrics.perspectives.total)}
+          {statTile('Users', metrics.users.total)}
+          {statTile('Saved Bills', metrics.tracking.total_saves)}
+          {statTile('Digest Opt-ins', metrics.users.digest_opted_in)}
+          {statTile('With News', metrics.bills.with_news)}
+          {statTile('Local Bills', metrics.bills.local)}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">{loading ? 'Loading metrics…' : 'Failed to load.'}</p>
+      )}
+    </div>
+  )
+}
+
+function DigestSection() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Weekly Email Digest</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Send a digest of recently analyzed bills to all opted-in users. Requires RESEND_API_KEY in .env.
+        </p>
+      </div>
+      {result && (
+        <p className={`text-sm ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
+          {result.message}
+        </p>
+      )}
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={async () => {
+          setRunning(true)
+          setResult(null)
+          try {
+            const data = await api.sendDigest(7)
+            setResult({ ok: true, message: `Sent to ${data?.sent ?? 0} users · ${data?.bills_in_digest ?? 0} bills · ${data?.failed ?? 0} failed.` })
+          } catch (err: any) {
+            setResult({ ok: false, message: err.message })
+          } finally {
+            setRunning(false)
+          }
+        }}
+      >
+        {running ? 'Sending…' : 'Send Digest Now'}
+      </Button>
+    </div>
+  )
+}
+
+function FetchDetailsSection() {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Fetch Full Text & Sponsors</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          For bills imported via bulk export, fetches full text (PDF) and sponsor info from Legistar.
+          Only processes bills missing full text. Slow — uses Playwright per bill.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/fetch-details-all')}
+      >
+        {running ? 'Fetching…' : 'Fetch Full Text for All Bills'}
+      </Button>
+    </div>
+  )
+}
+
+function CityContextSection() {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Philadelphia Context</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Backfill tag-matched city statistics (housing, budget, health, etc.) for all analyzed bills.
+          Shown on bill detail pages and used to enrich AI perspective prompts.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/backfill-city-context')}
+      >
+        {running ? 'Backfilling…' : 'Backfill City Context'}
+      </Button>
+    </div>
+  )
+}
+
+function FetchNewsSection() {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Fetch News</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Search Google News for articles related to each bill and store them.
+          Runs for all local bills. Safe to re-run — overwrites previous results.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/fetch-news-all')}
+      >
+        {running ? 'Fetching…' : 'Fetch News for All Bills'}
+      </Button>
+    </div>
+  )
+}
+
+function PlainTitlesSection() {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Plain English Titles</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Uses AI to generate a short, human-friendly name for each bill that doesn&apos;t have one yet.
+          Shown prominently on the home feed above the official title.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/plain-titles')}
+      >
+        {running ? 'Generating…' : 'Generate Plain Titles'}
+      </Button>
+    </div>
+  )
+}
+
+function AutoTagSection({ onDone }: { onDone?: () => void }) {
+  const { progress, running, start } = useStreamProgress()
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h2 className="font-semibold">Auto-Tag Bills</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Uses AI to assign category tags (housing, transportation, budget, etc.) to all
+          bills that don&apos;t have tags yet. Tags appear as filterable pills on the home feed.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} />
+      <Button
+        variant="outline"
+        disabled={running}
+        onClick={() => start('/api/legislation/stream/tag-all').then(() => onDone?.())}
+      >
+        {running ? 'Tagging…' : 'Tag Untagged Bills'}
+      </Button>
     </div>
   )
 }

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.models import Legislation
 from app.services.ai_provider import get_ai_provider
 from app.services.news_service import fetch_and_store_news
+from app.services.opendataphilly_service import get_bill_context
 
 logger = logging.getLogger(__name__)
 
@@ -79,10 +80,20 @@ bill_type guide:
 - ceremonial: recognitions, commemorations, honorary naming
 - procedural: administrative, housekeeping, technical amendments
 
+impact_score guide (be conservative — most local bills score 1-4):
+- 9-10: affects ALL Philadelphians — major budget, city-wide policy change, or public safety
+- 7-8: affects a large portion of the city — major rezoning, significant spending, broad regulation
+- 5-6: affects a specific neighborhood, demographic group, or hundreds of residents
+- 3-4: affects a small number of people — a single block, business district, or institution
+- 1-2: single address, single property, or purely ceremonial/administrative with no real-world impact
+
 impact_level guide:
-- high: 7-10 — affects many residents or large budget
-- medium: 4-6 — affects specific neighborhoods or groups
-- low: 1-3 — minor, technical, or ceremonial
+- high: 7-10
+- medium: 4-6
+- low: 1-3
+
+Examples of low-scoring bills (score 1-3): street name changes, single-property variances or overhangs,
+individual building permits, honorary designations, alley vacations, single-address zoning exceptions.
 
 Return only the JSON object, no other text."""
 
@@ -98,6 +109,14 @@ Return only the JSON object, no other text."""
         tags = data.get("tags", [])
         if isinstance(tags, list):
             bill.tags = json.dumps(tags)
+
+        # Build Philadelphia context using the tags we just generated
+        try:
+            _, display_sections = get_bill_context(bill)
+            if display_sections:
+                bill.supplementary_data = json.dumps(display_sections)
+        except Exception as e:
+            logger.warning(f"City context skipped for bill {bill.bill_number}: {e}")
 
         bill.analyzed_at = datetime.utcnow()
         bill.updated_at = datetime.utcnow()

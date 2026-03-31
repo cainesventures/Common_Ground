@@ -101,7 +101,7 @@ The Playwright scraper opens a headless browser, navigates to phila.legistar.com
 Click **Generate Plain Titles**. Ollama reads each bill's title and description and writes a short, human-friendly name (e.g. "City Agrees to Buy Electricity and Fuel for a Few Years"). Ollama will auto-start if it isn't already running.
 
 ### Auto-tag bills
-Click **Tag Untagged Bills**. Ollama assigns 1–3 category tags (housing, zoning, budget, etc.) to each bill. Tags appear as filterable pills on the home feed.
+Click **Tag Untagged Bills**. Ollama assigns 1–3 category tags (housing, zoning, budget, etc.) to each bill. Tags appear as filterable dropdowns on the home feed and legislation browser.
 
 ### Fetch news
 Click **Fetch News for All Bills**. Searches Google News RSS for articles related to each bill based on its topic tags and keywords. No API key needed. Articles appear in the "In the News" section on each bill's detail page.
@@ -123,6 +123,12 @@ On any analyzed bill's detail page, scroll to **AI Perspectives**. The tally at 
 ### Scrape council members
 Click **Scrape Council Members** in the admin panel. Playwright scrapes all 17 council member profiles from phlcouncil.com (~2 minutes). Council members then appear at `/councilmembers` with their bio, district map, term start date, years serving, and next election year. Their names link from bill detail pages.
 
+### Save bills
+After logging in, click the bookmark icon on any bill card to save it. Access your saved bills at `/my-bills` (also in the navbar).
+
+### Metrics
+Go to **http://localhost:3000/dashboard** (dev users only). Shows bills analyzed, perspectives generated, position breakdown, user counts, and total bill saves.
+
 ---
 
 ## 6. Bulk ingest
@@ -136,7 +142,37 @@ To pull all ~8,500 Philadelphia bills at once:
 
 ---
 
-## 7. Troubleshooting
+## 7. Optional features
+
+### Email digests (requires Resend)
+1. Get a free API key at [resend.com](https://resend.com)
+2. Add to `.env`:
+   ```env
+   RESEND_API_KEY=re_...
+   EMAIL_FROM=Common Ground <digest@yourdomain.com>
+   FRONTEND_BASE_URL=http://localhost:3000
+   ```
+3. Users opt in from their `/profile` page
+4. Trigger a test send from the admin panel → **Send Digest**
+
+### Donations (requires Stripe)
+1. Create a Stripe account and get test keys from the [Stripe dashboard](https://dashboard.stripe.com)
+2. Add to `.env`:
+   ```env
+   STRIPE_SECRET_KEY=sk_test_...
+   STRIPE_PUBLISHABLE_KEY=pk_test_...
+   STRIPE_WEBHOOK_SECRET=whsec_...   # from Stripe webhook settings
+   ```
+3. The donate page is at `/donate` — accessible to all visitors
+
+To test webhooks locally, use the [Stripe CLI](https://stripe.com/docs/stripe-cli):
+```bash
+stripe listen --forward-to localhost:8000/api/donations/webhook
+```
+
+---
+
+## 8. Troubleshooting
 
 **"No module named 'app'"** — run all commands from the `Common_Ground/` root directory.
 
@@ -155,3 +191,7 @@ To pull all ~8,500 Philadelphia bills at once:
 **Frontend build errors** — run `cd frontend && npm install` to ensure dependencies are up to date.
 
 **Admin panel redirects to home** — you must be logged in as a dev user. Click **Dev Login** on the navbar.
+
+**Email digest not sending** — check that `RESEND_API_KEY` is set and the user has `digest_enabled = true`. Check backend logs for the Resend API response.
+
+**Stripe checkout fails** — ensure `STRIPE_SECRET_KEY` starts with `sk_test_` (test mode) or `sk_live_` (live mode) and that the key matches your Stripe account. Check backend logs for the Stripe error.
