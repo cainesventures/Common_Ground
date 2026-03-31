@@ -96,7 +96,7 @@ function formatElapsed(s: number) {
   return `${Math.floor(s / 60)}m ${s % 60}s`
 }
 
-function ProgressBar({ progress, running, className = '' }: { progress: StreamEvent | null; running: boolean; className?: string }) {
+function ProgressBar({ progress, running, onStop, className = '' }: { progress: StreamEvent | null; running: boolean; onStop?: () => void; className?: string }) {
   const elapsed = useElapsed(running)
   if (!progress) return null
   const pct = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : (progress.done ? 100 : 0)
@@ -110,6 +110,15 @@ function ProgressBar({ progress, running, className = '' }: { progress: StreamEv
         <div className="flex items-center gap-3 shrink-0 ml-2 tabular-nums">
           {progress.total > 0 && <span>{progress.current} / {progress.total}</span>}
           {(running || isDone) && <span className="text-muted-foreground/60">{formatElapsed(elapsed)}</span>}
+          {running && onStop && (
+            <button
+              onClick={onStop}
+              className="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+              title="Stop process"
+            >
+              Stop
+            </button>
+          )}
         </div>
       </div>
       <div className="h-3 rounded-full overflow-hidden" style={{ backgroundColor: '#e5e7eb' }}>
@@ -369,6 +378,9 @@ export default function AdminPage() {
   )
 }
 
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 function AnalyzeBillsSection({
   bills, billsTotal, billsLoading, loadBills,
   analyzingId, fetchingNewsId, analyzeResults, analyzeBill, fetchNews,
@@ -383,87 +395,251 @@ function AnalyzeBillsSection({
   analyzeBill: (bill: Bill) => void
   fetchNews: (bill: Bill) => void
 }) {
-  const { progress, running, start } = useStreamProgress()
-  const [activeKey, setActiveKey] = useState<string | null>(null)
+  const { progress, running, start, stop } = useStreamProgress()
+  const [activeKey,      setActiveKey]      = useState<string | null>(null)
 
-  const run = (key: string, force: boolean, forcePerspectives: boolean) => {
-    setActiveKey(key)
-    start(`/api/legislation/stream/analyze-all?force=${force}&force_perspectives=${forcePerspectives}`)
-      .then(() => loadBills())
+  // Filter state — "draft" values before Apply
+  const [draftYear,      setDraftYear]      = useState('')
+  const [draftMonth,     setDraftMonth]     = useState('')
+  const [draftDateFrom,  setDraftDateFrom]  = useState('')
+  const [draftDateTo,    setDraftDateTo]    = useState('')
+
+  // Applied filter — what's actually sent to the backend
+  const [filterYear,     setFilterYear]     = useState('')
+  const [filterMonth,    setFilterMonth]    = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo,   setFilterDateTo]   = useState('')
+
+  // Count from backend after Apply
+  const [filterCount,    setFilterCount]    = useState<number | null>(null)
+  const [counting,       setCounting]       = useState(false)
+
+  const currentYear = new Date().getFullYear()
+  const years = Array.from({ length: currentYear - 1999 }, (_, i) => currentYear - i)
+
+  const hasDraft = !!(draftYear || draftMonth || draftDateFrom || draftDateTo)
+  const hasApplied = !!(filterYear || filterMonth || filterDateFrom || filterDateTo)
+
+  const applyFilter = async () => {
+    setFilterYear(draftYear)
+    setFilterMonth(draftMonth)
+    setFilterDateFrom(draftDateFrom)
+    setFilterDateTo(draftDateTo)
+    setCounting(true)
+    setFilterCount(null)
+    try {
+      const data = await api.countLegislation({
+        year:      draftYear      ? Number(draftYear)  : undefined,
+        month:     draftMonth     ? Number(draftMonth) : undefined,
+        date_from: draftDateFrom  || undefined,
+        date_to:   draftDateTo    || undefined,
+      })
+      setFilterCount(data?.count ?? 0)
+    } catch { setFilterCount(null) }
+    finally   { setCounting(false) }
   }
 
-  return (
-    <div className="border rounded-lg p-4 space-y-4">
-      <div>
-        <h2 className="font-semibold">Analyze Bills</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {billsTotal} bills in DB. Click Analyze to generate summary, impact score, and 1 base perspective (Centrist).
-        </p>
-      </div>
+  const clearFilter = () => {
+    setDraftYear(''); setDraftMonth(''); setDraftDateFrom(''); setDraftDateTo('')
+    setFilterYear(''); setFilterMonth(''); setFilterDateFrom(''); setFilterDateTo('')
+    setFilterCount(null)
+  }
 
-      {/* Bulk action buttons */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <Button variant="outline" size="sm" disabled={running} onClick={() => run('new', false, false)}>
-          {running && activeKey === 'new' ? 'Analyzing…' : 'Analyze Unanalyzed'}
-        </Button>
-        <Button variant="outline" size="sm" disabled={running} onClick={() => run('all', true, false)}>
-          {running && activeKey === 'all' ? 'Re-analyzing…' : 'Re-analyze All'}
-        </Button>
-        <Button variant="outline" size="sm" disabled={running} onClick={() => run('full', true, true)}>
-          {running && activeKey === 'full' ? 'Re-analyzing…' : 'Re-analyze All + Perspectives'}
-        </Button>
-        <Button variant="outline" size="sm" onClick={loadBills} disabled={billsLoading || running}>
+  const buildParams = (force: boolean, forcePerspectives = false) => {
+    const p = new URLSearchParams()
+    if (force)             p.set('force',              'true')
+    if (forcePerspectives) p.set('force_perspectives', 'true')
+    if (filterYear)        p.set('year',      filterYear)
+    if (filterMonth)       p.set('month',     filterMonth)
+    if (filterDateFrom)    p.set('date_from', filterDateFrom)
+    if (filterDateTo)      p.set('date_to',   filterDateTo)
+    return p.toString()
+  }
+
+  const run = (key: string, force: boolean, forcePerspectives = false) => {
+    setActiveKey(key)
+    start(`/api/legislation/stream/analyze-all?${buildParams(force, forcePerspectives)}`).then(() => loadBills())
+  }
+
+  const runFull = (key: string, force: boolean) => {
+    setActiveKey(key)
+    start(`/api/legislation/stream/analyze-all-full?${buildParams(force)}`).then(() => loadBills())
+  }
+
+  const filterLabel = (() => {
+    if (filterYear && filterMonth) return `${MONTHS_SHORT[Number(filterMonth)-1]} ${filterYear}`
+    if (filterYear)  return filterYear
+    if (filterDateFrom && filterDateTo) return `${filterDateFrom} → ${filterDateTo}`
+    if (filterDateFrom) return `From ${filterDateFrom}`
+    if (filterDateTo)   return `Until ${filterDateTo}`
+    return ''
+  })()
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+
+      {/* ── Header ── */}
+      <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+        <div>
+          <h2 className="font-semibold">Analyze Bills</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {billsTotal.toLocaleString()} bills in DB · generates summary, impact score &amp; base perspectives
+          </p>
+        </div>
+        <Button variant="ghost" size="sm" onClick={loadBills} disabled={billsLoading || running}>
           {billsLoading ? 'Loading…' : 'Refresh'}
         </Button>
       </div>
 
-      {/* Progress bar — shown while streaming */}
-      <ProgressBar progress={progress} running={running} />
+      <div className="p-4 space-y-4">
 
-      {bills.length === 0 && !billsLoading && (
-        <p className="text-sm text-muted-foreground">No bills yet. Ingest some below.</p>
-      )}
+        {/* ── Date filter ── */}
+        <div className="rounded-lg border p-3 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Scope — filter by date introduced
+          </p>
 
-      <div className="space-y-2 max-h-96 overflow-y-auto">
-        {bills.map((bill) => {
-          const result = analyzeResults[bill.id]
-          const isAnalyzing = analyzingId === bill.id
-          return (
-            <div key={bill.id} className="flex items-start gap-3 py-2 border-b last:border-0">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{bill.bill_number}</p>
-                <p className="text-xs text-muted-foreground truncate">{bill.title}</p>
-                {result && (
-                  <p className={`text-xs mt-1 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
-                    {result.message}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                  bill.analyzed_at ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                }`}>
-                  {bill.analyzed_at ? 'Analyzed' : 'Pending'}
-                </span>
-                <Button size="sm" variant="outline" onClick={() => fetchNews(bill)}
-                  disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}>
-                  {fetchingNewsId === bill.id ? 'Fetching…' : 'News'}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => analyzeBill(bill)}
-                  disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null || running}>
-                  {isAnalyzing ? 'Analyzing…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
-                </Button>
-              </div>
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-muted-foreground">Year</label>
+              <select
+                value={draftYear}
+                onChange={(e) => { setDraftYear(e.target.value); setDraftDateFrom(''); setDraftDateTo('') }}
+                className="h-8 rounded border bg-background px-2 text-sm"
+              >
+                <option value="">Any</option>
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
+              </select>
             </div>
-          )
-        })}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-muted-foreground">Month</label>
+              <select
+                value={draftMonth}
+                onChange={(e) => { setDraftMonth(e.target.value); setDraftDateFrom(''); setDraftDateTo('') }}
+                disabled={!draftYear}
+                className="h-8 rounded border bg-background px-2 text-sm disabled:opacity-40"
+              >
+                <option value="">Any</option>
+                {MONTHS.map((m, i) => <option key={i+1} value={i+1}>{m}</option>)}
+              </select>
+            </div>
+            <div className="flex items-end pb-0.5 px-1 text-xs text-muted-foreground self-end hidden sm:block">or</div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-muted-foreground">From date</label>
+              <input type="date" value={draftDateFrom}
+                onChange={(e) => { setDraftDateFrom(e.target.value); setDraftYear(''); setDraftMonth('') }}
+                className="h-8 rounded border bg-background px-2 text-sm" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-muted-foreground">To date</label>
+              <input type="date" value={draftDateTo}
+                onChange={(e) => { setDraftDateTo(e.target.value); setDraftYear(''); setDraftMonth('') }}
+                className="h-8 rounded border bg-background px-2 text-sm" />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button size="sm" onClick={applyFilter} disabled={!hasDraft && !hasApplied || counting || running}>
+              {counting ? 'Counting…' : 'Apply filter'}
+            </Button>
+            {hasApplied && (
+              <button onClick={clearFilter} className="text-xs text-muted-foreground hover:text-foreground underline">
+                Clear
+              </button>
+            )}
+            {filterCount !== null && (
+              <span className="text-sm font-semibold text-blue-600">
+                {filterCount.toLocaleString()} bill{filterCount !== 1 ? 's' : ''} match
+                {filterLabel ? ` · ${filterLabel}` : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── Bulk actions ── */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Bulk actions{hasApplied && filterLabel ? ` · scoped to ${filterLabel}` : ' · all bills'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {([
+              { key: 'new',     label: 'Analyze Unanalyzed',            desc: 'Summary + impact + 3 base perspectives',         action: () => run('new', false, false) },
+              { key: 'all',     label: 'Re-analyze All',                desc: 'Re-run analysis, keep existing perspectives',    action: () => run('all', true, false) },
+              { key: 'full',    label: 'Re-analyze + Perspectives',     desc: 'Re-run analysis and regenerate 3 base perspectives', action: () => run('full', true, true) },
+              { key: 'fullnew', label: 'Analyze + All 17 Perspectives', desc: 'Full analysis + generate all 17 perspectives',   action: () => runFull('fullnew', false) },
+            ] as const).map(({ key, label, desc, action }) => (
+              <button
+                key={key}
+                onClick={action}
+                disabled={running}
+                className={`text-left rounded-lg border px-3 py-2.5 transition-all hover:border-primary/60 hover:bg-muted/20 disabled:opacity-40 ${
+                  running && activeKey === key ? 'border-primary bg-primary/5' : ''
+                }`}
+              >
+                <p className="text-sm font-medium">
+                  {running && activeKey === key ? '⏳ ' : ''}{label}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{desc}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Progress bar ── */}
+        <ProgressBar progress={progress} running={running} onStop={stop} />
+
+        {/* ── Per-bill queue ── */}
+        {bills.length === 0 && !billsLoading ? (
+          <p className="text-sm text-muted-foreground">No bills yet. Ingest some below.</p>
+        ) : (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Per-bill actions</p>
+            <div className="space-y-px max-h-80 overflow-y-auto rounded-lg border divide-y">
+              {bills.map((bill) => {
+                const result = analyzeResults[bill.id]
+                const isAnalyzing = analyzingId === bill.id
+                return (
+                  <div key={bill.id} className="flex items-center gap-3 px-3 py-2 bg-background hover:bg-muted/20 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-mono text-muted-foreground shrink-0">{bill.bill_number}</span>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
+                          bill.analyzed_at ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {bill.analyzed_at ? 'Analyzed' : 'Pending'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{bill.plain_title || bill.title}</p>
+                      {result && (
+                        <p className={`text-[11px] mt-0.5 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
+                          {result.message}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <Button size="sm" variant="outline" onClick={() => fetchNews(bill)}
+                        disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}>
+                        {fetchingNewsId === bill.id ? '…' : 'News'}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => analyzeBill(bill)}
+                        disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null || running}>
+                        {isAnalyzing ? '…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   )
 }
 
 function AllPerspectivesSection() {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -474,7 +650,7 @@ function AllPerspectivesSection() {
           Run this after bulk analysis to fill out the full set.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}
@@ -576,7 +752,7 @@ function DigestSection() {
 }
 
 function FetchDetailsSection() {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -587,7 +763,7 @@ function FetchDetailsSection() {
           Only processes bills missing full text. Slow — uses Playwright per bill.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}
@@ -600,7 +776,7 @@ function FetchDetailsSection() {
 }
 
 function CityContextSection() {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -611,7 +787,7 @@ function CityContextSection() {
           Shown on bill detail pages and used to enrich AI perspective prompts.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}
@@ -624,7 +800,7 @@ function CityContextSection() {
 }
 
 function FetchNewsSection() {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -635,7 +811,7 @@ function FetchNewsSection() {
           Runs for all local bills. Safe to re-run — overwrites previous results.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}
@@ -648,7 +824,7 @@ function FetchNewsSection() {
 }
 
 function PlainTitlesSection() {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -659,7 +835,7 @@ function PlainTitlesSection() {
           Shown prominently on the home feed above the official title.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}
@@ -672,7 +848,7 @@ function PlainTitlesSection() {
 }
 
 function AutoTagSection({ onDone }: { onDone?: () => void }) {
-  const { progress, running, start } = useStreamProgress()
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -683,7 +859,7 @@ function AutoTagSection({ onDone }: { onDone?: () => void }) {
           bills that don&apos;t have tags yet. Tags appear as filterable pills on the home feed.
         </p>
       </div>
-      <ProgressBar progress={progress} running={running} />
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         variant="outline"
         disabled={running}

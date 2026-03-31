@@ -290,8 +290,11 @@ class LegislationIngestionService:
         analyzed: Optional[bool] = None,
         tag: str = "",
         impact: str = "",
+        year: Optional[int] = None,
+        month: Optional[int] = None,
     ):
         """Search for legislation with optional filters."""
+        from sqlalchemy import extract
         base_query = self.db.query(Legislation)
         if query:
             base_query = base_query.filter(
@@ -308,6 +311,14 @@ class LegislationIngestionService:
             base_query = base_query.filter(Legislation.tags.ilike(f'%"{tag}"%'))
         if impact:
             base_query = base_query.filter(Legislation.impact_level == impact)
+        if year:
+            base_query = base_query.filter(
+                extract("year", Legislation.introduced_date) == year
+            )
+        if month:
+            base_query = base_query.filter(
+                extract("month", Legislation.introduced_date) == month
+            )
         total = base_query.count()
         results = (
             base_query

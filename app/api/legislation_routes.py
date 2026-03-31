@@ -203,6 +203,71 @@ async def get_tag_counts(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/year-counts")
+async def get_year_counts(db: Session = Depends(get_db)):
+    """Return bill counts grouped by introduction year, sorted ascending."""
+    from sqlalchemy import func, extract
+
+    rows = (
+        db.query(
+            extract("year", Legislation.introduced_date).label("year"),
+            func.count(Legislation.id).label("count"),
+        )
+        .filter(Legislation.introduced_date.isnot(None), Legislation.level == "local")
+        .group_by("year")
+        .order_by("year")
+        .all()
+    )
+    return {
+        "years": [{"year": int(row.year), "count": row.count} for row in rows]
+    }
+
+
+@router.get("/month-counts")
+async def get_month_counts(year: int = Query(...), db: Session = Depends(get_db)):
+    """Return bill counts grouped by month for a given year, sorted ascending."""
+    from sqlalchemy import func, extract
+
+    rows = (
+        db.query(
+            extract("month", Legislation.introduced_date).label("month"),
+            func.count(Legislation.id).label("count"),
+        )
+        .filter(
+            Legislation.introduced_date.isnot(None),
+            Legislation.level == "local",
+            extract("year", Legislation.introduced_date) == year,
+        )
+        .group_by("month")
+        .order_by("month")
+        .all()
+    )
+    return {
+        "months": [{"month": int(row.month), "count": row.count} for row in rows]
+    }
+
+
+@router.get("/count")
+async def count_legislation(
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    analyzed: str = Query(""),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Count bills matching the given date/analysis filters (for admin preview)."""
+    from sqlalchemy import extract
+    q = db.query(Legislation).filter(Legislation.level == "local")
+    if analyzed == "true":
+        q = q.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        q = q.filter(Legislation.analyzed_at.is_(None))
+    q = _apply_date_filters(q, year, month, date_from, date_to)
+    return {"count": q.count()}
+
+
 @router.get("/search")
 async def search_legislation(
     q: str = Query('', max_length=200),
@@ -212,6 +277,8 @@ async def search_legislation(
     analyzed: str = Query("", description="Filter: 'true' = analyzed, 'false' = pending, '' = all"),
     tag: str = Query("", max_length=60),
     impact: str = Query("", max_length=20),
+    year: int = Query(0, description="Filter by introduction year (0 = all)"),
+    month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     db: Session = Depends(get_db)
 ):
     """Search for legislation with optional filters."""
@@ -224,7 +291,8 @@ async def search_legislation(
 
         service = LegislationIngestionService(db)
         results, total = service.search_legislation(
-            q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact
+            q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
+            year=year or None, month=month or None
         )
         return {
             "success": True,
@@ -398,10 +466,36 @@ async def backfill_city_context(
 
 # ── Streaming (SSE) endpoints ─────────────────────────────────────────────────
 
+def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
+    """Apply year/month/date_from/date_to filters to a Legislation query."""
+    from sqlalchemy import extract
+    if year:
+        q = q.filter(extract("year", Legislation.introduced_date) == year)
+    if month:
+        q = q.filter(extract("month", Legislation.introduced_date) == month)
+    if date_from:
+        try:
+            from datetime import date
+            q = q.filter(Legislation.introduced_date >= date.fromisoformat(date_from))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import date
+            q = q.filter(Legislation.introduced_date <= date.fromisoformat(date_to))
+        except ValueError:
+            pass
+    return q
+
+
 @router.get("/stream/analyze-all")
 async def stream_analyze_all_bills(
     force: bool = Query(False),
     force_perspectives: bool = Query(False),
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
@@ -413,6 +507,7 @@ async def stream_analyze_all_bills(
         q = db.query(Legislation).filter(Legislation.level == "local")
         if not force:
             q = q.filter(Legislation.analyzed_at.is_(None))
+        q = _apply_date_filters(q, year, month, date_from, date_to)
         bills = q.all()
         total = len(bills)
         yield _sse({"current": 0, "total": total, "message": f"Found {total} bills to analyze", "done": False})
@@ -428,6 +523,59 @@ async def stream_analyze_all_bills(
                 logger.warning(f"stream analyze failed for {bill.bill_number}: {e}")
                 failed += 1
         yield _sse({"current": total, "total": total, "message": f"Done — {analyzed} analyzed, {failed} failed", "done": True})
+        await asyncio.sleep(0)
+
+    return _sse_stream(gen)
+
+
+@router.get("/stream/analyze-all-full")
+async def stream_analyze_all_full(
+    force: bool = Query(False),
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Stream analyze + all 17 perspectives per bill as Server-Sent Events."""
+    from app.services.bill_research_service import analyze_bill
+    from app.services.perspectives_service import generate_perspective as _gen
+
+    async def gen():
+        q = db.query(Legislation).filter(Legislation.level == "local")
+        if not force:
+            q = q.filter(Legislation.analyzed_at.is_(None))
+        q = _apply_date_filters(q, year, month, date_from, date_to)
+        bills = q.all()
+        total_bills = len(bills)
+        # Each bill = 1 analyze step + 17 perspective steps
+        total_ops = total_bills * (1 + len(ALL_PERSPECTIVES))
+        yield _sse({"current": 0, "total": total_ops, "message": f"Found {total_bills} bills — {total_ops} operations total", "done": False})
+        await asyncio.sleep(0)
+        current = analyzed = failed = 0
+        for bill in bills:
+            current += 1
+            yield _sse({"current": current, "total": total_ops, "message": f"Analyzing {bill.bill_number}…", "done": False})
+            await asyncio.sleep(0)
+            try:
+                await asyncio.get_event_loop().run_in_executor(None, lambda b=bill: analyze_bill(b, db))
+                analyzed += 1
+            except Exception as e:
+                logger.warning(f"full-analyze failed for {bill.bill_number}: {e}")
+                failed += 1
+                current += len(ALL_PERSPECTIVES)  # skip perspectives for this bill
+                continue
+            for ptype in ALL_PERSPECTIVES:
+                current += 1
+                yield _sse({"current": current, "total": total_ops, "message": f"{bill.bill_number} — {ptype}", "done": False})
+                await asyncio.sleep(0)
+                try:
+                    await asyncio.get_event_loop().run_in_executor(None, lambda b=bill, p=ptype: _gen(b, p, db))
+                except Exception as e:
+                    logger.warning(f"perspective {ptype} failed for {bill.bill_number}: {e}")
+                    failed += 1
+        yield _sse({"current": total_ops, "total": total_ops, "message": f"Done — {analyzed} bills analyzed, {failed} failures", "done": True})
         await asyncio.sleep(0)
 
     return _sse_stream(gen)
