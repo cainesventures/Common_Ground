@@ -234,27 +234,55 @@ function BillCard({ bill }: { bill: Bill }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function LegislationPage() {
-  const [query,         setQuery]         = useState('')
-  const [queryInput,    setQueryInput]    = useState('')
-  const [bills,         setBills]         = useState<Bill[]>([])
-  const [total,         setTotal]         = useState(0)
-  const [page,          setPage]          = useState(1)
-  const [loading,       setLoading]       = useState(true)
-  const [error,         setError]         = useState('')
-  const [selectedYear,  setSelectedYear]  = useState<number | null>(null)
-  const [selectedMonth, setSelectedMonth] = useState<number | null>(null)
-  const [selectedTag,   setSelectedTag]   = useState('')
-  const [tagCounts,     setTagCounts]     = useState<{tag: string; count: number}[]>([])
+const STATUSES = [
+  { value: 'introduced',    label: 'Introduced' },
+  { value: 'in_committee',  label: 'In Committee' },
+  { value: 'active',        label: 'Active' },
+  { value: 'passed',        label: 'Passed' },
+  { value: 'signed',        label: 'Signed' },
+  { value: 'signed_into_law', label: 'Signed into Law' },
+  { value: 'failed',        label: 'Failed' },
+  { value: 'vetoed',        label: 'Vetoed' },
+]
 
-  const fetch = useCallback(async (
-    q: string, year: number | null, month: number | null, tag: string, pageNum: number
+const LEVELS = [
+  { value: 'local',   label: 'Local' },
+  { value: 'state',   label: 'State' },
+  { value: 'federal', label: 'Federal' },
+]
+
+const IMPACTS = ['high', 'medium', 'low'] as const
+
+export default function LegislationPage() {
+  const [query,          setQuery]          = useState('')
+  const [queryInput,     setQueryInput]     = useState('')
+  const [bills,          setBills]          = useState<Bill[]>([])
+  const [total,          setTotal]          = useState(0)
+  const [page,           setPage]           = useState(1)
+  const [loading,        setLoading]        = useState(true)
+  const [error,          setError]          = useState('')
+  const [selectedYear,   setSelectedYear]   = useState<number | null>(null)
+  const [selectedMonth,  setSelectedMonth]  = useState<number | null>(null)
+  const [selectedTag,    setSelectedTag]    = useState('')
+  const [selectedLevel,  setSelectedLevel]  = useState('local')
+  const [selectedStatus, setSelectedStatus] = useState('')
+  const [selectedImpact, setSelectedImpact] = useState('')
+  const [analyzedOnly,   setAnalyzedOnly]   = useState(false)
+  const [tagCounts,      setTagCounts]      = useState<{tag: string; count: number}[]>([])
+
+  const fetchBills = useCallback(async (
+    q: string, year: number | null, month: number | null, tag: string,
+    level: string, status: string, impact: string, analyzed: boolean, pageNum: number
   ) => {
     setLoading(true)
     setError('')
     try {
       const offset = (pageNum - 1) * PAGE_SIZE
-      const data = await api.searchLegislation(q, PAGE_SIZE, offset, 'local', '', tag, '', year ?? 0, month ?? 0)
+      const data = await api.searchLegislation(
+        q, PAGE_SIZE, offset, level,
+        analyzed ? 'true' : '',
+        tag, impact, year ?? 0, month ?? 0, status
+      )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
     } catch (e: any) {
@@ -266,46 +294,48 @@ export default function LegislationPage() {
     }
   }, [])
 
-  // Initial tag counts
   useEffect(() => {
     api.getTagCounts().then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
   }, [])
 
-  // Re-fetch whenever filters or page changes
   useEffect(() => {
-    fetch(query, selectedYear, selectedMonth, selectedTag, page)
-  }, [query, selectedYear, selectedMonth, selectedTag, page, fetch])
+    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page)
+  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, fetchBills])
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
+  const reset = (overrides: Partial<{
+    year: number | null; month: number | null; tag: string; level: string;
+    status: string; impact: string; analyzed: boolean; q: string
+  }> = {}) => {
     setPage(1)
-    setQuery(queryInput)
+    if ('year'     in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
+    if ('month'    in overrides) setSelectedMonth(overrides.month!)
+    if ('tag'      in overrides) setSelectedTag(overrides.tag!)
+    if ('level'    in overrides) setSelectedLevel(overrides.level!)
+    if ('status'   in overrides) setSelectedStatus(overrides.status!)
+    if ('impact'   in overrides) setSelectedImpact(overrides.impact!)
+    if ('analyzed' in overrides) setAnalyzedOnly(overrides.analyzed!)
+    if ('q'        in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
   }
 
-  const handleYearSelect = (year: number | null) => {
-    setSelectedYear(year)
-    setSelectedMonth(null)
+  const clearAll = () => {
     setPage(1)
-  }
-
-  const handleMonthSelect = (month: number | null) => {
-    setSelectedMonth(month)
-    setPage(1)
-  }
-
-  const handleTagChange = (tag: string) => {
-    setSelectedTag(tag)
-    setPage(1)
+    setSelectedYear(null); setSelectedMonth(null)
+    setSelectedTag(''); setSelectedLevel('local')
+    setSelectedStatus(''); setSelectedImpact('')
+    setAnalyzedOnly(false); setQuery(''); setQueryInput('')
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
-  // Active filter summary for breadcrumb
   const filterParts: string[] = []
-  if (selectedYear)  filterParts.push(String(selectedYear))
-  if (selectedMonth) filterParts.push(MONTH_NAMES_FULL[selectedMonth - 1])
-  if (selectedTag)   filterParts.push(selectedTag)
-  if (query)         filterParts.push(`"${query}"`)
+  if (selectedLevel  && selectedLevel !== 'local') filterParts.push(selectedLevel)
+  if (selectedYear)   filterParts.push(String(selectedYear))
+  if (selectedMonth)  filterParts.push(MONTH_NAMES_FULL[selectedMonth - 1])
+  if (selectedTag)    filterParts.push(selectedTag)
+  if (selectedStatus) filterParts.push(selectedStatus.replace(/_/g, ' '))
+  if (selectedImpact) filterParts.push(`${selectedImpact} impact`)
+  if (analyzedOnly)   filterParts.push('analyzed only')
+  if (query)          filterParts.push(`"${query}"`)
 
   return (
     <div className="space-y-5">
@@ -318,40 +348,110 @@ export default function LegislationPage() {
       <DrilldownChart
         selectedYear={selectedYear}
         selectedMonth={selectedMonth}
-        onYearSelect={handleYearSelect}
-        onMonthSelect={handleMonthSelect}
+        onYearSelect={(y) => reset({ year: y })}
+        onMonthSelect={(m) => { setSelectedMonth(m); setPage(1) }}
       />
 
-      {/* Search + tag filter */}
-      <div className="flex flex-wrap gap-2">
-        <form onSubmit={handleSearch} className="flex gap-2 flex-1 min-w-64">
-          <input
-            type="text"
-            value={queryInput}
-            onChange={(e) => setQueryInput(e.target.value)}
-            placeholder="Search bills by title or number…"
-            className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            className="inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            Search
-          </button>
-        </form>
-        {tagCounts.length > 0 && (
+      {/* ── Filter row ── */}
+      <div className="space-y-3">
+
+        {/* Level tabs */}
+        <div className="flex items-center gap-1 border-b">
+          {[{ value: '', label: 'All' }, ...LEVELS].map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => reset({ level: value })}
+              className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                selectedLevel === value
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Status, Impact, Analyzed row */}
+        <div className="flex flex-wrap gap-2 items-center">
+          {/* Status dropdown */}
           <select
-            value={selectedTag}
-            onChange={(e) => handleTagChange(e.target.value)}
-            className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            value={selectedStatus}
+            onChange={(e) => reset({ status: e.target.value })}
+            className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           >
-            <option value="">All Tags</option>
-            {tagCounts.map(({ tag, count }) => (
-              <option key={tag} value={tag}>{tag} ({count})</option>
-            ))}
+            <option value="">All statuses</option>
+            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-        )}
+
+          {/* Impact chips */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => reset({ impact: '' })}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                !selectedImpact ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-muted/70'
+              }`}
+            >All</button>
+            {IMPACTS.map(imp => (
+              <button
+                key={imp}
+                onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize transition-colors ${
+                  selectedImpact === imp
+                    ? imp === 'high' ? 'bg-red-500 text-white'
+                    : imp === 'medium' ? 'bg-amber-500 text-white'
+                    : 'bg-green-500 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                }`}
+              >
+                {imp}
+              </button>
+            ))}
+          </div>
+
+          {/* Analyzed toggle */}
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+            <input
+              type="checkbox"
+              checked={analyzedOnly}
+              onChange={(e) => reset({ analyzed: e.target.checked })}
+              className="rounded border-input"
+            />
+            Analyzed only
+          </label>
+        </div>
+
+        {/* Search + tag */}
+        <div className="flex flex-wrap gap-2">
+          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput) }} className="flex gap-2 flex-1 min-w-64">
+            <input
+              type="text"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="Search bills by title or number…"
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              Search
+            </button>
+          </form>
+          {tagCounts.length > 0 && (
+            <select
+              value={selectedTag}
+              onChange={(e) => reset({ tag: e.target.value })}
+              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">All Tags</option>
+              {tagCounts.map(({ tag, count }) => (
+                <option key={tag} value={tag}>{tag} ({count})</option>
+              ))}
+            </select>
+          )}
+        </div>
       </div>
 
       {/* Active filter breadcrumb */}
@@ -360,7 +460,7 @@ export default function LegislationPage() {
           <span className="text-muted-foreground">Showing:</span>
           <span className="font-medium">{filterParts.join(' · ')}</span>
           <button
-            onClick={() => { setSelectedYear(null); setSelectedMonth(null); setSelectedTag(''); setQuery(''); setQueryInput(''); setPage(1) }}
+            onClick={clearAll}
             className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
           >
             Clear all

@@ -277,6 +277,7 @@ async def search_legislation(
     analyzed: str = Query("", description="Filter: 'true' = analyzed, 'false' = pending, '' = all"),
     tag: str = Query("", max_length=60),
     impact: str = Query("", max_length=20),
+    status: str = Query("", max_length=40),
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     db: Session = Depends(get_db)
@@ -292,7 +293,7 @@ async def search_legislation(
         service = LegislationIngestionService(db)
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
-            year=year or None, month=month or None
+            year=year or None, month=month or None, status=status or None
         )
         return {
             "success": True,
@@ -943,6 +944,142 @@ async def fetch_bill_details(
     except Exception as e:
         logger.error(f"fetch-details failed for {legislation_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+PIPELINE_STEP_ORDER = ["analyze", "perspectives", "news"]
+PIPELINE_STEP_LABELS = {
+    "analyze": "Analyze",
+    "perspectives": "Generate Perspectives",
+    "news": "Fetch News",
+}
+
+
+@router.get("/stream/pipeline")
+async def stream_pipeline(
+    steps: str = Query("analyze,perspectives"),
+    force_analyze: bool = Query(False),
+    perspective_types: str = Query(",".join(ALL_PERSPECTIVES)),
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Run the full bill pipeline in order: analyze → perspectives → news.
+
+    Each step skips already-processed work (idempotent). Date filter scopes all steps.
+    """
+    from app.services.bill_research_service import analyze_bill
+    from app.services.perspectives_service import generate_perspective as _gen
+    from app.services.news_service import fetch_and_store_news
+    from app.services.legislation_service import _ai_plain_title, _ai_tag_bill
+    from app.services.ai_provider import get_ai_provider
+    from app.integrations.legistar_scraper import PhilaLegistarScraper
+    from sqlalchemy import or_
+    import json as _j
+
+    requested = [s.strip() for s in steps.split(",") if s.strip()]
+    enabled = [s for s in PIPELINE_STEP_ORDER if s in requested]
+    ptypes = [p.strip() for p in perspective_types.split(",") if p.strip() and p in ALL_PERSPECTIVES]
+    if not ptypes:
+        ptypes = list(ALL_PERSPECTIVES)
+
+    async def gen():
+        total_steps = len(enabled)
+        if total_steps == 0:
+            yield _sse({"current": 0, "total": 0, "message": "No steps selected", "done": True})
+            return
+
+        # Get scoped bill set (used across steps; each step applies its own skip filter)
+        base_q = db.query(Legislation).filter(Legislation.level == "local")
+        base_q = _apply_date_filters(base_q, year, month, date_from, date_to)
+        scoped_bills = base_q.order_by(Legislation.introduced_date.desc()).all()
+        total_bills = len(scoped_bills)
+
+        yield _sse({"current": 0, "total": total_bills * total_steps, "message": f"Starting pipeline: {total_steps} step(s), {total_bills} bills in scope", "done": False})
+        await asyncio.sleep(0)
+
+        overall = 0
+
+        for step_idx, step in enumerate(enabled):
+            label = PIPELINE_STEP_LABELS[step]
+            step_num = f"Step {step_idx + 1}/{total_steps}"
+
+            if step == "analyze":
+                provider = get_ai_provider()
+                scraper = PhilaLegistarScraper(headless=True)
+                for i, bill in enumerate(scoped_bills, 1):
+                    overall += 1
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} ({i}/{total_bills})", "done": False})
+                    await asyncio.sleep(0)
+                    try:
+                        def _run_analyze(b=bill):
+                            # 1. Fetch full text if missing
+                            if not b.full_text:
+                                try:
+                                    parsed = scraper.fetch_details_for_bill(b.bill_number)
+                                    if parsed:
+                                        for k, v in parsed.items():
+                                            if v is not None and k not in ("id",):
+                                                setattr(b, k, v)
+                                except Exception as e:
+                                    logger.warning(f"fetch_details failed for {b.bill_number}: {e}")
+                            # 2. Generate plain title if missing
+                            if not b.plain_title:
+                                try:
+                                    plain = _ai_plain_title(b, provider)
+                                    if plain:
+                                        b.plain_title = plain
+                                except Exception as e:
+                                    logger.warning(f"plain_title failed for {b.bill_number}: {e}")
+                            # 3. Auto-tag if missing
+                            if not b.tags or b.tags in ("", "[]"):
+                                try:
+                                    tags = _ai_tag_bill(b, provider)
+                                    if tags:
+                                        b.tags = _j.dumps(tags)
+                                except Exception as e:
+                                    logger.warning(f"auto-tag failed for {b.bill_number}: {e}")
+                            # 4. Full analysis if not done (or force)
+                            if not b.analyzed_at or force_analyze:
+                                analyze_bill(b, db)
+                            db.commit()
+                        await asyncio.get_event_loop().run_in_executor(None, _run_analyze)
+                    except Exception as e:
+                        logger.warning(f"pipeline analyze failed for {bill.bill_number}: {e}")
+
+            elif step == "perspectives":
+                analyzed_bills = [b for b in scoped_bills if b.analyzed_at]
+                total_ops = len(analyzed_bills) * len(ptypes)
+                op = 0
+                for bill in analyzed_bills:
+                    for ptype in ptypes:
+                        op += 1
+                        overall += 1
+                        yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} / {ptype} ({op}/{total_ops})", "done": False})
+                        await asyncio.sleep(0)
+                        try:
+                            await asyncio.get_event_loop().run_in_executor(None, lambda b=bill, p=ptype: _gen(b, p, db))
+                        except Exception as e:
+                            logger.warning(f"pipeline perspective {ptype} failed for {bill.bill_number}: {e}")
+                # Pad overall counter if analyzed_bills < scoped_bills
+                overall += (total_bills - len(analyzed_bills)) * len(ptypes)
+
+            elif step == "news":
+                for i, bill in enumerate(scoped_bills, 1):
+                    overall += 1
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} ({i}/{total_bills})", "done": False})
+                    await asyncio.sleep(0)
+                    try:
+                        await asyncio.get_event_loop().run_in_executor(None, lambda b=bill: fetch_and_store_news(b, db))
+                    except Exception as e:
+                        logger.warning(f"pipeline news fetch failed for {bill.bill_number}: {e}")
+
+        yield _sse({"current": total_bills * total_steps, "total": total_bills * total_steps, "message": f"Pipeline complete — {total_bills} bills processed", "done": True})
+        await asyncio.sleep(0)
+
+    return _sse_stream(gen)
 
 
 @router.get("/stream/fetch-details-all")

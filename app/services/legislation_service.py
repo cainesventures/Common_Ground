@@ -292,6 +292,7 @@ class LegislationIngestionService:
         impact: str = "",
         year: Optional[int] = None,
         month: Optional[int] = None,
+        status: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -319,6 +320,8 @@ class LegislationIngestionService:
             base_query = base_query.filter(
                 extract("month", Legislation.introduced_date) == month
             )
+        if status:
+            base_query = base_query.filter(Legislation.status == status)
         total = base_query.count()
         results = (
             base_query
