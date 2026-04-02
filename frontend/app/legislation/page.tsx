@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 
 const PAGE_SIZE = 20
@@ -64,6 +65,7 @@ function BarChart<T extends { count: number }>({
   title: string
   subtitle?: string
 }) {
+  const [hoveredKey, setHoveredKey] = useState<string | number | null>(null)
   if (data.length === 0) return null
   const max = Math.max(...data.map(d => d.count), 1)
   const total = data.reduce((s, d) => s + d.count, 0)
@@ -77,44 +79,64 @@ function BarChart<T extends { count: number }>({
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
       </div>
-      <div className="flex items-end gap-1" style={{ height: 100 }}>
+      <div className="flex items-end gap-1" style={{ height: 108 }}>
         {data.map((item) => {
           const key  = getKey(item)
           const label = getLabel(item)
           const isActive = activeKey === key
+          const isHovered = hoveredKey === key
           const barH = Math.max((item.count / max) * 72, 3)
+          const barColor = isActive ? '#3b82f6' : isHovered ? '#1d4ed8' : '#3b82f630'
 
           return (
             <button
               key={key}
               onClick={() => onSelect(key)}
-              className="flex-1 flex flex-col items-center gap-0.5 group min-w-0"
+              onMouseEnter={() => setHoveredKey(key)}
+              onMouseLeave={() => setHoveredKey(null)}
+              className="bar-hover flex-1 flex flex-col items-center gap-0.5 min-w-0"
               title={`${label}: ${item.count.toLocaleString()} bill${item.count !== 1 ? 's' : ''}`}
             >
-              {/* Count label — always visible for active, hover for others */}
-              <span className={`text-[10px] tabular-nums leading-none transition-opacity ${
-                isActive ? 'text-blue-600 font-semibold opacity-100' : 'text-muted-foreground opacity-0 group-hover:opacity-100'
-              }`}>
+              {/* Count label — visible on active or hover */}
+              <span style={{
+                fontSize: 11,
+                fontWeight: 600,
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+                color: '#000000',
+                opacity: isActive || isHovered ? 1 : 0,
+                transition: 'opacity 150ms ease',
+              }}>
                 {item.count.toLocaleString()}
               </span>
 
               {/* Bar */}
               <div className="w-full flex items-end" style={{ height: 72 }}>
                 <div
-                  className="w-full rounded-t-sm transition-all duration-150"
+                  className="w-full rounded-t-sm"
                   style={{
                     height: barH,
-                    backgroundColor: isActive ? '#3b82f6' : '#3b82f630',
+                    backgroundColor: barColor,
                     outline: isActive ? '2px solid #3b82f6' : 'none',
                     outlineOffset: '1px',
+                    transition: 'background-color 150ms ease',
                   }}
                 />
               </div>
 
               {/* X-axis label */}
-              <span className={`text-[10px] leading-none truncate w-full text-center transition-colors ${
-                isActive ? 'text-blue-600 font-semibold' : 'text-muted-foreground'
-              }`}>
+              <span style={{
+                fontSize: 10,
+                lineHeight: 1,
+                textAlign: 'center',
+                width: '100%',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: isActive ? '#2563eb' : '#6b7280',
+                fontWeight: isActive ? 600 : 400,
+                transition: 'color 150ms ease',
+              }}>
                 {label}
               </span>
             </button>
@@ -127,28 +149,41 @@ function BarChart<T extends { count: number }>({
 
 // ── Drill-down Chart ─────────────────────────────────────────────────────────
 
+interface ChartFilters {
+  q?: string
+  analyzed?: string
+  tag?: string
+  impact?: string
+  status?: string
+  sponsor?: string
+}
+
 function DrilldownChart({
   selectedYear,
   selectedMonth,
   onYearSelect,
   onMonthSelect,
+  filters,
 }: {
   selectedYear:  number | null
   selectedMonth: number | null
   onYearSelect:  (year: number | null) => void
   onMonthSelect: (month: number | null) => void
+  filters: ChartFilters
 }) {
   const [yearCounts,  setYearCounts]  = useState<YearCount[]>([])
   const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
 
   useEffect(() => {
-    api.getYearCounts().then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
-  }, [])
+    api.getYearCounts(filters).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
 
   useEffect(() => {
     if (!selectedYear) { setMonthCounts([]); return }
-    api.getMonthCounts(selectedYear).then((d) => setMonthCounts(d?.months ?? [])).catch(() => {})
-  }, [selectedYear])
+    api.getMonthCounts(selectedYear, filters).then((d) => setMonthCounts(d?.months ?? [])).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear, filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
 
   if (!selectedYear) {
     return (
@@ -245,34 +280,62 @@ const STATUSES = [
   { value: 'vetoed',        label: 'Vetoed' },
 ]
 
-const LEVELS = [
-  { value: 'local',   label: 'Local' },
-  { value: 'state',   label: 'State' },
-  { value: 'federal', label: 'Federal' },
-]
 
 const IMPACTS = ['high', 'medium', 'low'] as const
 
 export default function LegislationPage() {
-  const [query,          setQuery]          = useState('')
-  const [queryInput,     setQueryInput]     = useState('')
+  return (
+    <Suspense>
+      <LegislationPageInner />
+    </Suspense>
+  )
+}
+
+function LegislationPageInner() {
+  const searchParams = useSearchParams()
+
+  // Initialize filter state from URL on first render
+  const sp = searchParams
+  const [query,          setQuery]          = useState(() => sp.get('q') ?? '')
+  const [queryInput,     setQueryInput]     = useState(() => sp.get('q') ?? '')
   const [bills,          setBills]          = useState<Bill[]>([])
   const [total,          setTotal]          = useState(0)
-  const [page,           setPage]           = useState(1)
+  const [page,           setPage]           = useState(() => Number(sp.get('page') ?? '1'))
   const [loading,        setLoading]        = useState(true)
   const [error,          setError]          = useState('')
-  const [selectedYear,   setSelectedYear]   = useState<number | null>(null)
-  const [selectedMonth,  setSelectedMonth]  = useState<number | null>(null)
-  const [selectedTag,    setSelectedTag]    = useState('')
-  const [selectedLevel,  setSelectedLevel]  = useState('local')
-  const [selectedStatus, setSelectedStatus] = useState('')
-  const [selectedImpact, setSelectedImpact] = useState('')
-  const [analyzedOnly,   setAnalyzedOnly]   = useState(false)
-  const [tagCounts,      setTagCounts]      = useState<{tag: string; count: number}[]>([])
+  const [selectedYear,   setSelectedYear]   = useState<number | null>(() => sp.get('year') ? Number(sp.get('year')) : null)
+  const [selectedMonth,  setSelectedMonth]  = useState<number | null>(() => sp.get('month') ? Number(sp.get('month')) : null)
+  const [selectedTag,    setSelectedTag]    = useState(() => sp.get('tag') ?? '')
+  const [selectedLevel,  setSelectedLevel]  = useState(() => sp.get('level') ?? 'local')
+  const [selectedStatus,  setSelectedStatus]  = useState(() => sp.get('status') ?? '')
+  const [selectedImpact,  setSelectedImpact]  = useState(() => sp.get('impact') ?? '')
+  const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
+  const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') === '1')
+  const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
+  const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
+
+  // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (query)          p.set('q',        query)
+    if (selectedYear)   p.set('year',     String(selectedYear))
+    if (selectedMonth)  p.set('month',    String(selectedMonth))
+    if (selectedTag)    p.set('tag',      selectedTag)
+    if (selectedLevel && selectedLevel !== 'local') p.set('level', selectedLevel)
+    if (selectedStatus)  p.set('status',  selectedStatus)
+    if (selectedImpact)  p.set('impact',  selectedImpact)
+    if (selectedSponsor) p.set('sponsor', selectedSponsor)
+    if (analyzedOnly)    p.set('analyzed', '1')
+    if (page > 1)        p.set('page',    String(page))
+    const qs = p.toString()
+    const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
+    window.history.replaceState(null, '', url)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, selectedSponsor, analyzedOnly, page])
 
   const fetchBills = useCallback(async (
     q: string, year: number | null, month: number | null, tag: string,
-    level: string, status: string, impact: string, analyzed: boolean, pageNum: number
+    level: string, status: string, impact: string, analyzed: boolean, pageNum: number, sponsor: string
   ) => {
     setLoading(true)
     setError('')
@@ -281,7 +344,7 @@ export default function LegislationPage() {
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        tag, impact, year ?? 0, month ?? 0, status
+        tag, impact, year ?? 0, month ?? 0, status, sponsor
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -295,16 +358,29 @@ export default function LegislationPage() {
   }, [])
 
   useEffect(() => {
-    api.getTagCounts().then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
-  }, [])
+    api.getTagCounts({
+      q: query,
+      level: selectedLevel,
+      analyzed: analyzedOnly ? 'true' : '',
+      impact: selectedImpact,
+      status: selectedStatus,
+      sponsor: selectedSponsor || undefined,
+      year: selectedYear ?? undefined,
+      month: selectedMonth ?? undefined,
+    }).then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
+  }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatus, selectedSponsor, selectedYear, selectedMonth])
 
   useEffect(() => {
-    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page)
-  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, fetchBills])
+    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor)
+  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, fetchBills])
+
+  useEffect(() => {
+    api.getCouncilmembers().then((d) => setCouncilMembers(d?.members ?? [])).catch(() => {})
+  }, [])
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tag: string; level: string;
-    status: string; impact: string; analyzed: boolean; q: string
+    status: string; impact: string; analyzed: boolean; q: string; sponsor: string
   }> = {}) => {
     setPage(1)
     if ('year'     in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
@@ -314,6 +390,7 @@ export default function LegislationPage() {
     if ('status'   in overrides) setSelectedStatus(overrides.status!)
     if ('impact'   in overrides) setSelectedImpact(overrides.impact!)
     if ('analyzed' in overrides) setAnalyzedOnly(overrides.analyzed!)
+    if ('sponsor'  in overrides) setSelectedSponsor(overrides.sponsor!)
     if ('q'        in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
   }
 
@@ -322,6 +399,7 @@ export default function LegislationPage() {
     setSelectedYear(null); setSelectedMonth(null)
     setSelectedTag(''); setSelectedLevel('local')
     setSelectedStatus(''); setSelectedImpact('')
+    setSelectedSponsor('')
     setAnalyzedOnly(false); setQuery(''); setQueryInput('')
   }
 
@@ -332,8 +410,9 @@ export default function LegislationPage() {
   if (selectedYear)   filterParts.push(String(selectedYear))
   if (selectedMonth)  filterParts.push(MONTH_NAMES_FULL[selectedMonth - 1])
   if (selectedTag)    filterParts.push(selectedTag)
-  if (selectedStatus) filterParts.push(selectedStatus.replace(/_/g, ' '))
-  if (selectedImpact) filterParts.push(`${selectedImpact} impact`)
+  if (selectedStatus)  filterParts.push(selectedStatus.replace(/_/g, ' '))
+  if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
+  if (selectedSponsor) filterParts.push(selectedSponsor)
   if (analyzedOnly)   filterParts.push('analyzed only')
   if (query)          filterParts.push(`"${query}"`)
 
@@ -350,27 +429,19 @@ export default function LegislationPage() {
         selectedMonth={selectedMonth}
         onYearSelect={(y) => reset({ year: y })}
         onMonthSelect={(m) => { setSelectedMonth(m); setPage(1) }}
+        filters={{
+          q: query || undefined,
+          analyzed: analyzedOnly ? 'true' : undefined,
+          tag: selectedTag || undefined,
+          impact: selectedImpact || undefined,
+          status: selectedStatus || undefined,
+          sponsor: selectedSponsor || undefined,
+        }}
       />
 
       {/* ── Filter row ── */}
       <div className="space-y-3">
 
-        {/* Level tabs */}
-        <div className="flex items-center gap-1 border-b">
-          {[{ value: '', label: 'All' }, ...LEVELS].map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => reset({ level: value })}
-              className={`px-3 py-1.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                selectedLevel === value
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         {/* Status, Impact, Analyzed row */}
         <div className="flex flex-wrap gap-2 items-center">
@@ -384,24 +455,43 @@ export default function LegislationPage() {
             {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
 
+          {/* Sponsor dropdown */}
+          {councilMembers.length > 0 && (
+            <select
+              value={selectedSponsor}
+              onChange={(e) => reset({ sponsor: e.target.value })}
+              className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">All sponsors</option>
+              {councilMembers.map(m => (
+                <option key={m.id} value={m.name}>{m.name}</option>
+              ))}
+            </select>
+          )}
+
           {/* Impact chips */}
           <div className="flex items-center gap-1">
+            <span className="text-xs text-muted-foreground mr-1">Impact:</span>
             <button
               onClick={() => reset({ impact: '' })}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                !selectedImpact ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground hover:bg-muted/70'
+              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                !selectedImpact
+                  ? 'bg-foreground text-background border-foreground'
+                  : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
               }`}
             >All</button>
             {IMPACTS.map(imp => (
               <button
                 key={imp}
                 onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize transition-colors ${
+                className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize border transition-colors ${
                   selectedImpact === imp
-                    ? imp === 'high' ? 'bg-red-500 text-white'
-                    : imp === 'medium' ? 'bg-amber-500 text-white'
-                    : 'bg-green-500 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                    ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
+                    : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
+                    :                   'bg-green-500 text-white border-green-500'
+                    : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400'
+                    : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400'
+                    :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400'
                 }`}
               >
                 {imp}

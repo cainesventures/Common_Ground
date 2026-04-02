@@ -27,7 +27,7 @@ brew install ollama
 ```
 
 ### Auto-start
-You don't need to manually run `ollama serve` before using Common Ground. The backend detects when Ollama is not running and starts it automatically, then retries the AI request. You'll see the Generate button show **"Starting AI…"** for a few seconds on the first request after a cold start.
+You don't need to manually run `ollama serve` before using Common Ground. The backend detects when Ollama is not running and starts it automatically, then retries the AI request. You'll see the pipeline show **"Starting AI…"** for a few seconds on the first request after a cold start.
 
 If you prefer to start it manually:
 ```bash
@@ -73,7 +73,7 @@ AI_BASE_URL=http://localhost:11434
 AI_API_KEY=              # leave blank for Ollama
 ```
 
-That's it. Restart the backend and all AI features (plain titles, tagging, analysis, perspectives) will use your local model.
+That's it. Restart the backend and all AI features will use your local model.
 
 ---
 
@@ -112,6 +112,8 @@ AI_API_KEY=your_together_key
 | Bill analysis | Structured JSON | ~15–30 sec per bill |
 | Single perspective | Structured JSON | ~10–20 sec per perspective |
 
+All four of these are batched together in the **Bill Pipeline** on the admin panel. The pipeline runs Steps 2 (Analyze — which covers plain titles, tagging, and analysis) and 3 (Perspectives) in sequence, streaming progress via SSE as each bill is processed. You don't need to trigger them as separate actions.
+
 News articles are fetched from Google News RSS — no AI or API key required.
 
 ---
@@ -124,13 +126,13 @@ News articles are fetched from Google News RSS — no AI or API key required.
 | Best local quality | `llama3.1:70b` | 48 GB |
 | Production (cloud) | `claude-sonnet-4-6` | — |
 
-For bulk operations (tagging 500 bills), expect several minutes. The admin panel processes bills sequentially and shows results as they complete.
+For bulk operations (tagging 500 bills), expect several minutes. The pipeline streams results as they complete and can be stopped at any time.
 
 ---
 
 ## Troubleshooting
 
-**Generate button shows "Starting AI…" for a long time** — Ollama is starting up. This only happens on the first request after a cold start. Subsequent requests are immediate.
+**Pipeline shows "Starting AI…" for a long time** — Ollama is starting up. This only happens on the first request after a cold start. Subsequent requests are immediate.
 
 **"Generation failed — Ollama may not be installed"** — Ollama is not installed or not on your PATH. Download from https://ollama.ai/download and ensure `ollama` is accessible from the command line.
 

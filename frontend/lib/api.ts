@@ -55,11 +55,31 @@ export const api = {
   listLegislation: (limit = 20, offset = 0, level = '') =>
     apiFetch(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),
 
-  getTagCounts: () =>
-    apiFetch('/api/legislation/tag-counts'),
+  getTagCounts: (params?: { q?: string; level?: string; analyzed?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.q)        p.set('q', params.q)
+    if (params?.level)    p.set('level', params.level)
+    if (params?.analyzed) p.set('analyzed', params.analyzed)
+    if (params?.impact)   p.set('impact', params.impact)
+    if (params?.status)   p.set('status', params.status)
+    if (params?.sponsor)  p.set('sponsor', params.sponsor)
+    if (params?.year)     p.set('year', String(params.year))
+    if (params?.month)    p.set('month', String(params.month))
+    const qs = p.toString()
+    return apiFetch(`/api/legislation/tag-counts${qs ? `?${qs}` : ''}`)
+  },
 
-  getYearCounts: () =>
-    apiFetch('/api/legislation/year-counts'),
+  getYearCounts: (params?: { q?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.q)        p.set('q', params.q)
+    if (params?.analyzed) p.set('analyzed', params.analyzed)
+    if (params?.tag)      p.set('tag', params.tag)
+    if (params?.impact)   p.set('impact', params.impact)
+    if (params?.status)   p.set('status', params.status)
+    if (params?.sponsor)  p.set('sponsor', params.sponsor)
+    const qs = p.toString()
+    return apiFetch(`/api/legislation/year-counts${qs ? `?${qs}` : ''}`)
+  },
 
   countLegislation: (params: { year?: number; month?: number; date_from?: string; date_to?: string; analyzed?: string }) => {
     const p = new URLSearchParams()
@@ -71,11 +91,19 @@ export const api = {
     return apiFetch(`/api/legislation/count?${p}`)
   },
 
-  getMonthCounts: (year: number) =>
-    apiFetch(`/api/legislation/month-counts?year=${year}`),
+  getMonthCounts: (year: number, params?: { q?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string }) => {
+    const p = new URLSearchParams({ year: String(year) })
+    if (params?.q)        p.set('q', params.q)
+    if (params?.analyzed) p.set('analyzed', params.analyzed)
+    if (params?.tag)      p.set('tag', params.tag)
+    if (params?.impact)   p.set('impact', params.impact)
+    if (params?.status)   p.set('status', params.status)
+    if (params?.sponsor)  p.set('sponsor', params.sponsor)
+    return apiFetch(`/api/legislation/month-counts?${p}`)
+  },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag = '', impact = '', year = 0, month = 0, status = '') =>
-    apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag = '', impact = '', year = 0, month = 0, status = '', sponsor = '') =>
+    apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${status ? `&status=${encodeURIComponent(status)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}`),
 
   tagAllBills: () =>
     apiFetch('/api/legislation/tag-all', { method: 'POST' }),
@@ -113,7 +141,15 @@ export const api = {
     apiFetch(`/api/users/send-digest?lookback_days=${lookbackDays}`, { method: 'POST' }),
 
   // ── Metrics ───────────────────────────────────────────────────────────────
-  getMetrics: () => apiFetch('/api/metrics'),
+  getMetrics: (params?: { year?: string; month?: string; date_from?: string; date_to?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.year)      p.set('year',      params.year)
+    if (params?.month)     p.set('month',     params.month)
+    if (params?.date_from) p.set('date_from', params.date_from)
+    if (params?.date_to)   p.set('date_to',   params.date_to)
+    const qs = p.toString()
+    return apiFetch(`/api/metrics${qs ? `?${qs}` : ''}`)
+  },
 
   getMyDebates: (limit = 20, offset = 0) =>
     apiFetch(`/api/users/me/debates?limit=${limit}&offset=${offset}`),

@@ -4,17 +4,41 @@ import { useState } from 'react'
 import { api } from '@/lib/api'
 
 const AMOUNTS = [5, 10, 20, 50, 100]
+const MIN = 1
+const MAX = 10_000
+
+function parseCustomAmount(raw: string): number | null {
+  // Strip anything that isn't a digit
+  const digits = raw.replace(/[^0-9]/g, '')
+  if (!digits) return null
+  const n = parseInt(digits, 10)
+  if (isNaN(n) || n < MIN || n > MAX) return null
+  return n
+}
 
 export default function DonatePage() {
-  const [selected, setSelected] = useState(10)
+  const [selected, setSelected] = useState<number>(10)
+  const [isCustom, setIsCustom] = useState(false)
+  const [customRaw, setCustomRaw] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const customAmount = parseCustomAmount(customRaw)
+  const effectiveAmount = isCustom ? customAmount : selected
+  const customInvalid = isCustom && customRaw !== '' && customAmount === null
+
+  const handleCustomInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Only allow digit characters
+    const sanitized = e.target.value.replace(/[^0-9]/g, '').slice(0, 6)
+    setCustomRaw(sanitized)
+  }
+
   const handleDonate = async () => {
+    if (!effectiveAmount) return
     setLoading(true)
     setError(null)
     try {
-      const data = await api.createCheckout(selected)
+      const data = await api.createCheckout(effectiveAmount)
       if (data?.url) {
         window.location.href = data.url
       } else {
@@ -61,17 +85,50 @@ export default function DonatePage() {
           {AMOUNTS.map((amt) => (
             <button
               key={amt}
-              onClick={() => setSelected(amt)}
-              className={`px-5 py-2.5 rounded-lg border text-sm font-semibold transition-all ${
-                selected === amt
+              onClick={() => { setSelected(amt); setIsCustom(false) }}
+              className={`btn-primary-hover px-5 py-2.5 rounded-lg border text-sm font-semibold transition-all ${
+                !isCustom && selected === amt
                   ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background hover:bg-muted/40 border-border'
+                  : 'bg-background border-border'
               }`}
             >
               ${amt}
             </button>
           ))}
+          <button
+            onClick={() => setIsCustom(true)}
+            className={`btn-primary-hover px-5 py-2.5 rounded-lg border text-sm font-semibold transition-all ${
+              isCustom
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background border-border'
+            }`}
+          >
+            Other
+          </button>
         </div>
+
+        {isCustom && (
+          <div className="mt-3">
+            <div className="relative w-40">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="0"
+                value={customRaw}
+                onChange={handleCustomInput}
+                autoFocus
+                className={`w-full pl-7 pr-3 py-2 rounded-lg border text-sm ${
+                  customInvalid ? 'border-red-400 bg-red-50' : 'border-border bg-background'
+                } focus:outline-none focus:ring-2 focus:ring-primary/40`}
+              />
+            </div>
+            {customInvalid && (
+              <p className="text-xs text-red-600 mt-1">Enter a whole number between ${MIN} and ${MAX.toLocaleString()}.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
@@ -82,10 +139,10 @@ export default function DonatePage() {
 
       <button
         onClick={handleDonate}
-        disabled={loading}
-        className="w-full h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors disabled:opacity-60"
+        disabled={loading || !effectiveAmount}
+        className="btn-primary-hover w-full h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-base transition-all disabled:opacity-60"
       >
-        {loading ? 'Redirecting to Stripe…' : `Donate $${selected}`}
+        {loading ? 'Redirecting to Stripe…' : `Donate $${effectiveAmount ?? '—'}`}
       </button>
 
       <p className="text-xs text-muted-foreground text-center mt-4">

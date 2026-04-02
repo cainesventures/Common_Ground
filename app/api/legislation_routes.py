@@ -176,17 +176,50 @@ async def list_legislation(
 
 
 @router.get("/tag-counts")
-async def get_tag_counts(db: Session = Depends(get_db)):
-    """Return all tags that exist in the DB with their bill counts, sorted by count desc."""
+async def get_tag_counts(
+    q: str = Query('', max_length=200),
+    level: str = Query("", max_length=20),
+    analyzed: str = Query(""),
+    impact: str = Query("", max_length=20),
+    status: str = Query("", max_length=40),
+    sponsor: str = Query("", max_length=100),
+    year: int = Query(0),
+    month: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Return tag counts scoped to the current filters."""
     import json
     from collections import Counter
+    from sqlalchemy import extract
 
-    rows = db.query(Legislation.tags).filter(
+    base_query = db.query(Legislation.tags).filter(
         Legislation.tags.isnot(None),
         Legislation.tags != "",
         Legislation.tags != "[]",
-    ).all()
+    )
+    if q:
+        base_query = base_query.filter(
+            (Legislation.title.ilike(f"%{q}%")) |
+            (Legislation.bill_number.ilike(f"%{q}%"))
+        )
+    if level:
+        base_query = base_query.filter(Legislation.level == level)
+    if analyzed == "true":
+        base_query = base_query.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        base_query = base_query.filter(Legislation.analyzed_at.is_(None))
+    if impact:
+        base_query = base_query.filter(Legislation.impact_level == impact)
+    if status:
+        base_query = base_query.filter(Legislation.status == status)
+    if sponsor:
+        base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+    if year:
+        base_query = base_query.filter(extract("year", Legislation.introduced_date) == year)
+    if month:
+        base_query = base_query.filter(extract("month", Legislation.introduced_date) == month)
 
+    rows = base_query.all()
     counter: Counter = Counter()
     for (tags_json,) in rows:
         try:
@@ -204,47 +237,86 @@ async def get_tag_counts(db: Session = Depends(get_db)):
 
 
 @router.get("/year-counts")
-async def get_year_counts(db: Session = Depends(get_db)):
+async def get_year_counts(
+    q: str = Query('', max_length=200),
+    analyzed: str = Query(""),
+    tag: str = Query("", max_length=60),
+    impact: str = Query("", max_length=20),
+    status: str = Query("", max_length=40),
+    sponsor: str = Query("", max_length=100),
+    db: Session = Depends(get_db),
+):
     """Return bill counts grouped by introduction year, sorted ascending."""
     from sqlalchemy import func, extract
 
-    rows = (
-        db.query(
-            extract("year", Legislation.introduced_date).label("year"),
-            func.count(Legislation.id).label("count"),
+    base = db.query(
+        extract("year", Legislation.introduced_date).label("year"),
+        func.count(Legislation.id).label("count"),
+    ).filter(Legislation.introduced_date.isnot(None), Legislation.level == "local")
+
+    if q:
+        base = base.filter(
+            (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
         )
-        .filter(Legislation.introduced_date.isnot(None), Legislation.level == "local")
-        .group_by("year")
-        .order_by("year")
-        .all()
-    )
-    return {
-        "years": [{"year": int(row.year), "count": row.count} for row in rows]
-    }
+    if analyzed == "true":
+        base = base.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        base = base.filter(Legislation.analyzed_at.is_(None))
+    if tag:
+        base = base.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+    if impact:
+        base = base.filter(Legislation.impact_level == impact)
+    if status:
+        base = base.filter(Legislation.status == status)
+    if sponsor:
+        base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+
+    rows = base.group_by("year").order_by("year").all()
+    return {"years": [{"year": int(row.year), "count": row.count} for row in rows]}
 
 
 @router.get("/month-counts")
-async def get_month_counts(year: int = Query(...), db: Session = Depends(get_db)):
+async def get_month_counts(
+    year: int = Query(...),
+    q: str = Query('', max_length=200),
+    analyzed: str = Query(""),
+    tag: str = Query("", max_length=60),
+    impact: str = Query("", max_length=20),
+    status: str = Query("", max_length=40),
+    sponsor: str = Query("", max_length=100),
+    db: Session = Depends(get_db),
+):
     """Return bill counts grouped by month for a given year, sorted ascending."""
     from sqlalchemy import func, extract
 
-    rows = (
-        db.query(
-            extract("month", Legislation.introduced_date).label("month"),
-            func.count(Legislation.id).label("count"),
-        )
-        .filter(
-            Legislation.introduced_date.isnot(None),
-            Legislation.level == "local",
-            extract("year", Legislation.introduced_date) == year,
-        )
-        .group_by("month")
-        .order_by("month")
-        .all()
+    base = db.query(
+        extract("month", Legislation.introduced_date).label("month"),
+        func.count(Legislation.id).label("count"),
+    ).filter(
+        Legislation.introduced_date.isnot(None),
+        Legislation.level == "local",
+        extract("year", Legislation.introduced_date) == year,
     )
-    return {
-        "months": [{"month": int(row.month), "count": row.count} for row in rows]
-    }
+
+    if q:
+        base = base.filter(
+            (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
+        )
+    if analyzed == "true":
+        base = base.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        base = base.filter(Legislation.analyzed_at.is_(None))
+    if tag:
+        base = base.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+    if impact:
+        base = base.filter(Legislation.impact_level == impact)
+    if status:
+        base = base.filter(Legislation.status == status)
+    if sponsor:
+        base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+
+    rows = base.group_by("month").order_by("month").all()
+    return {"months": [{"month": int(row.month), "count": row.count} for row in rows]}
 
 
 @router.get("/count")
@@ -278,6 +350,7 @@ async def search_legislation(
     tag: str = Query("", max_length=60),
     impact: str = Query("", max_length=20),
     status: str = Query("", max_length=40),
+    sponsor: str = Query("", max_length=100),
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     db: Session = Depends(get_db)
@@ -293,7 +366,7 @@ async def search_legislation(
         service = LegislationIngestionService(db)
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
-            year=year or None, month=month or None, status=status or None
+            year=year or None, month=month or None, status=status or None, sponsor=sponsor or None
         )
         return {
             "success": True,
@@ -758,6 +831,88 @@ async def stream_backfill_city_context(
     return _sse_stream(gen)
 
 
+@router.get("/stream/backfill-sponsors")
+async def stream_backfill_sponsors(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Stream sponsor backfill progress as SSE. One Playwright session builds the
+    matter→guid map, then httpx fetches sponsor info for each bill without one."""
+    from app.integrations.legistar_scraper import PhilaLegistarScraper
+
+    async def gen():
+        yield _sse({"current": 0, "total": 0, "message": "Building matter→GUID map (Playwright, ~2 min)…", "done": False})
+        await asyncio.sleep(0)
+
+        loop = asyncio.get_event_loop()
+        scraper = PhilaLegistarScraper(headless=True)
+
+        try:
+            guid_map = await loop.run_in_executor(None, scraper.scrape_matter_guid_map)
+        except Exception as e:
+            yield _sse({"current": 0, "total": 0, "message": f"Failed to build GUID map: {e}", "done": True})
+            return
+
+        yield _sse({"current": 0, "total": 0, "message": f"GUID map built — {len(guid_map)} entries. Finding bills without sponsors…", "done": False})
+        await asyncio.sleep(0)
+
+        bills = db.query(Legislation).filter(
+            (Legislation.sponsor.is_(None)) | (Legislation.sponsor == ""),
+            Legislation.level == "local",
+        ).all()
+        total = len(bills)
+
+        yield _sse({"current": 0, "total": total, "message": f"{total} bills need sponsors", "done": False})
+        await asyncio.sleep(0)
+
+        updated = skipped = failed = 0
+        for i, bill in enumerate(bills, 1):
+            # Extract matter_id from bill id: "legistar_phila_260134" → "260134"
+            matter_id = bill.id.split("legistar_phila_", 1)[-1] if "legistar_phila_" in bill.id else None
+            if not matter_id or not matter_id.isdigit():
+                skipped += 1
+                continue
+
+            guid = guid_map.get(matter_id)
+            if not guid:
+                skipped += 1
+                continue
+
+            if i % 50 == 0 or i <= 3:
+                yield _sse({"current": i, "total": total, "message": f"[{i}/{total}] Fetching sponsor for {bill.bill_number}…", "done": False})
+                await asyncio.sleep(0)
+
+            try:
+                sponsor = await loop.run_in_executor(
+                    None, PhilaLegistarScraper.fetch_sponsor_from_detail, matter_id, guid
+                )
+                if sponsor:
+                    bill.sponsor = sponsor
+                    # Also store the external_url if missing
+                    if not bill.external_url:
+                        bill.external_url = f"https://phila.legistar.com/LegislationDetail.aspx?ID={matter_id}&GUID={guid}"
+                    updated += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                logger.warning(f"Sponsor fetch failed for {bill.bill_number}: {e}")
+                failed += 1
+
+            # Commit in batches of 200
+            if i % 200 == 0:
+                db.commit()
+
+        db.commit()
+        yield _sse({
+            "current": total, "total": total,
+            "message": f"Done — {updated} updated, {skipped} skipped (no GUID or no sponsor listed), {failed} failed",
+            "done": True,
+        })
+        await asyncio.sleep(0)
+
+    return _sse_stream(gen)
+
+
 class VoteRequest(BaseModel):
     vote: str
     voter_token: str
@@ -946,8 +1101,9 @@ async def fetch_bill_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-PIPELINE_STEP_ORDER = ["analyze", "perspectives", "news"]
+PIPELINE_STEP_ORDER = ["sponsors", "analyze", "perspectives", "news"]
 PIPELINE_STEP_LABELS = {
+    "sponsors": "Backfill Sponsors",
     "analyze": "Analyze",
     "perspectives": "Generate Perspectives",
     "news": "Fetch News",
@@ -1006,7 +1162,50 @@ async def stream_pipeline(
             label = PIPELINE_STEP_LABELS[step]
             step_num = f"Step {step_idx + 1}/{total_steps}"
 
-            if step == "analyze":
+            if step == "sponsors":
+                from app.integrations.legistar_scraper import PhilaLegistarScraper as _Scraper
+                bills_no_sponsor = [b for b in scoped_bills if not b.sponsor]
+                step_total = len(bills_no_sponsor)
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: building GUID map (Playwright ~2 min)…", "done": False})
+                await asyncio.sleep(0)
+                _scraper = _Scraper(headless=True)
+                try:
+                    guid_map = await asyncio.get_event_loop().run_in_executor(None, _scraper.scrape_matter_guid_map)
+                except Exception as e:
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: GUID map failed: {e}", "done": False})
+                    guid_map = {}
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {len(guid_map)} GUIDs found, fetching {step_total} sponsors…", "done": False})
+                await asyncio.sleep(0)
+                s_updated = 0
+                for i, bill in enumerate(bills_no_sponsor, 1):
+                    overall += 1
+                    if i % 50 == 1:
+                        yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: [{i}/{step_total}] {bill.bill_number}", "done": False})
+                        await asyncio.sleep(0)
+                    matter_id = bill.id.split("legistar_phila_", 1)[-1] if "legistar_phila_" in bill.id else None
+                    if not matter_id or not matter_id.isdigit():
+                        continue
+                    guid = guid_map.get(matter_id)
+                    if not guid:
+                        continue
+                    try:
+                        sponsor = await asyncio.get_event_loop().run_in_executor(
+                            None, _Scraper.fetch_sponsor_from_detail, matter_id, guid
+                        )
+                        if sponsor:
+                            bill.sponsor = sponsor
+                            if not bill.external_url:
+                                bill.external_url = f"https://phila.legistar.com/LegislationDetail.aspx?ID={matter_id}&GUID={guid}"
+                            s_updated += 1
+                    except Exception as e:
+                        logger.warning(f"sponsor fetch failed for {bill.bill_number}: {e}")
+                    if i % 200 == 0:
+                        db.commit()
+                db.commit()
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {s_updated} sponsors backfilled", "done": False})
+                await asyncio.sleep(0)
+
+            elif step == "analyze":
                 provider = get_ai_provider()
                 scraper = PhilaLegistarScraper(headless=True)
                 for i, bill in enumerate(scoped_bills, 1):

@@ -293,6 +293,7 @@ class LegislationIngestionService:
         year: Optional[int] = None,
         month: Optional[int] = None,
         status: Optional[str] = None,
+        sponsor: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -322,6 +323,8 @@ class LegislationIngestionService:
             )
         if status:
             base_query = base_query.filter(Legislation.status == status)
+        if sponsor:
+            base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
         total = base_query.count()
         results = (
             base_query

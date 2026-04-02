@@ -14,7 +14,8 @@ from app.models.database import get_db
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/donations", tags=["donations"])
 
-DONATION_AMOUNTS = {5, 10, 20, 50, 100}  # valid one-time amounts in USD
+DONATION_MIN = 1
+DONATION_MAX = 10_000
 
 
 class CheckoutRequest(BaseModel):
@@ -37,8 +38,8 @@ async def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db)):
     if not settings.stripe_secret_key:
         raise HTTPException(status_code=503, detail="Stripe is not configured")
 
-    if body.amount_usd not in DONATION_AMOUNTS:
-        raise HTTPException(status_code=400, detail=f"Amount must be one of {sorted(DONATION_AMOUNTS)}")
+    if not (DONATION_MIN <= body.amount_usd <= DONATION_MAX):
+        raise HTTPException(status_code=400, detail=f"Amount must be between ${DONATION_MIN} and ${DONATION_MAX}")
 
     try:
         import stripe

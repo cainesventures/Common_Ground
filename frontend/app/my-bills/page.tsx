@@ -89,7 +89,7 @@ export default function MyBillsPage() {
             return (
               <div key={bill.id} className="relative border rounded-lg hover:border-primary/60 hover:bg-muted/20 transition-all">
                 <Link href={`/legislation/${bill.id}`} className="block px-4 py-3">
-                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-1 pr-8">
                     <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
                       {bill.status?.replace(/_/g, ' ')}

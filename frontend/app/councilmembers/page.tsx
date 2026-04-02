@@ -26,6 +26,48 @@ interface Member {
   years_until_election?: number
 }
 
+function SponsorshipChart({ members }: { members: Member[] }) {
+  const [hoveredId, setHoveredId] = useState<string | null>(null)
+  const sorted = [...members].filter(m => m.bills_sponsored > 0).sort((a, b) => b.bills_sponsored - a.bills_sponsored)
+  if (sorted.length === 0) return null
+  const max = sorted[0].bills_sponsored
+
+  return (
+    <div className="rounded-xl border bg-card p-4 space-y-2">
+      <p className="text-sm font-semibold mb-3">Bills Sponsored</p>
+      {sorted.map((m) => {
+        const pct = Math.max((m.bills_sponsored / max) * 100, 2)
+        const isHovered = hoveredId === m.id
+        return (
+          <Link
+            key={m.id}
+            href={`/councilmembers/${m.id}`}
+            className="flex items-center gap-3 group"
+            onMouseEnter={() => setHoveredId(m.id)}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            <span className="text-xs text-muted-foreground w-28 shrink-0 truncate group-hover:text-foreground transition-colors">
+              {m.name.split(' ').slice(-1)[0]}
+            </span>
+            <div className="flex-1 h-5 bg-muted/40 rounded-sm overflow-hidden">
+              <div
+                className="h-full rounded-sm transition-all duration-150"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: isHovered ? '#1d4ed8' : '#3b82f6',
+                }}
+              />
+            </div>
+            <span className="text-xs font-semibold tabular-nums w-8 text-right" style={{ color: isHovered ? '#1d4ed8' : '#6b7280' }}>
+              {m.bills_sponsored}
+            </span>
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
 function MemberCard({ member }: { member: Member }) {
   const isAtLarge = member.district === 'At-Large'
 
@@ -91,6 +133,10 @@ export default function CouncilmembersPage() {
           members={members}
           height={420}
         />
+      )}
+
+      {!loading && members.length > 0 && (
+        <SponsorshipChart members={members} />
       )}
 
       {loading && (

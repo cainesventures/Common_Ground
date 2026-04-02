@@ -48,3 +48,5 @@ Write-Host "Opening browser..." -ForegroundColor Yellow
 Start-Process "http://localhost:3000"
 
 Write-Host "`nDone! Backend on :8000, Frontend on :3000`n" -ForegroundColor Green
+
+exit

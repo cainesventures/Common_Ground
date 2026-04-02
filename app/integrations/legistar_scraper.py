@@ -460,6 +460,93 @@ class PhilaLegistarScraper:
             ),
         }
 
+    def scrape_matter_guid_map(self) -> Dict[str, str]:
+        """
+        Scrape the full legislation list (expanded to 10,000 records) and return
+        a mapping of {matter_id: guid} for all bills.  One Playwright session.
+        """
+        from playwright.sync_api import sync_playwright
+
+        result: Dict[str, str] = {}
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page()
+            try:
+                logger.info("Loading Legistar for matter→guid map …")
+                page.goto(f"{BASE_URL}/Legislation.aspx", wait_until="networkidle", timeout=30000)
+                self._apply_filters_and_search(page)
+
+                # Expand to 10,000 records
+                try:
+                    for item in page.query_selector_all(".rmText"):
+                        if item.inner_text().strip() == "Show":
+                            item.hover()
+                            page.wait_for_timeout(600)
+                            break
+                    page.locator(".rmText", has_text="Show 10000 records").first.click(timeout=5000)
+                    page.wait_for_timeout(8000)
+                    page.wait_for_selector("tr.rgRow", timeout=30000)
+                except Exception as e:
+                    logger.warning(f"Could not expand to 10000 rows: {e} — using current page")
+
+                for row in page.query_selector_all("tr.rgRow, tr.rgAltRow"):
+                    try:
+                        cells = row.query_selector_all("td")
+                        if not cells:
+                            continue
+                        link = cells[0].query_selector("a")
+                        href = link.get_attribute("href") if link else ""
+                        mid = re.search(r"ID=(\d+)", href or "")
+                        gid = re.search(r"GUID=([A-F0-9\-]{36})", href or "", re.IGNORECASE)
+                        if mid and gid:
+                            result[mid.group(1)] = gid.group(1)
+                    except Exception:
+                        continue
+
+                logger.info(f"Collected {len(result)} matter→guid mappings")
+            except Exception as e:
+                logger.error(f"Error building matter→guid map: {e}")
+            finally:
+                browser.close()
+
+        return result
+
+    @staticmethod
+    def fetch_sponsor_from_detail(matter_id: str, guid: str) -> Optional[str]:
+        """
+        Fetch a bill detail page via httpx (no browser) and parse the sponsor field.
+        Returns sponsor string or None.
+        """
+        import httpx
+        from html.parser import HTMLParser
+
+        class _SponsorParser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self._capture = False
+                self.sponsor: Optional[str] = None
+            def handle_starttag(self, tag, attrs):
+                attr_dict = dict(attrs)
+                if attr_dict.get("id") == "ctl00_ContentPlaceHolder1_lblSponsors2":
+                    self._capture = True
+            def handle_data(self, data):
+                if self._capture and data.strip():
+                    self.sponsor = data.strip()
+                    self._capture = False
+
+        url = f"{BASE_URL}/LegislationDetail.aspx?ID={matter_id}&GUID={guid}"
+        try:
+            resp = httpx.get(url, timeout=15, follow_redirects=True)
+            if resp.status_code != 200:
+                return None
+            parser = _SponsorParser()
+            parser.feed(resp.text)
+            return parser.sponsor or None
+        except Exception as e:
+            logger.warning(f"fetch_sponsor_from_detail failed for matter {matter_id}: {e}")
+            return None
+
     def _parse_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         matter_id = row.get("matter_id") or row.get("file_number", "unknown")
         intro_date = _parse_date(row.get("intro_date", ""))

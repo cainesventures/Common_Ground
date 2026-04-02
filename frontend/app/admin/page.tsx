@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
+import { usePipeline } from '@/app/contexts/pipeline-context'
 
 // ── SSE streaming hook ────────────────────────────────────────────────────────
 type StreamEvent = {
@@ -165,6 +166,7 @@ export default function AdminPage() {
   const [authorized, setAuthorized] = useState(false)
   const [loading, setLoading] = useState(true)
   const [reloadKey, setReloadKey] = useState(0)
+  const [pipelineFilter, setPipelineFilter] = useState<{ year: string; month: string; date_from: string; date_to: string }>({ year: '', month: '', date_from: '', date_to: '' })
 
   // Ingest form
   const [city, setCity] = useState('philadelphia')
@@ -236,7 +238,7 @@ export default function AdminPage() {
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
               </div>
-              <Button type="submit" disabled={localRunning}>
+              <Button type="submit" disabled={localRunning} className="bg-blue-600 hover:bg-blue-700 text-white">
                 {localRunning ? 'Ingesting…' : 'Ingest Bills'}
               </Button>
             </div>
@@ -260,7 +262,7 @@ export default function AdminPage() {
           {scrapeResult && (
             <p className={`text-sm ${scrapeResult.ok ? 'text-green-600' : 'text-destructive'}`}>{scrapeResult.message}</p>
           )}
-          <Button variant="outline" disabled={scrapeRunning} onClick={async () => {
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={scrapeRunning} onClick={async () => {
             setScrapeRunning(true); setScrapeResult(null)
             try {
               const data = await api.scrapeCouncilmembers()
@@ -279,14 +281,15 @@ export default function AdminPage() {
       {/* ── Section B: Bill Pipeline ───────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Bill Pipeline</h2>
-        <BillPipelineSection authorized={authorized} reloadKey={reloadKey} onReload={() => setReloadKey(k => k + 1)} />
+        <BillPipelineSection authorized={authorized} reloadKey={reloadKey} onReload={() => setReloadKey(k => k + 1)} onFilterChange={setPipelineFilter} />
       </section>
 
       {/* ── Section C: Utilities ───────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Utilities</h2>
-        <MetricsSection />
+        <MetricsSection filter={pipelineFilter} />
         <DigestSection />
+        <BackfillSponsorsSection />
         <BackfillCityContextSection />
       </section>
     </div>
@@ -294,11 +297,12 @@ export default function AdminPage() {
 }
 
 // ── Bill Pipeline ─────────────────────────────────────────────────────────────
-function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: boolean; reloadKey: number; onReload: () => void }) {
-  const { progress, running, start, stop } = useStreamProgress()
+function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }: { authorized: boolean; reloadKey: number; onReload: () => void; onFilterChange?: (f: { year: string; month: string; date_from: string; date_to: string }) => void }) {
+  const { progress, running, start, stop } = usePipeline()
   const PAGE_SIZE = 20
 
   // Step toggles
+  const [stepSponsors,      setStepSponsors]      = useState(false)
   const [stepAnalyze,       setStepAnalyze]       = useState(true)
   const [stepPerspectives,  setStepPerspectives]  = useState(true)
   const [stepNews,          setStepNews]          = useState(false)
@@ -380,6 +384,7 @@ function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: 
   const applyFilter = async () => {
     setFilterYear(draftYear); setFilterMonth(draftMonth)
     setFilterDateFrom(draftDateFrom); setFilterDateTo(draftDateTo)
+    onFilterChange?.({ year: draftYear, month: draftMonth, date_from: draftDateFrom, date_to: draftDateTo })
     setPage(0)
     loadBills(draftYear, draftMonth, draftDateFrom, draftDateTo, 0)
     setCounting(true); setFilterCount(null)
@@ -399,11 +404,13 @@ function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: 
     setDraftYear(''); setDraftMonth(''); setDraftDateFrom(''); setDraftDateTo('')
     setFilterYear(''); setFilterMonth(''); setFilterDateFrom(''); setFilterDateTo('')
     setFilterCount(null); setPage(0)
+    onFilterChange?.({ year: '', month: '', date_from: '', date_to: '' })
     loadBills()
   }
 
   const buildPipelinePath = () => {
     const steps = [
+      stepSponsors      && 'sponsors',
       stepAnalyze       && 'analyze',
       stepPerspectives  && 'perspectives',
       stepNews          && 'news',
@@ -541,6 +548,20 @@ function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: 
 
         {/* ── Step selection ── */}
         <div className="rounded-lg border divide-y">
+          {/* Step 0: Sponsors */}
+          <div className="px-4 py-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={stepSponsors} onChange={e => setStepSponsors(e.target.checked)}
+                className="rounded border-input w-4 h-4" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Backfill Sponsors</p>
+                <p className="text-xs text-muted-foreground">
+                  Scrapes Legistar once to build a matter→GUID map, then fetches the sponsor for each bill in scope that has none. Unchecked by default — takes ~30–60 min for a full run.
+                </p>
+              </div>
+            </label>
+          </div>
+
           {/* Step 1: Analyze */}
           <div className="px-4 py-3 space-y-1">
             <label className="flex items-center gap-3 cursor-pointer">
@@ -624,8 +645,10 @@ function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: 
         {/* ── Run button ── */}
         <div className="flex items-center gap-3">
           <Button
+            size="lg"
             onClick={runPipeline}
-            disabled={running || (!stepAnalyze && !stepPerspectives && !stepNews)}
+            disabled={running || (!stepSponsors && !stepAnalyze && !stepPerspectives && !stepNews)}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6"
           >
             {running ? 'Running Pipeline…' : `Run Pipeline${filterLabel ? ` · ${filterLabel}` : ''}`}
           </Button>
@@ -718,15 +741,18 @@ function BillPipelineSection({ authorized, reloadKey, onReload }: { authorized: 
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
-function MetricsSection() {
+function MetricsSection({ filter }: { filter?: { year: string; month: string; date_from: string; date_to: string } }) {
   const [metrics, setMetrics] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const load = async () => {
     setLoading(true)
-    try { const data = await api.getMetrics(); setMetrics(data?.metrics ?? null) }
+    try {
+      const data = await api.getMetrics(filter?.year || filter?.month || filter?.date_from || filter?.date_to ? filter : undefined)
+      setMetrics(data?.metrics ?? null)
+    }
     catch { /* ignore */ } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [filter?.year, filter?.month, filter?.date_from, filter?.date_to])
 
   const statTile = (label: string, value: number | string, sub?: string) => (
     <div key={label} className="border rounded-lg p-3 text-center">
@@ -739,19 +765,24 @@ function MetricsSection() {
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="font-semibold">Metrics</h3>
+        <div>
+          <h3 className="font-semibold">Metrics</h3>
+          {(filter?.year || filter?.month || filter?.date_from || filter?.date_to) && (
+            <p className="text-xs text-blue-600 mt-0.5">Scoped to pipeline filter</p>
+          )}
+        </div>
         <Button variant="ghost" size="sm" onClick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</Button>
       </div>
       {metrics ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {statTile('Bills', metrics.bills.total)}
+          {statTile('Bills', metrics.bills.total, metrics.bills.scoped ? 'in scope' : undefined)}
           {statTile('Analyzed', metrics.bills.analyzed, `${metrics.bills.analysis_rate_pct}% of total`)}
           {statTile('Perspectives', metrics.perspectives.total)}
           {statTile('Users', metrics.users.total)}
           {statTile('Saved Bills', metrics.tracking.total_saves)}
           {statTile('Digest Opt-ins', metrics.users.digest_opted_in)}
           {statTile('With News', metrics.bills.with_news)}
-          {statTile('Local Bills', metrics.bills.local)}
+          {statTile('Plain Titles', metrics.bills.with_plain_titles)}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">{loading ? 'Loading metrics…' : 'Failed to load.'}</p>
@@ -772,7 +803,7 @@ function DigestSection() {
         </p>
       </div>
       {result && <p className={`text-sm ${result.ok ? 'text-green-600' : 'text-destructive'}`}>{result.message}</p>}
-      <Button variant="outline" disabled={running} onClick={async () => {
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={async () => {
         setRunning(true); setResult(null)
         try {
           const data = await api.sendDigest(7)
@@ -782,6 +813,26 @@ function DigestSection() {
         } finally { setRunning(false) }
       }}>
         {running ? 'Sending…' : 'Send Digest Now'}
+      </Button>
+    </div>
+  )
+}
+
+function BackfillSponsorsSection() {
+  const { progress, running, start, stop } = useStreamProgress()
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Backfill Sponsors</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Backfill sponsor names for the ~8,500 bulk-imported bills that have no sponsor set.
+          Scrapes the Legistar list page once to build a matter→GUID map, then fetches each bill's
+          detail page. Takes ~30–60 min for a full run.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} onStop={stop} />
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start('/api/legislation/stream/backfill-sponsors')}>
+        {running ? 'Backfilling Sponsors…' : 'Backfill Sponsors'}
       </Button>
     </div>
   )
@@ -798,7 +849,7 @@ function BackfillCityContextSection() {
         </p>
       </div>
       <ProgressBar progress={progress} running={running} onStop={stop} />
-      <Button variant="outline" disabled={running} onClick={() => start('/api/legislation/stream/backfill-city-context')}>
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start('/api/legislation/stream/backfill-city-context')}>
         {running ? 'Backfilling…' : 'Backfill City Context'}
       </Button>
     </div>

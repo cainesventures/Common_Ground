@@ -10,7 +10,7 @@ Get the app running locally in about 10 minutes.
 - Node.js 18+
 - [Ollama](https://ollama.ai/download) (for free local AI) — **or** a Claude/OpenAI API key
 
-> **Ollama auto-start:** Once installed, you don't need to manually run `ollama serve`. The backend will start Ollama automatically the first time an AI action is triggered.
+> **Ollama auto-start:** Once installed, you don't need to manually run `ollama serve`. The backend detects when Ollama is not running and starts it automatically, then retries the AI request. You'll see the pipeline show **"Starting AI…"** for a few seconds on the first request after a cold start.
 
 ---
 
@@ -93,35 +93,31 @@ Click **Dev Login** on the navbar. This creates a dev user with full admin acces
 
 ### Ingest bills
 1. Go to **http://localhost:3000/admin**
-2. Set **Limit** to `10` and click **Ingest Bills**
+2. In the **Ingestion** section, set **Limit** to `10` and click **Ingest Bills**
 
 The Playwright scraper opens a headless browser, navigates to phila.legistar.com, and imports real Philadelphia ordinances. For all ~8,500 bills, check **Bulk Export** instead.
 
-### Generate plain titles
-Click **Generate Plain Titles**. Ollama reads each bill's title and description and writes a short, human-friendly name (e.g. "City Agrees to Buy Electricity and Fuel for a Few Years"). Ollama will auto-start if it isn't already running.
+### Run the Bill Pipeline
+The **Bill Pipeline** section is a single unified workflow. By default Steps 2 (Analyze) and 3 (Perspectives) are checked. For a first run with a small batch, this is all you need:
 
-### Auto-tag bills
-Click **Tag Untagged Bills**. Ollama assigns 1–3 category tags (housing, zoning, budget, etc.) to each bill. Tags appear as filterable dropdowns on the home feed and legislation browser.
+1. Optionally set a **date scope** (year or month) to limit which bills are processed
+2. Review the step checkboxes:
+   - **Step 1: Sponsors** — backfills missing sponsor data from Legistar (off by default)
+   - **Step 2: Analyze** — fetches full bill text, generates a plain title, auto-tags, and runs AI analysis (summary, impact score, bill type, 3 base perspectives)
+   - **Step 3: Perspectives** — generates all 17 perspectives (use the multi-select to pick specific types)
+   - **Step 4: News** — fetches Google News articles (off by default)
+3. Click **Start Pipeline**
 
-### Fetch news
-Click **Fetch News for All Bills**. Searches Google News RSS for articles related to each bill based on its topic tags and keywords. No API key needed. Articles appear in the "In the News" section on each bill's detail page.
+A live progress bar streams results as each bill is processed. Click **Stop** at any time to halt the run. Pipeline state persists across navigation — you can browse the site while it runs.
 
-### Analyze a bill
-In the **Analyze Bills** section, click **Analyze** on any bill. This generates:
-- Plain-language summary
-- Impact score (1–10) and level (low/medium/high)
-- Bill type (substantive/ceremonial/procedural)
-- 3 base perspectives (Progressive, Conservative, Libertarian)
-- Related news articles (fetched automatically)
+### Scrape council members
+In the **Ingestion** section, click **Scrape Council Members**. Playwright scrapes all 17 council member profiles from phlcouncil.com (~2 minutes). Council members then appear at `/councilmembers` with their bio, district map, term start date, years serving, and next election year. Their names link from bill detail pages.
 
 ### View bills
-Go to **http://localhost:3000** — bills appear as a list with plain titles, category tags, and status badges. Use the filter bar to search by keyword, tag, impact level, or analysis status. Click any bill for the full detail page including AI perspectives and news.
+Go to **http://localhost:3000** — bills appear as a list with plain titles, category tags, and status badges. Use the filter bar to search by keyword, tag, sponsor, impact level, or analysis status. All active filters are preserved in the URL. Click any bill for the full detail page including AI perspectives and news.
 
 ### View perspectives
 On any analyzed bill's detail page, scroll to **AI Perspectives**. The tally at the top shows support/oppose/neutral/mixed counts with percentages. Click any row to expand the full perspective inline. Click **Generate** on any pending perspective to generate it on demand.
-
-### Scrape council members
-Click **Scrape Council Members** in the admin panel. Playwright scrapes all 17 council member profiles from phlcouncil.com (~2 minutes). Council members then appear at `/councilmembers` with their bio, district map, term start date, years serving, and next election year. Their names link from bill detail pages.
 
 ### Save bills
 After logging in, click the bookmark icon on any bill card to save it. Access your saved bills at `/my-bills` (also in the navbar).
@@ -134,11 +130,9 @@ Go to **http://localhost:3000/dashboard** (dev users only). Shows bills analyzed
 ## 6. Bulk ingest
 
 To pull all ~8,500 Philadelphia bills at once:
-1. In admin, check **Bulk Export** and click **Ingest Bills**
+1. In admin → **Ingestion**, check **Bulk Export** and click **Ingest Bills**
 2. Takes 2–3 minutes; bills are stored without analysis
-3. Run **Generate Plain Titles** and **Tag Untagged Bills** to process them
-4. Click **Fetch News for All Bills** to populate news articles
-5. Analyze individually from the Analyze Bills section as needed
+3. Go to **Bill Pipeline**, enable the steps you want, and click **Start Pipeline** to process them
 
 ---
 
@@ -153,7 +147,7 @@ To pull all ~8,500 Philadelphia bills at once:
    FRONTEND_BASE_URL=http://localhost:3000
    ```
 3. Users opt in from their `/profile` page
-4. Trigger a test send from the admin panel → **Send Digest**
+4. Trigger a test send from admin → **Utilities** → **Send Digest**
 
 ### Donations (requires Stripe)
 1. Create a Stripe account and get test keys from the [Stripe dashboard](https://dashboard.stripe.com)
@@ -182,9 +176,9 @@ stripe listen --forward-to localhost:8000/api/donations/webhook
 
 **"model not found"** — The model name in `.env` doesn't match what's installed. Run `ollama list` to see exact names (e.g. `llama3.1:8b` not `llama3`).
 
-**Tags/plain titles not appearing** — run **Tag Untagged Bills** and **Generate Plain Titles** from the admin panel after ingesting bills.
+**Tags/plain titles not appearing** — run the pipeline with Step 2 enabled after ingesting bills.
 
-**News not showing on bill detail page** — run **Fetch News for All Bills** from the admin panel, or click the **News** button next to any individual bill in the Analyze Bills section.
+**News not showing on bill detail page** — run the pipeline with Step 4 (News) enabled.
 
 **District map shows "Could not load district boundaries"** — the backend proxies Philadelphia GIS data from the city's ArcGIS server. This requires an internet connection. Check backend logs for the specific error.
 

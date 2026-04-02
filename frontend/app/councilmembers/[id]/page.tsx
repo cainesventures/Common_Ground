@@ -6,6 +6,153 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
 
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+// ── Compact bar chart ──────────────────────────────────────────────────────────
+
+function MiniBarChart<T extends { count: number }>({
+  data,
+  getLabel,
+  getKey,
+  activeKey,
+  onSelect,
+  title,
+  subtitle,
+}: {
+  data: T[]
+  getLabel: (item: T) => string
+  getKey:   (item: T) => string | number
+  activeKey: string | number | null
+  onSelect:  (key: string | number) => void
+  title: string
+  subtitle?: string
+}) {
+  const [hoveredKey, setHoveredKey] = useState<string | number | null>(null)
+  if (data.length === 0) return null
+  const max = Math.max(...data.map(d => d.count), 1)
+  const total = data.reduce((s, d) => s + d.count, 0)
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <span className="text-sm font-semibold">{title}</span>
+          {subtitle && <span className="text-xs text-muted-foreground ml-2">{subtitle}</span>}
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
+      </div>
+      <div className="flex items-end gap-1" style={{ height: 108 }}>
+        {data.map((item) => {
+          const key = getKey(item)
+          const isActive = activeKey === key
+          const isHovered = hoveredKey === key
+          const barH = Math.max((item.count / max) * 72, 3)
+          const barColor = isActive ? '#3b82f6' : isHovered ? '#1d4ed8' : '#3b82f630'
+          return (
+            <button
+              key={key}
+              onClick={() => onSelect(key)}
+              onMouseEnter={() => setHoveredKey(key)}
+              onMouseLeave={() => setHoveredKey(null)}
+              className="bar-hover flex-1 flex flex-col items-center gap-0.5 min-w-0"
+              title={`${getLabel(item)}: ${item.count.toLocaleString()} bill${item.count !== 1 ? 's' : ''}`}
+            >
+              <span style={{
+                fontSize: 11, fontWeight: 600, lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums', color: '#000',
+                opacity: isActive || isHovered ? 1 : 0,
+                transition: 'opacity 150ms ease',
+              }}>
+                {item.count.toLocaleString()}
+              </span>
+              <div className="w-full flex items-end" style={{ height: 72 }}>
+                <div className="w-full rounded-t-sm" style={{
+                  height: barH, backgroundColor: barColor,
+                  outline: isActive ? '2px solid #3b82f6' : 'none',
+                  outlineOffset: '1px',
+                  transition: 'background-color 150ms ease',
+                }} />
+              </div>
+              <span style={{
+                fontSize: 10, lineHeight: 1, textAlign: 'center', width: '100%',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                color: isActive ? '#2563eb' : '#6b7280',
+                fontWeight: isActive ? 600 : 400,
+                transition: 'color 150ms ease',
+              }}>
+                {getLabel(item)}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// Legislation stores sponsors as "Councilmember Squilla" — match by last name
+function extractLastName(fullName: string): string {
+  const beforeComma = fullName.split(',')[0].trim()
+  const parts = beforeComma.split(' ')
+  return parts[parts.length - 1]
+}
+
+function SponsorActivityChart({ sponsorName }: { sponsorName: string }) {
+  const [yearCounts,   setYearCounts]   = useState<{ year: number; count: number }[]>([])
+  const [monthCounts,  setMonthCounts]  = useState<{ month: number; count: number }[]>([])
+  const [selectedYear, setSelectedYear] = useState<number | null>(null)
+  const lastName = extractLastName(sponsorName)
+
+  useEffect(() => {
+    api.getYearCounts({ sponsor: lastName })
+      .then((d) => setYearCounts(d?.years ?? []))
+      .catch(() => {})
+  }, [lastName])
+
+  useEffect(() => {
+    if (!selectedYear) { setMonthCounts([]); return }
+    api.getMonthCounts(selectedYear, { sponsor: lastName })
+      .then((d) => setMonthCounts(d?.months ?? []))
+      .catch(() => {})
+  }, [selectedYear, lastName])
+
+  if (yearCounts.length === 0) return null
+
+  if (!selectedYear) {
+    return (
+      <MiniBarChart
+        data={yearCounts}
+        getLabel={(y) => String(y.year)}
+        getKey={(y) => y.year}
+        activeKey={null}
+        onSelect={(k) => setSelectedYear(k as number)}
+        title="Bill Activity by Year"
+        subtitle="click a year to drill down"
+      />
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <MiniBarChart
+        data={monthCounts}
+        getLabel={(m) => MONTH_NAMES[m.month - 1]}
+        getKey={(m) => m.month}
+        activeKey={null}
+        onSelect={() => {}}
+        title={`${selectedYear}`}
+        subtitle="bills introduced by month"
+      />
+      <button
+        onClick={() => setSelectedYear(null)}
+        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+      >
+        ← All years
+      </button>
+    </div>
+  )
+}
+
 const DistrictMap = dynamic(
   () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
   { ssr: false, loading: () => <div className="h-80 rounded-lg bg-muted animate-pulse" /> }
@@ -115,6 +262,9 @@ export default function CouncilmemberPage() {
           <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
         </div>
       </div>
+
+      {/* Bill activity chart */}
+      <SponsorActivityChart sponsorName={member.name} />
 
       {/* District Map */}
       <DistrictMap district={member.district} />

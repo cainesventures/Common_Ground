@@ -143,12 +143,21 @@ function BillPreviewCard({ bill }: { bill: Bill }) {
   )
 }
 
+interface SiteMetrics {
+  bills:       { total: number; analyzed: number; with_plain_titles: number }
+  perspectives:{ total: number }
+}
+
 export default function LandingPage() {
   const [recentBills, setRecentBills] = useState<Bill[]>([])
+  const [metrics, setMetrics] = useState<SiteMetrics | null>(null)
 
   useEffect(() => {
     api.searchLegislation('', 4, 0, 'local', 'true', '', 'high')
       .then((data) => setRecentBills(data?.results ?? []))
+      .catch(() => {})
+    api.getMetrics()
+      .then((data) => setMetrics(data?.metrics ?? null))
       .catch(() => {})
   }, [])
 
@@ -169,18 +178,37 @@ export default function LandingPage() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
             href="/legislation"
-            className="px-6 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors"
+            className="btn-primary-hover px-6 py-3 rounded-lg border border-black bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90"
           >
             Browse legislation
           </Link>
           <Link
             href="/councilmembers"
-            className="px-6 py-3 rounded-lg border font-semibold text-base hover:bg-muted/40 transition-colors"
+            className="btn-primary-hover px-6 py-3 rounded-lg border font-semibold text-base"
           >
             View council members
           </Link>
         </div>
       </section>
+
+      {/* ── Live metrics ── */}
+      {metrics && (
+        <section className="max-w-2xl mx-auto">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            {[
+              { value: metrics.bills.total.toLocaleString(),             label: 'Bills tracked' },
+              { value: metrics.bills.analyzed.toLocaleString(),          label: 'Bills analyzed' },
+              { value: metrics.bills.with_plain_titles.toLocaleString(), label: 'Plain English titles' },
+              { value: metrics.perspectives.total.toLocaleString(),      label: 'AI perspectives' },
+            ].map(({ value, label }) => (
+              <div key={label} className="border rounded-xl px-4 py-5 bg-card">
+                <p className="text-2xl font-extrabold tabular-nums">{value}</p>
+                <p className="text-xs text-muted-foreground mt-1">{label}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── How it works ── */}
       <section className="max-w-3xl mx-auto">
@@ -250,7 +278,7 @@ export default function LandingPage() {
         </div>
         <Link
           href="/legislation?analyzed=true"
-          className="inline-block px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors"
+          className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border border-black bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
         >
           Read the perspectives
         </Link>
@@ -267,7 +295,7 @@ export default function LandingPage() {
         </p>
         <Link
           href="/donate"
-          className="inline-block px-5 py-2.5 rounded-lg border font-semibold text-sm hover:bg-muted/40 transition-colors"
+          className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border font-semibold text-sm"
         >
           Support the project →
         </Link>
