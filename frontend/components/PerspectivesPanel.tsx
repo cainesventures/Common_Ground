@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
 
 const ALL_PERSPECTIVES = [
@@ -22,6 +22,20 @@ const ALL_PERSPECTIVES = [
   { key: 'christian_ethicist',  label: 'Christian Ethicist',   group: 'Special',      icon: '🕊️' },
   { key: 'conspiracy_theorist', label: 'Conspiracy Theorist',  group: 'Special',      icon: '🕵️' },
 ]
+
+function timeAgo(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime()
+  const minutes = Math.floor(diff / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return `${Math.floor(months / 12)}y ago`
+}
 
 const POSITION_STYLES: Record<string, string> = {
   support: 'bg-green-100 text-green-800 border-green-200',
@@ -80,6 +94,12 @@ function PerspectiveCard({ p }: { p: Perspective }) {
         <div className="border-t pt-2">
           <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Concerns: </span>{p.concerns}</p>
         </div>
+      )}
+
+      {p.generated_at && (
+        <p className="text-[11px] text-muted-foreground/50 text-right">
+          Generated {timeAgo(p.generated_at)}
+        </p>
       )}
     </div>
   )
@@ -216,6 +236,8 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
   const [generating, setGenerating] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [bulkRunning, setBulkRunning] = useState<'all' | 'clear' | null>(null)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const cancelRef = useRef(false)
 
   const load = async () => {
     if (!analyzed) { setLoading(false); return }
@@ -233,16 +255,46 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
   useEffect(() => { load() }, [billId, analyzed])
 
   const generateAll = async () => {
+    // Get fresh pending list
+    const freshData = await api.getPerspectives(billId).catch(() => null)
+    const toGenerate: string[] = freshData?.pending_types ?? [...pending]
+    if (toGenerate.length === 0) return
+
     setBulkRunning('all')
+    setBulkProgress({ done: 0, total: toGenerate.length })
     setGenerateError(null)
-    try {
-      await api.generateAllPerspectives(billId)
-      await load()
-    } catch (err: any) {
-      setGenerateError(err?.message ?? 'Failed to generate all perspectives.')
-    } finally {
-      setBulkRunning(null)
+    cancelRef.current = false
+
+    let done = 0
+    for (const ptype of toGenerate) {
+      if (cancelRef.current) break
+      try {
+        const data = await api.generatePerspective(billId, ptype)
+        if (data?.perspective_type) {
+          setPerspectives((prev) => {
+            const filtered = prev.filter((p) => p.perspective_type !== data.perspective_type)
+            return [...filtered, {
+              perspective_type: data.perspective_type,
+              position: data.position,
+              key_arguments: data.key_arguments,
+              concerns: data.concerns,
+              assessment: data.assessment,
+              generated_at: data.generated_at,
+            }]
+          })
+          setPending((prev) => prev.filter((t) => t !== ptype))
+        }
+      } catch (err: any) {
+        // Log but continue to next perspective
+        console.warn(`Failed to generate ${ptype}:`, err?.message)
+      }
+      done++
+      setBulkProgress({ done, total: toGenerate.length })
     }
+
+    setBulkRunning(null)
+    setBulkProgress(null)
+    cancelRef.current = false
   }
 
   const clearAll = async () => {
@@ -319,13 +371,27 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
       {/* Bulk actions — admin only */}
       {isAdmin && (
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={generateAll}
-            disabled={isBusy}
-            className="text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
-          >
-            {bulkRunning === 'all' ? 'Generating…' : 'Generate All'}
-          </button>
+          {bulkRunning === 'all' ? (
+            <>
+              <span className="text-xs text-muted-foreground">
+                {bulkProgress ? `${bulkProgress.done} of ${bulkProgress.total} generated` : 'Starting…'}
+              </span>
+              <button
+                onClick={() => { cancelRef.current = true }}
+                className="text-xs px-3 py-1.5 rounded-md border font-medium border-red-300 text-red-600 hover:bg-red-50 transition-colors"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={generateAll}
+              disabled={isBusy}
+              className="text-xs px-3 py-1.5 rounded-md border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
+            >
+              Generate All
+            </button>
+          )}
           <button
             onClick={clearAll}
             disabled={isBusy}

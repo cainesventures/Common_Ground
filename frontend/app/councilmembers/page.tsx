@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
 
@@ -24,6 +25,122 @@ interface Member {
   years_serving?: number
   next_election?: number
   years_until_election?: number
+}
+
+// Point-in-polygon (ray-casting). GeoJSON coords are [lng, lat].
+function pointInPolygon(lat: number, lng: number, ring: number[][]): boolean {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0], yi = ring[i][1]  // lng, lat
+    const xj = ring[j][0], yj = ring[j][1]
+    if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
+      inside = !inside
+    }
+  }
+  return inside
+}
+
+function getDistrictNum(props: Record<string, any>): number | null {
+  const val = props?.DISTRICT ?? props?.District ?? props?.district ??
+              props?.DIST_NUM ?? props?.districtNum ?? props?.OBJECTID ?? null
+  if (val === null || val === undefined) return null
+  const n = Number(val)
+  return isNaN(n) ? null : n
+}
+
+function findDistrictFromGeoJSON(lat: number, lng: number, geojson: any): number | null {
+  for (const feature of (geojson.features ?? [])) {
+    const num = getDistrictNum(feature?.properties ?? {})
+    if (num === null) continue
+    const geom = feature.geometry
+    const rings: number[][][] =
+      geom?.type === 'Polygon'      ? [geom.coordinates[0]] :
+      geom?.type === 'MultiPolygon' ? geom.coordinates.map((p: any) => p[0]) : []
+    for (const ring of rings) {
+      if (pointInPolygon(lat, lng, ring)) return num
+    }
+  }
+  return null
+}
+
+function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound: (id: string) => void }) {
+  const [address, setAddress] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<Member | null>(null)
+
+  const handleFind = async () => {
+    if (!address.trim()) return
+    setLoading(true); setError(null); setResult(null)
+    try {
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Philadelphia, PA')}&format=json&limit=1`,
+        { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' } }
+      )
+      const geoData = await geoRes.json()
+      if (!geoData.length) { setError('Address not found. Try including street number and street name.'); return }
+      const lat = parseFloat(geoData[0].lat)
+      const lng = parseFloat(geoData[0].lon)
+
+      const gjRes = await fetch('/api/councilmembers/districts-geojson')
+      const geojson = await gjRes.json()
+      const districtNum = findDistrictFromGeoJSON(lat, lng, geojson)
+      if (!districtNum) { setError('Could not match that address to a Philadelphia district.'); return }
+
+      const districtStr = `District ${districtNum}`
+      const member = members.find((m) => m.district === districtStr)
+      if (!member) { setError(`Found District ${districtNum} but no matching council member on file.`); return }
+
+      setResult(member)
+      onFound(member.id)
+    } catch (e: any) {
+      setError(e.message || 'Something went wrong.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <p className="text-sm font-semibold">Find my councilmember</p>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Enter your street address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleFind()}
+          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+        <button
+          onClick={handleFind}
+          disabled={loading || !address.trim()}
+          className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
+        >
+          {loading ? 'Looking…' : 'Find'}
+        </button>
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {result && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border">
+          {result.photo_url ? (
+            <Image src={result.photo_url} alt={result.name} width={40} height={40} className="w-10 h-10 rounded-full object-cover object-top shrink-0" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <span className="text-sm font-bold text-muted-foreground">{result.name[0]}</span>
+            </div>
+          )}
+          <div>
+            <p className="text-sm font-semibold">{result.name}</p>
+            <p className="text-xs text-muted-foreground">{result.district}</p>
+          </div>
+          <a href={`/councilmembers/${result.id}`} className="ml-auto text-xs text-primary hover:underline">
+            View profile →
+          </a>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function SponsorshipChart({ members }: { members: Member[] }) {
@@ -68,17 +185,18 @@ function SponsorshipChart({ members }: { members: Member[] }) {
   )
 }
 
-function MemberCard({ member }: { member: Member }) {
+function MemberCard({ member, highlighted }: { member: Member; highlighted?: boolean }) {
   const isAtLarge = member.district === 'At-Large'
 
   return (
     <Link
+      id={`member-${member.id}`}
       href={`/councilmembers/${member.id}`}
-      className="flex items-start gap-4 border rounded-lg p-4 hover:border-primary/60 hover:shadow-sm transition-all"
+      className={`flex items-start gap-4 border rounded-lg p-4 hover:border-primary/60 hover:shadow-sm transition-all ${highlighted ? 'ring-2 ring-primary border-primary' : ''}`}
     >
       <div className="shrink-0 w-14 h-14 rounded-full overflow-hidden bg-muted flex items-center justify-center">
         {member.photo_url ? (
-          <img src={member.photo_url} alt={member.name} className="w-full h-full object-cover object-top" />
+          <Image src={member.photo_url} alt={member.name} width={56} height={56} className="w-full h-full object-cover object-top" />
         ) : (
           <span className="text-xl font-bold text-muted-foreground">{member.name[0]}</span>
         )}
@@ -106,6 +224,7 @@ export default function CouncilmembersPage() {
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null)
 
   useEffect(() => {
     api.getCouncilmembers()
@@ -113,6 +232,13 @@ export default function CouncilmembersPage() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleFound = (id: string) => {
+    setHighlightedId(id)
+    setTimeout(() => {
+      document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 100)
+  }
 
   const district = members.filter((m) => m.district !== 'At-Large')
   const atLarge = members.filter((m) => m.district === 'At-Large')
@@ -133,6 +259,10 @@ export default function CouncilmembersPage() {
           members={members}
           height={420}
         />
+      )}
+
+      {!loading && members.length > 0 && (
+        <FindMyCouncilmember members={members} onFound={handleFound} />
       )}
 
       {!loading && members.length > 0 && (
@@ -164,7 +294,7 @@ export default function CouncilmembersPage() {
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District Members</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {district.map((m) => <MemberCard key={m.id} member={m} />)}
+            {district.map((m) => <MemberCard key={m.id} member={m} highlighted={highlightedId === m.id} />)}
           </div>
         </div>
       )}
@@ -173,7 +303,7 @@ export default function CouncilmembersPage() {
         <div>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">At-Large Members</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {atLarge.map((m) => <MemberCard key={m.id} member={m} />)}
+            {atLarge.map((m) => <MemberCard key={m.id} member={m} highlighted={highlightedId === m.id} />)}
           </div>
         </div>
       )}

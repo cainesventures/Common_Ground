@@ -64,6 +64,12 @@ class Legislation(Base):
     times_tracked = Column(Integer, default=0)
     analyzed_at = Column(DateTime)        # NULL = not yet analyzed
 
+    # Upcoming hearing fields (populated by hearings scraper)
+    next_hearing_date     = Column(DateTime, nullable=True)
+    next_hearing_time     = Column(String, nullable=True)
+    next_hearing_body     = Column(String, nullable=True)
+    next_hearing_location = Column(String, nullable=True)
+
     # Relationships
     debates = relationship("Debate", back_populates="legislation", cascade="all, delete-orphan")
     votes = relationship("LegislationVote", back_populates="legislation", cascade="all, delete-orphan")
@@ -356,3 +362,43 @@ class LegislationVote(Base):
 
     legislation = relationship("Legislation", back_populates="votes")
     user        = relationship("User", back_populates="votes")
+
+
+class Candidate(Base):
+    """Philadelphia City Council election candidate."""
+    __tablename__ = "candidates"
+
+    id              = Column(String, primary_key=True)   # "cand_{uuid12}"
+    name            = Column(String, nullable=False)
+    district        = Column(String, nullable=False)     # "District 2" | "At-Large"
+    party           = Column(String)
+    bio             = Column(Text)
+    photo_url       = Column(String)
+    website_url     = Column(String)
+    office_sought   = Column(String)
+    election_year   = Column(Integer, nullable=False)
+    is_incumbent    = Column(Boolean, default=False)
+    known_positions = Column(Text)                       # Free-text notes on stances; used as AI context
+    created_at      = Column(DateTime, default=datetime.utcnow)
+    updated_at      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    predictions = relationship("CandidateVotePrediction", back_populates="candidate", cascade="all, delete-orphan")
+
+
+class CandidateVotePrediction(Base):
+    """Cached AI-generated vote prediction for a candidate on a specific bill."""
+    __tablename__ = "candidate_vote_predictions"
+
+    id             = Column(String, primary_key=True)
+    candidate_id   = Column(String, ForeignKey("candidates.id"), nullable=False, index=True)
+    bill_id        = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
+    predicted_vote = Column(String, nullable=False)   # "support" | "oppose" | "uncertain"
+    reasoning      = Column(Text)
+    ai_provider    = Column(String)
+    ai_model       = Column(String)
+    generated_at   = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("candidate_id", "bill_id", name="uq_prediction_per_candidate_bill"),)
+
+    candidate   = relationship("Candidate", back_populates="predictions")
+    legislation = relationship("Legislation")

@@ -28,16 +28,20 @@ export default function ProfilePage() {
       return
     }
 
-    Promise.all([
+    Promise.allSettled([
       api.getMe(),
       api.getMyVotes(),
-    ]).then(([meData, voteData]) => {
+    ]).then(([meResult, voteResult]) => {
+      if (meResult.status === 'rejected') {
+        clearToken()
+        router.replace('/')
+        return
+      }
+      const meData = meResult.value
+      const voteData = voteResult.status === 'fulfilled' ? voteResult.value : null
       setUser(meData?.user ?? null)
       setDigestEnabled(meData?.user?.digest_enabled ?? false)
       setVotes(voteData?.votes ?? [])
-    }).catch(() => {
-      clearToken()
-      router.replace('/')
     }).finally(() => setLoading(false))
   }, [router])
 

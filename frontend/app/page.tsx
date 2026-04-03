@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 
@@ -27,6 +28,14 @@ interface Bill {
   impact_level?: string
   summary?: string
   tags?: string
+  next_hearing_date?: string
+}
+
+function isWithin7Days(isoDate: string): boolean {
+  const d = new Date(isoDate)
+  const now = new Date()
+  const diff = d.getTime() - now.getTime()
+  return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000
 }
 
 const FEATURES = [
@@ -125,6 +134,11 @@ function BillPreviewCard({ bill }: { bill: Bill }) {
             {bill.impact_level} impact
           </span>
         )}
+        {bill.next_hearing_date && isWithin7Days(bill.next_hearing_date) && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
+            Hearing {new Date(bill.next_hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </span>
+        )}
       </div>
       <p className="text-sm font-semibold leading-snug">
         {bill.plain_title || bill.title}
@@ -149,8 +163,17 @@ interface SiteMetrics {
 }
 
 export default function LandingPage() {
+  const router = useRouter()
   const [recentBills, setRecentBills] = useState<Bill[]>([])
   const [metrics, setMetrics] = useState<SiteMetrics | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    const q = searchQuery.trim()
+    if (q) router.push(`/legislation?q=${encodeURIComponent(q)}`)
+    else router.push('/legislation')
+  }
 
   useEffect(() => {
     api.searchLegislation('', 4, 0, 'local', 'true', '', 'high')
@@ -175,6 +198,21 @@ export default function LandingPage() {
         <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
           Common Ground tracks every bill introduced to Philadelphia City Council and explains it in plain English — with AI perspectives from across the political spectrum.
         </p>
+        <form onSubmit={handleSearch} className="flex gap-2 max-w-lg mx-auto w-full mb-4">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search bills by title, topic, or number…"
+            className="flex-1 rounded-lg border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+          <button
+            type="submit"
+            className="px-5 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors"
+          >
+            Search
+          </button>
+        </form>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
             href="/legislation"

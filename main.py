@@ -9,7 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.database import init_db, get_db
-from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes
+from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes
 
 settings = get_settings()
 
@@ -27,6 +27,8 @@ def _validate_startup():
     warnings = []
     if settings.app_base_url == "http://localhost:8000" and settings.environment == "production":
         warnings.append("APP_BASE_URL is still set to localhost — sharing URLs will be broken in production")
+    if settings.jwt_secret == "change-me-in-production" and settings.environment == "production":
+        raise RuntimeError("JWT_SECRET must be set to a secure random value in production — refusing to start")
     for msg in warnings:
         logger.warning(msg)
 
@@ -60,6 +62,8 @@ app.include_router(legislation_routes.router)
 app.include_router(councilmember_routes.router)
 app.include_router(metrics_routes.router)
 app.include_router(donation_routes.router)
+app.include_router(hearings_routes.router)
+app.include_router(election_routes.router)
 
 
 @app.get("/")

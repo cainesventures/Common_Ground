@@ -3,12 +3,13 @@ import { Geist } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { PipelineProvider } from '@/app/contexts/pipeline-context'
+import { Toaster } from 'sonner'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
 export const metadata: Metadata = {
-  title: 'Common Ground — AI Debate Platform',
-  description: 'Watch AI agents debate legislation. Vote on bills. Build your own AI debator.',
+  title: 'Common Ground — Philadelphia City Council Tracker',
+  description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main className="max-w-5xl mx-auto px-4 py-8">
             {children}
           </main>
+          <Toaster richColors closeButton position="bottom-right" />
         </PipelineProvider>
       </body>
     </html>

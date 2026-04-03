@@ -117,13 +117,20 @@ async def list_councilmembers(db: Session = Depends(get_db)):
 
 
 @router.get("/{member_id}")
-async def get_member(member_id: str, db: Session = Depends(get_db)):
+async def get_member(
+    member_id: str,
+    bills_page: int = Query(1, ge=1),
+    bills_limit: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     """Get a single council member with their sponsored bills."""
     member = get_councilmember(db, member_id)
     if not member:
         raise HTTPException(status_code=404, detail="Council member not found")
 
-    bills, total = get_councilmember_bills(db, member.name, limit=50, offset=0)
+    _, total = get_councilmember_bills(db, member.name, limit=1, offset=0)
+    offset = (bills_page - 1) * bills_limit
+    bills, _ = get_councilmember_bills(db, member.name, limit=bills_limit, offset=offset)
 
     return {
         "success": True,
@@ -146,6 +153,8 @@ async def get_member(member_id: str, db: Session = Depends(get_db)):
         },
         "bills": {
             "total": total,
+            "page": bills_page,
+            "limit": bills_limit,
             "results": [
                 {
                     "id": b.id,

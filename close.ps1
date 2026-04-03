@@ -19,3 +19,5 @@ if ($frontendPids) {
 }
 
 Write-Host "`nDone.`n" -ForegroundColor Green
+
+Stop-Process -Id $PID

@@ -547,6 +547,111 @@ class PhilaLegistarScraper:
             logger.warning(f"fetch_sponsor_from_detail failed for matter {matter_id}: {e}")
             return None
 
+    def scrape_upcoming_hearings(self) -> List[Dict[str, Any]]:
+        """
+        Scrape phila.legistar.com/Calendar.aspx for upcoming City Council meetings.
+        For each meeting that has an Accessible Agenda link, fetch that page and
+        extract the bill file numbers listed on the agenda.
+
+        Returns a list of dicts:
+          {
+            "date": datetime,
+            "time": str,                     # e.g. "10:00 AM"
+            "body": str,                     # e.g. "Committee on Public Safety"
+            "location": str,
+            "bill_file_numbers": List[str],  # e.g. ["240001", "25-0123"]
+          }
+        """
+        from playwright.sync_api import sync_playwright
+        from html.parser import HTMLParser
+        import re as _re
+
+        results: List[Dict[str, Any]] = []
+        now = datetime.utcnow()
+
+        class AgendaParser(HTMLParser):
+            """Extract bill file-number-like tokens from agenda HTML."""
+            def __init__(self):
+                super().__init__()
+                self.text_chunks: List[str] = []
+            def handle_data(self, data: str):
+                self.text_chunks.append(data)
+            def bill_numbers(self) -> List[str]:
+                text = " ".join(self.text_chunks)
+                # Philly bill numbers: "240001", "24-0001", "2024-0001"
+                return list(dict.fromkeys(_re.findall(r'\b\d{2,4}-?\d{4,5}\b', text)))
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page()
+            try:
+                logger.info("Loading Legistar Calendar ...")
+                page.goto(f"{BASE_URL}/Calendar.aspx", wait_until="networkidle", timeout=30000)
+                page.wait_for_selector("tr.rgRow, tr.rgAltRow", timeout=15000)
+
+                rows = page.query_selector_all("tr.rgRow, tr.rgAltRow")
+                logger.info(f"Calendar: found {len(rows)} meeting rows")
+
+                for row in rows:
+                    cells = row.query_selector_all("td")
+                    if len(cells) < 4:
+                        continue
+
+                    date_text     = cells[0].inner_text().strip()
+                    time_text     = cells[1].inner_text().strip() if len(cells) > 1 else ""
+                    body_text     = cells[2].inner_text().strip() if len(cells) > 2 else ""
+                    location_text = cells[3].inner_text().strip() if len(cells) > 3 else ""
+
+                    meeting_date = _parse_date(date_text)
+                    if not meeting_date or meeting_date < now:
+                        continue  # skip past meetings
+
+                    # Find "Accessible Agenda" link in the row
+                    agenda_url: Optional[str] = None
+                    for link in row.query_selector_all("a"):
+                        text = link.inner_text().strip()
+                        href = link.get_attribute("href") or ""
+                        if "accessible" in text.lower() and "agenda" in text.lower():
+                            agenda_url = href if href.startswith("http") else f"{BASE_URL}/{href.lstrip('/')}"
+                            break
+
+                    bill_file_numbers: List[str] = []
+                    if agenda_url:
+                        try:
+                            resp = httpx.get(agenda_url, timeout=15, follow_redirects=True)
+                            content_type = resp.headers.get("content-type", "")
+                            if "html" in content_type:
+                                parser = AgendaParser()
+                                parser.feed(resp.text)
+                                bill_file_numbers = parser.bill_numbers()
+                            elif "pdf" in content_type:
+                                try:
+                                    import fitz
+                                    doc = fitz.open(stream=resp.content, filetype="pdf")
+                                    text = " ".join(page.get_text() for page in doc)
+                                    import re as _re2
+                                    bill_file_numbers = list(dict.fromkeys(_re2.findall(r'\b\d{2,4}-?\d{4,5}\b', text)))
+                                except Exception:
+                                    pass
+                        except Exception as e:
+                            logger.warning(f"Could not fetch agenda at {agenda_url}: {e}")
+
+                    results.append({
+                        "date":              meeting_date,
+                        "time":              time_text,
+                        "body":              body_text,
+                        "location":          location_text,
+                        "bill_file_numbers": bill_file_numbers,
+                    })
+
+            except Exception as e:
+                logger.error(f"scrape_upcoming_hearings failed: {e}")
+            finally:
+                browser.close()
+
+        logger.info(f"scrape_upcoming_hearings: {len(results)} future meetings found")
+        return results
+
     def _parse_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         matter_id = row.get("matter_id") or row.get("file_number", "unknown")
         intro_date = _parse_date(row.get("intro_date", ""))

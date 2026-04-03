@@ -289,8 +289,11 @@ export default function AdminPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Utilities</h2>
         <MetricsSection filter={pipelineFilter} />
         <DigestSection />
+        <RefreshHearingsSection />
+        <CandidateManagementSection />
         <BackfillSponsorsSection />
         <BackfillCityContextSection />
+        <SyncStatusesSection />
       </section>
     </div>
   )
@@ -833,6 +836,240 @@ function BackfillSponsorsSection() {
       <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start('/api/legislation/stream/backfill-sponsors')}>
         {running ? 'Backfilling Sponsors…' : 'Backfill Sponsors'}
+      </Button>
+    </div>
+  )
+}
+
+function RefreshHearingsSection() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Upcoming Hearings</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Scrape phila.legistar.com/Calendar.aspx and update hearing dates on matching bills. Takes 1–3 minutes.
+        </p>
+      </div>
+      {result && (
+        <p className={`text-sm ${result.ok ? 'text-green-600' : 'text-destructive'}`}>{result.message}</p>
+      )}
+      <Button
+        disabled={running}
+        className="bg-blue-600 hover:bg-blue-700 text-white"
+        onClick={async () => {
+          setRunning(true); setResult(null)
+          try {
+            const data = await api.refreshHearings()
+            setResult({ ok: true, message: `Scraped ${data?.meetings_scraped ?? 0} meetings, matched ${data?.bills_matched ?? 0} bills.` })
+          } catch (e: any) {
+            setResult({ ok: false, message: e.message || 'Failed' })
+          } finally { setRunning(false) }
+        }}
+      >
+        {running ? 'Refreshing Hearings…' : 'Refresh Hearings'}
+      </Button>
+    </div>
+  )
+}
+
+function ScrapeCandidatesButton({ onDone }: { onDone: () => void }) {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [year, setYear] = useState(2025)
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {result && (
+        <span className={`text-xs ${result.ok ? 'text-muted-foreground' : 'text-destructive'}`}>
+          {result.message}
+        </span>
+      )}
+      <select
+        value={year}
+        onChange={(e) => setYear(Number(e.target.value))}
+        className="rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none"
+      >
+        {[2027, 2025, 2023, 2021].map((y) => (
+          <option key={y} value={y}>{y}</option>
+        ))}
+      </select>
+      <Button
+        disabled={running}
+        variant="outline"
+        className="text-xs px-3 py-1.5"
+        onClick={async () => {
+          setRunning(true); setResult(null)
+          try {
+            const data = await api.scrapeCandidates(year, false)
+            const src = data?.source_year && data.source_year !== year ? ` (from ${data.source_year} — ${year} page not found yet)` : ''
+            setResult({ ok: true, message: `Added ${data?.added ?? 0}, skipped ${data?.skipped ?? 0}${src}` })
+            onDone()
+          } catch (e: any) {
+            setResult({ ok: false, message: e.message || 'Scrape failed' })
+          } finally { setRunning(false) }
+        }}
+      >
+        {running ? 'Scraping…' : 'Scrape Ballotpedia'}
+      </Button>
+    </div>
+  )
+}
+
+function CandidateManagementSection() {
+  const [candidates, setCandidates] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const emptyForm = { name: '', district: '', party: '', office_sought: '', election_year: new Date().getFullYear() + 1, is_incumbent: false, bio: '', website_url: '', known_positions: '' }
+  const [form, setForm] = useState<typeof emptyForm>(emptyForm)
+
+  const load = () => {
+    setLoading(true)
+    api.getCandidates().then((d) => setCandidates(d?.candidates ?? [])).catch(() => {}).finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleSave = async () => {
+    if (!form.name || !form.district) return
+    setSaving(true)
+    try {
+      if (editingId) {
+        await api.updateCandidate(editingId, form)
+      } else {
+        await api.createCandidate({ ...form, election_year: Number(form.election_year) })
+      }
+      setForm(emptyForm); setShowForm(false); setEditingId(null); load()
+    } catch (e: any) {
+      alert(e.message)
+    } finally { setSaving(false) }
+  }
+
+  const handleEdit = (c: any) => {
+    setForm({ name: c.name, district: c.district, party: c.party ?? '', office_sought: c.office_sought ?? '', election_year: c.election_year, is_incumbent: !!c.is_incumbent, bio: c.bio ?? '', website_url: c.website_url ?? '', known_positions: c.known_positions ?? '' })
+    setEditingId(c.id); setShowForm(true)
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete candidate ${name}? This also clears their cached predictions.`)) return
+    await api.deleteCandidate(id); load()
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <h3 className="font-semibold">Election Candidates</h3>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage candidate profiles shown on the Elections page.</p>
+        </div>
+        <div className="flex gap-2">
+          <ScrapeCandidatesButton onDone={load} />
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5" onClick={() => { setForm(emptyForm); setEditingId(null); setShowForm(true) }}>
+            + Add
+          </Button>
+        </div>
+      </div>
+
+      {showForm && (
+        <div className="border rounded-md p-4 space-y-3 bg-muted/20">
+          <p className="text-sm font-medium">{editingId ? 'Edit Candidate' : 'New Candidate'}</p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              ['name', 'Full name', 'text'],
+              ['district', 'District (e.g. "District 2" or "At-Large")', 'text'],
+              ['party', 'Party', 'text'],
+              ['office_sought', 'Office sought', 'text'],
+              ['election_year', 'Election year', 'number'],
+              ['website_url', 'Campaign website URL', 'text'],
+            ].map(([field, label, type]) => (
+              <div key={field} className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">{label}</label>
+                <input
+                  type={type}
+                  value={(form as any)[field]}
+                  onChange={(e) => setForm((f) => ({ ...f, [field]: type === 'number' ? Number(e.target.value) : e.target.value }))}
+                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
+                />
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Bio</label>
+            <textarea rows={2} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Known positions (AI uses this for predictions — e.g. "Supports affordable housing; opposes stadium subsidies")</label>
+            <textarea rows={2} value={form.known_positions} onChange={(e) => setForm((f) => ({ ...f, known_positions: e.target.value }))} className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none" />
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.is_incumbent} onChange={(e) => setForm((f) => ({ ...f, is_incumbent: e.target.checked }))} />
+            Incumbent
+          </label>
+          <div className="flex gap-2">
+            <Button disabled={saving || !form.name || !form.district} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSave}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setForm(emptyForm) }}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : candidates.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No candidates yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {candidates.map((c) => (
+            <div key={c.id} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+              <div>
+                <span className="font-medium">{c.name}</span>
+                <span className="text-muted-foreground ml-2">{c.district} · {c.party ?? 'Independent'} · {c.election_year}</span>
+                {c.is_incumbent && <span className="ml-2 text-xs text-blue-600">(incumbent)</span>}
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleEdit(c)} className="text-xs text-muted-foreground hover:text-foreground transition-colors">Edit</button>
+                <button onClick={() => handleDelete(c.id, c.name)} className="text-xs text-red-500 hover:text-red-700 transition-colors">Delete</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SyncStatusesSection() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  const run = async () => {
+    setRunning(true); setResult(null)
+    try {
+      const data = await api.syncBillStatuses()
+      setResult(`Checked ${data.checked} bills, updated ${data.updated}`)
+    } catch (e: any) {
+      setResult(`Error: ${e.message}`)
+    } finally {
+      setRunning(false)
+    }
+  }
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Sync Bill Statuses</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Re-fetch status from Legistar for all introduced/in-committee bills. Detects bills that have been passed, failed, or vetoed since last ingest.
+        </p>
+      </div>
+      {result && <p className="text-sm text-muted-foreground">{result}</p>}
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={run}>
+        {running ? 'Syncing…' : 'Sync Statuses'}
       </Button>
     </div>
   )

@@ -41,6 +41,14 @@ interface Bill {
   analyzed_at?: string
   tags?: string
   summary?: string
+  next_hearing_date?: string
+}
+
+function isWithin7Days(isoDate: string): boolean {
+  const d = new Date(isoDate)
+  const now = new Date()
+  const diff = d.getTime() - now.getTime()
+  return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000
 }
 
 interface YearCount  { year: number;  count: number }
@@ -222,7 +230,22 @@ function DrilldownChart({
 
 // ── Bill Card ────────────────────────────────────────────────────────────────
 
-function BillCard({ bill }: { bill: Bill }) {
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>
+  const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === query.trim().toLowerCase()
+          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">{part}</mark>
+          : part
+      )}
+    </>
+  )
+}
+
+function BillCard({ bill, query = '' }: { bill: Bill; query?: string }) {
   const accent = IMPACT_ACCENT[bill.impact_level ?? ''] ?? '#e5e7eb'
   const statusClass = STATUS_BADGE[bill.status] ?? 'bg-gray-100 text-gray-600'
 
@@ -247,6 +270,11 @@ function BillCard({ bill }: { bill: Bill }) {
               {bill.impact_level} impact
             </span>
           )}
+          {bill.next_hearing_date && isWithin7Days(bill.next_hearing_date) && (
+            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0">
+              Hearing {new Date(bill.next_hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </span>
+          )}
           {bill.introduced_date && (
             <span className="text-[11px] text-muted-foreground/60 shrink-0 ml-auto">
               {new Date(bill.introduced_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -254,10 +282,12 @@ function BillCard({ bill }: { bill: Bill }) {
           )}
         </div>
         <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-          {bill.plain_title || bill.title}
+          <Highlight text={bill.plain_title || bill.title} query={query} />
         </p>
         {bill.summary && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{bill.summary}</p>
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+            <Highlight text={bill.summary} query={query} />
+          </p>
         )}
       </div>
       <div className="flex items-center pr-3 shrink-0">
@@ -310,7 +340,7 @@ function LegislationPageInner() {
   const [selectedStatus,  setSelectedStatus]  = useState(() => sp.get('status') ?? '')
   const [selectedImpact,  setSelectedImpact]  = useState(() => sp.get('impact') ?? '')
   const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
-  const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') === '1')
+  const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') !== '0')
   const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
   const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
 
@@ -325,7 +355,7 @@ function LegislationPageInner() {
     if (selectedStatus)  p.set('status',  selectedStatus)
     if (selectedImpact)  p.set('impact',  selectedImpact)
     if (selectedSponsor) p.set('sponsor', selectedSponsor)
-    if (analyzedOnly)    p.set('analyzed', '1')
+    if (!analyzedOnly)   p.set('analyzed', '0')  // default is true; only flag when off
     if (page > 1)        p.set('page',    String(page))
     const qs = p.toString()
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
@@ -400,7 +430,7 @@ function LegislationPageInner() {
     setSelectedTag(''); setSelectedLevel('local')
     setSelectedStatus(''); setSelectedImpact('')
     setSelectedSponsor('')
-    setAnalyzedOnly(false); setQuery(''); setQueryInput('')
+    setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
@@ -413,7 +443,7 @@ function LegislationPageInner() {
   if (selectedStatus)  filterParts.push(selectedStatus.replace(/_/g, ' '))
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
   if (selectedSponsor) filterParts.push(selectedSponsor)
-  if (analyzedOnly)   filterParts.push('analyzed only')
+  if (!analyzedOnly)  filterParts.push('including unanalyzed')
   if (query)          filterParts.push(`"${query}"`)
 
   return (
@@ -583,19 +613,29 @@ function LegislationPageInner() {
       {!loading && !error && bills.length > 0 && (
         <div className="space-y-2">
           {bills.map((bill) => (
-            <BillCard key={bill.id} bill={bill} />
+            <BillCard key={bill.id} bill={bill} query={query} />
           ))}
         </div>
       )}
 
       {/* Empty state */}
       {!loading && !error && bills.length === 0 && (
-        <p className="text-sm text-muted-foreground text-center py-12">
-          {filterParts.length > 0
-            ? 'No bills match the selected filters.'
-            : <>No legislation has been ingested yet.{' '}<Link href="/admin" className="underline hover:no-underline">Ingest bills</Link></>
-          }
-        </p>
+        <div className="text-center py-16 space-y-3">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
+          </svg>
+          {filterParts.length > 0 ? (
+            <>
+              <p className="text-sm font-medium text-muted-foreground">No bills match these filters.</p>
+              <button onClick={clearAll} className="text-sm text-primary hover:underline">Clear filters and try again</button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium text-muted-foreground">No legislation has been ingested yet.</p>
+              <Link href="/admin" className="text-sm text-primary hover:underline">Ingest bills from the admin panel →</Link>
+            </>
+          )}
+        </div>
       )}
 
       {/* Pagination */}

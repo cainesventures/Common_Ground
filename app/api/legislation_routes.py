@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
 from app.models.database import get_db
 from app.services.legislation_service import LegislationIngestionService
@@ -166,7 +166,8 @@ async def list_legislation(
                  "plain_title": leg.plain_title, "source": leg.source, "status": leg.status,
                  "level": leg.level, "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
                  "impact_level": leg.impact_level, "bill_type": leg.bill_type, "tags": leg.tags,
-                 "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None}
+                 "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None,
+                 "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None}
                 for leg in results
             ]
         }
@@ -390,6 +391,7 @@ async def search_legislation(
                     "bill_type": leg.bill_type,
                     "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None,
                     "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
+                    "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
                 }
                 for leg in results
             ]
@@ -411,6 +413,21 @@ async def generate_plain_titles(
         return {"success": True, **result}
     except Exception as e:
         logger.error(f"Error generating plain titles: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sync-statuses")
+async def sync_bill_statuses(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Re-fetch status from Legistar for all in-flight (introduced/in_committee) bills."""
+    try:
+        service = LegislationIngestionService(db)
+        result = await service.sync_bill_statuses()
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Error syncing bill statuses: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1388,7 +1405,14 @@ async def generate_perspective(
 
     try:
         from app.services.perspectives_service import generate_perspective as _gen
-        persp = _gen(leg, perspective_type, db)
+        loop = asyncio.get_event_loop()
+        try:
+            persp = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: _gen(leg, perspective_type, db)),
+                timeout=90.0,
+            )
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail=f"Generation timed out after 90s for {perspective_type}")
         if not persp:
             raise HTTPException(status_code=500, detail="Failed to generate perspective")
 
@@ -1466,9 +1490,11 @@ async def get_perspectives(
     if not leg:
         raise HTTPException(status_code=404, detail="Legislation not found")
 
-    perspectives = db.query(BillPerspective).filter(
-        BillPerspective.bill_id == legislation_id
-    ).all()
+    perspectives = (
+        db.query(BillPerspective)
+        .filter(BillPerspective.bill_id == legislation_id)
+        .all()
+    )
 
     generated = {p.perspective_type for p in perspectives}
     pending = [t for t in ALL_PERSPECTIVES if t not in generated]
@@ -1519,7 +1545,12 @@ async def get_legislation(
 ):
     """Get detailed information about specific legislation."""
     try:
-        leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+        leg = (
+            db.query(Legislation)
+            .options(joinedload(Legislation.perspectives))
+            .filter(Legislation.id == legislation_id)
+            .first()
+        )
         if not leg:
             raise HTTPException(status_code=404, detail="Legislation not found")
 
@@ -1546,6 +1577,10 @@ async def get_legislation(
                 "analyzed_at": leg.analyzed_at,
                 "news_links": leg.news_links,
                 "supplementary_data": leg.supplementary_data,
+                "next_hearing_date":     leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
+                "next_hearing_time":     leg.next_hearing_time,
+                "next_hearing_body":     leg.next_hearing_body,
+                "next_hearing_location": leg.next_hearing_location,
             }
         }
     except HTTPException:

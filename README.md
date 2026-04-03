@@ -10,15 +10,24 @@ A free, citizen-friendly tracker for Philadelphia City Council legislation. Ever
 - **Plain-language summaries** — AI explains each bill in plain English after analysis
 - **Category tags** — AI assigns category tags (housing, zoning, transportation, budget, etc.) for easy filtering
 - **17 AI perspectives** — Political, Policy, Demographic, and Special viewpoints with a support/oppose tally and stacked bar
+- **Perspective timestamps** — each generated perspective shows how long ago it was created
 - **Impact scoring** — each bill rated 1–10 on how broadly it affects Philadelphians
+- **Bill status timeline** — visual Introduced → In Committee → Signed/Failed/Vetoed progress bar
+- **Related bills** — sidebar on bill detail page surfacing bills with similar tags or sponsor
 - **In the News** — Google News RSS articles related to each bill, shown on the bill detail page
+- **Upcoming hearings** — amber badge on bills with hearings within 7 days; full banner with Google Calendar link on detail page
 - **Council member profiles** — all 17 Philadelphia City Council members with bio, district map, term start, years serving, next election year, live bills-sponsored count, and bill activity chart
 - **Full-city district map** — interactive map on the Council page showing all 10 districts
+- **"Contact my councilmember"** — enter your address to find your district member and draft a Gmail message
 - **Vote** — cast Support / Oppose / Neutral on any bill
 - **Save bills** — bookmark bills to your personal saved list (requires login)
+- **Bill tracking toast notifications** — success/error feedback when saving or voting
+- **Search term highlighting** — matched keywords highlighted in bill titles and summaries
 - **Weekly email digest** — opt in to receive a weekly summary of newly analyzed bills with AI perspectives
 - **Metrics dashboard** — site-wide stats: bills analyzed, perspectives generated, user counts, position breakdown
 - **Donations** — one-time Stripe donations to support the project
+- **Dark mode** — light / dark / system toggle in the navbar, persists across sessions
+- **Share button** — copy a bill's URL to clipboard from the detail page
 
 ## Stack
 
@@ -73,7 +82,7 @@ AI_MODEL=llama3.1:8b
 AI_BASE_URL=http://localhost:11434
 ```
 
-Google OAuth is optional during development — use the **Dev Login** button on the navbar instead.
+Google OAuth is optional during development — use the small **Dev** button on the navbar instead (only visible in development mode).
 
 ### 3. Initialize the database
 
@@ -121,6 +130,8 @@ A single unified workflow that processes bills through up to four steps in seque
 
 ### 3. Utilities
 - **Backfill Sponsors** — standalone SSE stream to fill in missing sponsor data
+- **Sync Bill Statuses** — re-fetches status from Legistar for all introduced/in-committee bills to detect passage, failure, or veto
+- **Refresh Hearings** — pulls upcoming hearing dates from the City Council calendar
 - **Weekly Digest** — triggers the digest email to all opted-in users
 - **Metrics** — displays site-wide stats inline
 
@@ -235,28 +246,33 @@ GET  /api/legislation/search?q=...&level=local&analyzed=true&tag=housing&impact=
 GET  /api/legislation/tag-counts?sponsor=...&status=...&impact=...   Tag frequency counts (filter-aware)
 GET  /api/legislation/year-counts?q=...&analyzed=...&tag=...&impact=...&status=...&sponsor=...
 GET  /api/legislation/month-counts?q=...&analyzed=...&tag=...&impact=...&status=...&sponsor=...
-GET  /api/legislation/{id}                      Bill detail (includes news_links)
+GET  /api/legislation/{id}                      Bill detail (includes news_links, perspectives eager-loaded)
 POST /api/legislation/{id}/analyze              Trigger analysis + news fetch (dev tier)
 POST /api/legislation/{id}/fetch-news           Fetch news for one bill (dev tier)
 POST /api/legislation/fetch-news-all            Fetch news for all local bills (dev tier)
 POST /api/legislation/plain-titles              Generate plain titles for all bills (dev tier)
 POST /api/legislation/tag-all                   Auto-tag all untagged bills (dev tier)
+POST /api/legislation/sync-statuses             Re-fetch Legistar status for in-flight bills (dev tier)
 GET  /api/legislation/stream/pipeline           SSE: unified pipeline (steps, force_analyze, perspective_types, year, month, date_from, date_to)
 GET  /api/legislation/stream/backfill-sponsors  SSE: backfill missing sponsor data
 GET  /api/legislation/{id}/perspectives         All perspectives for a bill
-POST /api/legislation/{id}/perspectives/{type}  Generate one perspective
+POST /api/legislation/{id}/perspectives/{type}  Generate one perspective (90s timeout)
 POST /api/legislation/{id}/vote                 Cast a vote
 GET  /api/councilmembers                        List all council members
-GET  /api/councilmembers/{id}                   Council member detail + sponsored bills
+GET  /api/councilmembers/{id}                   Council member detail + sponsored bills (paginated)
 GET  /api/councilmembers/districts-geojson      Philadelphia district boundaries (proxied)
 POST /api/councilmembers/scrape                 Scrape phlcouncil.com profiles (dev tier)
+GET  /api/auth/google                           Redirect to Google OAuth consent screen
+GET  /api/auth/google/callback                  OAuth callback — issues JWT, redirects to frontend
 GET  /api/auth/me                               Current user profile
-POST /api/auth/dev-login                        Dev-only login bypass
+POST /api/auth/dev-login                        Dev-only login bypass (development only)
 POST /api/users/me/track/{bill_id}              Toggle save/unsave a bill
 GET  /api/users/me/tracked-bills                List saved bills (full detail)
 GET  /api/users/me/tracked-bill-ids             List saved bill IDs (fast lookup)
 PATCH /api/users/me/preferences                 Update digest opt-in preference
 POST /api/users/send-digest                     Send weekly digest to opted-in users (dev tier)
+GET  /api/hearings/upcoming                     Bills with upcoming hearings
+POST /api/hearings/refresh                      Scrape City Council calendar for hearing dates (dev tier)
 GET  /api/metrics                               Site-wide metrics
 GET  /api/donations/config                      Stripe publishable key
 POST /api/donations/checkout                    Create Stripe Checkout session
@@ -357,6 +373,20 @@ Common_Ground/
 - [ ] Set up Google OAuth and add redirect URI to Google Cloud Console
 - [ ] Set at least one user's `subscription_tier = 'dev'` in the DB
 - [ ] Set up HTTPS on frontend and backend
+- [ ] Add `next.config.ts` remote patterns for any additional image domains
 - [ ] Set `RESEND_API_KEY` and `EMAIL_FROM` to enable weekly digests
 - [ ] Set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` to enable donations
 - [ ] Register the Stripe webhook endpoint (`POST /api/donations/webhook`) in the Stripe dashboard
+- [ ] Set up a server-side cron job for daily bill ingest (do not rely on local machine — see Scheduled Ingest note below)
+
+## Scheduled Ingest
+
+The app has no built-in scheduler — ingest must be triggered either manually from the admin panel or via a server-side cron job. On a VPS or cloud provider, add a cron entry like:
+
+```bash
+# Daily at 2am — ingest new Philadelphia bills and sync statuses
+3 2 * * * curl -s -X POST https://your-domain.com/api/legislation/ingest/local/philadelphia \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+4 2 * * * curl -s -X POST https://your-domain.com/api/legislation/sync-statuses \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```

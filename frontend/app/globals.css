@@ -13,10 +13,22 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #0a0a0a;
     --foreground: #ededed;
   }
+}
+
+/* Manual dark mode via .dark class on <html> */
+.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+}
+
+/* Manual light mode override (force light even when OS is dark) */
+.light {
+  --background: #ffffff;
+  --foreground: #171717;
 }
 
 body {

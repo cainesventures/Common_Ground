@@ -390,3 +390,62 @@ class LegislationIngestionService:
         self.db.commit()
         logger.info(f"Generated plain titles for {generated}/{len(untitled)} bills")
         return {"generated": generated, "total": len(untitled)}
+
+    async def sync_bill_statuses(self) -> dict:
+        """Re-fetch status from Legistar for bills that are still in-flight (introduced or in_committee).
+
+        Bills that have reached a terminal state (signed_into_law, failed, vetoed) are skipped.
+        Only applies to bills ingested from Legistar (id starts with 'legistar_').
+        """
+        from app.integrations.legistar import LegistarClient, STATUS_MAP
+
+        in_flight = (
+            self.db.query(Legislation)
+            .filter(
+                Legislation.status.in_(["introduced", "in_committee"]),
+                Legislation.id.like("legistar_%"),
+            )
+            .all()
+        )
+
+        if not in_flight:
+            return {"checked": 0, "updated": 0}
+
+        client = LegistarClient()
+        updated = 0
+
+        async with __import__("httpx").AsyncClient(timeout=30.0) as http:
+            for bill in in_flight:
+                # Extract Legistar matter ID from our internal ID: legistar_philadelphia_12345
+                parts = bill.id.split("_")
+                if len(parts) < 3:
+                    continue
+                try:
+                    matter_id = int(parts[-1])
+                except ValueError:
+                    continue
+
+                try:
+                    url = f"https://webapi.legistar.com/v1/Philadelphia/matters/{matter_id}"
+                    resp = await http.get(url, headers={"Accept": "application/json"})
+                    if resp.status_code != 200:
+                        continue
+                    raw = resp.json()
+                    raw_status = (raw.get("MatterStatusName") or "").lower()
+                    new_status = "introduced"
+                    for key, val in STATUS_MAP.items():
+                        if key in raw_status:
+                            new_status = val
+                            break
+                    if new_status != bill.status:
+                        logger.info(f"Status change: {bill.bill_number} {bill.status!r} → {new_status!r}")
+                        bill.status = new_status
+                        updated += 1
+                except Exception as e:
+                    logger.warning(f"Status sync failed for {bill.id}: {e}")
+
+        if updated:
+            self.db.commit()
+
+        logger.info(f"Status sync complete: checked={len(in_flight)}, updated={updated}")
+        return {"checked": len(in_flight), "updated": updated}

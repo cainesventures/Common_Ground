@@ -111,6 +111,9 @@ export const api = {
   generatePlainTitles: () =>
     apiFetch('/api/legislation/plain-titles', { method: 'POST' }),
 
+  syncBillStatuses: () =>
+    apiFetch('/api/legislation/sync-statuses', { method: 'POST' }),
+
   // ── Voting ────────────────────────────────────────────────────────────────
   castVote: (legislationId: string, vote: string, voterToken: string, debateId?: string) =>
     apiFetch(`/api/legislation/${legislationId}/vote`, {
@@ -231,12 +234,55 @@ export const api = {
   ingestLocal: (city: string, limit = 20, bulk = false) =>
     apiFetch(`/api/legislation/ingest/local/${city}?limit=${limit}&bulk=${bulk}`, { method: 'POST' }),
 
+  // ── Hearings ─────────────────────────────────────────────────────────────
+  refreshHearings: () =>
+    apiFetch('/api/hearings/refresh', { method: 'POST' }),
+
+  getUpcomingHearings: (days = 30) =>
+    apiFetch(`/api/hearings/upcoming?days=${days}`),
+
+  // ── Elections ────────────────────────────────────────────────────────────
+  getCandidates: (params?: { election_year?: number; district?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.election_year) p.set('election_year', String(params.election_year))
+    if (params?.district)      p.set('district', params.district)
+    return apiFetch(`/api/elections/candidates?${p}`)
+  },
+
+  createCandidate: (data: {
+    name: string; district: string; party?: string; bio?: string;
+    photo_url?: string; website_url?: string; office_sought?: string;
+    election_year: number; is_incumbent?: boolean; known_positions?: string
+  }) => apiFetch('/api/elections/candidates', { method: 'POST', body: JSON.stringify(data) }),
+
+  updateCandidate: (id: string, data: object) =>
+    apiFetch(`/api/elections/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  deleteCandidate: (id: string) =>
+    apiFetch(`/api/elections/candidates/${id}`, { method: 'DELETE' }),
+
+  getOfficeDescription: (office: string) =>
+    apiFetch(`/api/elections/office-description?office=${encodeURIComponent(office)}`),
+
+  scrapeCandidates: (election_year = 2027, overwrite = false) =>
+    apiFetch(`/api/elections/candidates/scrape?election_year=${election_year}&overwrite=${overwrite}`, { method: 'POST' }),
+
+  getCandidatePredictions: (billId: string) =>
+    apiFetch(`/api/elections/predictions?bill_id=${encodeURIComponent(billId)}`),
+
+  clearCandidatePredictions: (params?: { bill_id?: string; candidate_id?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.bill_id)      p.set('bill_id', params.bill_id)
+    if (params?.candidate_id) p.set('candidate_id', params.candidate_id)
+    return apiFetch(`/api/elections/predictions?${p}`, { method: 'DELETE' })
+  },
+
   // ── Councilmembers ────────────────────────────────────────────────────────
   getCouncilmembers: () =>
     apiFetch('/api/councilmembers'),
 
-  getCouncilmember: (id: string) =>
-    apiFetch(`/api/councilmembers/${id}`),
+  getCouncilmember: (id: string, billsPage = 1, billsLimit = 20) =>
+    apiFetch(`/api/councilmembers/${id}?bills_page=${billsPage}&bills_limit=${billsLimit}`),
 
   scrapeCouncilmembers: () =>
     apiFetch('/api/councilmembers/scrape', { method: 'POST' }),
