@@ -92,6 +92,56 @@ class LegistarClient:
             logger.error(f"Legistar API error fetching matter {matter_id} for '{client}': {e}")
             return None
 
+    async def fetch_roll_call(
+        self, client: str, matter_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch official roll call votes for a bill from the Legistar API.
+
+        Queries EventItems where this matter was voted on, expanding the
+        embedded VoteRecords. Returns a flat list of individual member votes.
+
+        Each returned dict has:
+            voter_name  – "Last, First" as returned by Legistar
+            vote        – "Yea", "Nay", "Abstain", or "Absent"
+            action_date – ISO date string or None
+            result      – overall action result (e.g. "Pass")
+        """
+        url = f"{self.base_url}/{client}/eventitems"
+        params: Dict[str, Any] = {
+            "$filter": f"EventItemMatterId eq {matter_id}",
+            "$expand": "EventItemVoteRecords",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as http:
+                response = await http.get(url, params=params, headers=self._headers())
+                response.raise_for_status()
+                items = response.json()
+        except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.ConnectError) as e:
+            logger.error(f"Legistar roll call error for matter {matter_id}: {e}")
+            return []
+
+        votes: List[Dict[str, Any]] = []
+        for item in items:
+            raw_votes = item.get("EventItemVoteRecords") or []
+            action_date = item.get("EventItemActionDate")
+            result = item.get("EventItemActionResult") or ""
+            for v in raw_votes:
+                votes.append({
+                    "voter_name": v.get("VotePersonName") or "",
+                    "vote": v.get("VoteValueName") or "Absent",
+                    "action_date": action_date,
+                    "result": result,
+                })
+
+        # Deduplicate — keep the most recent vote per person if multiple events
+        seen: Dict[str, Dict[str, Any]] = {}
+        for v in votes:
+            name = v["voter_name"]
+            if name not in seen or v["action_date"] > (seen[name]["action_date"] or ""):
+                seen[name] = v
+        return list(seen.values())
+
     @staticmethod
     def parse_matter_data(raw: Dict[str, Any], client: str) -> Dict[str, Any]:
         """

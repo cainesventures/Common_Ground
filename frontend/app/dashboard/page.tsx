@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 
 interface Metrics {
@@ -42,16 +43,22 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.getMetrics()
-      .then((data) => setMetrics(data?.metrics ?? null))
+    api.getMe()
+      .then((data) => {
+        if (data?.user?.subscription_tier === 'dev') return api.getMetrics()
+        router.replace('/')
+        return null
+      })
+      .then((data) => data && setMetrics(data?.metrics ?? null))
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false))
-  }, [])
+  }, [router])
 
   if (loading) {
     return (
@@ -74,7 +81,19 @@ export default function DashboardPage() {
 
   if (!metrics) return null
 
-  const positionEntries = Object.entries(metrics.perspectives.by_position).sort((a, b) => b[1] - a[1])
+  const VALID_POSITIONS = new Set(['support', 'oppose', 'neutral', 'mixed'])
+  const normalizedPositions: Record<string, number> = {}
+  for (const [pos, count] of Object.entries(metrics.perspectives.by_position)) {
+    const p = pos.toLowerCase()
+    let key: string
+    if (VALID_POSITIONS.has(p)) key = p
+    else if (p.includes('support') && p.includes('oppose')) key = 'mixed'
+    else if (p.includes('support')) key = 'support'
+    else if (p.includes('oppose')) key = 'oppose'
+    else key = 'neutral'
+    normalizedPositions[key] = (normalizedPositions[key] ?? 0) + count
+  }
+  const positionEntries = Object.entries(normalizedPositions).sort((a, b) => b[1] - a[1])
   const totalPositioned = positionEntries.reduce((sum, [, n]) => sum + n, 0)
 
   return (

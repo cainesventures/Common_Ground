@@ -260,7 +260,19 @@ def generate_perspective(
             )
             db.add(persp)
 
-        persp.position = data.get("position", "neutral")
+        raw_position = str(data.get("position", "neutral")).lower()
+        valid_positions = {"support", "oppose", "neutral", "mixed"}
+        if raw_position in valid_positions:
+            normalized = raw_position
+        elif "support" in raw_position and "oppose" in raw_position:
+            normalized = "mixed"
+        elif "support" in raw_position:
+            normalized = "support"
+        elif "oppose" in raw_position:
+            normalized = "oppose"
+        else:
+            normalized = "neutral"
+        persp.position = normalized
         args = data.get("key_arguments", [])
         persp.key_arguments = json.dumps(args if isinstance(args, list) else [])
         persp.concerns = data.get("concerns")

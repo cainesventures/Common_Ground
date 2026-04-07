@@ -75,6 +75,7 @@ class Legislation(Base):
     votes = relationship("LegislationVote", back_populates="legislation", cascade="all, delete-orphan")
     perspectives = relationship("BillPerspective", back_populates="legislation", cascade="all, delete-orphan")
     tracked_by = relationship("BillTracking", back_populates="legislation", cascade="all, delete-orphan")
+    vote_records = relationship("BillVoteRecord", back_populates="legislation", cascade="all, delete-orphan")
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -274,6 +275,9 @@ class Councilmember(Base):
     term_start = Column(Integer, nullable=True)   # Year first took office, e.g. 2012
     updated_at = Column(DateTime, default=datetime.utcnow)
 
+    votes = relationship("CouncilmemberVote", back_populates="councilmember", cascade="all, delete-orphan")
+    vote_records = relationship("BillVoteRecord", back_populates="councilmember")
+
 
 class BillTracking(Base):
     """User tracking (saving) a bill to follow updates."""
@@ -324,10 +328,12 @@ class User(Base):
     email        = Column(String, unique=True, nullable=False)
     display_name = Column(String)
     avatar_url   = Column(String)                                            # Google profile photo URL
-    subscription_tier = Column(String, default="free", nullable=False)      # "free" | "paid" | "dev"
-    digest_enabled    = Column(Boolean, default=False, nullable=False)       # weekly email digest opt-in
-    created_at        = Column(DateTime, default=datetime.utcnow)
-    last_login        = Column(DateTime)
+    subscription_tier  = Column(String, default="free", nullable=False)      # "free" | "paid" | "dev"
+    digest_enabled     = Column(Boolean, default=False, nullable=False)       # weekly email digest opt-in
+    digest_frequency   = Column(String, default="weekly", nullable=False)    # "daily" | "weekly" | "never"
+    digest_min_impact  = Column(String, default="low", nullable=False)       # "low" | "medium" | "high"
+    created_at         = Column(DateTime, default=datetime.utcnow)
+    last_login         = Column(DateTime)
 
     votes          = relationship("LegislationVote", back_populates="user")
     tracked_bills  = relationship("BillTracking", back_populates="user", cascade="all, delete-orphan")
@@ -362,6 +368,27 @@ class LegislationVote(Base):
 
     legislation = relationship("Legislation", back_populates="votes")
     user        = relationship("User", back_populates="votes")
+
+
+class CouncilmemberVote(Base):
+    """Anonymous or authenticated citizen approval vote on a council member.
+
+    Deduplicated per (councilmember_id, voter_token).  One vote per token;
+    casting again updates the existing record (upsert).
+    """
+    __tablename__ = "councilmember_votes"
+
+    id                = Column(String, primary_key=True)
+    councilmember_id  = Column(String, ForeignKey("councilmembers.id"), nullable=False, index=True)
+    user_id           = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    vote              = Column(String, nullable=False)   # "support" | "oppose"
+    voter_token       = Column(String, nullable=False)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("councilmember_id", "voter_token", name="uq_cm_vote_per_voter"),)
+
+    councilmember = relationship("Councilmember", back_populates="votes")
 
 
 class Candidate(Base):
@@ -402,3 +429,30 @@ class CandidateVotePrediction(Base):
 
     candidate   = relationship("Candidate", back_populates="predictions")
     legislation = relationship("Legislation")
+
+
+class BillVoteRecord(Base):
+    """Official roll call vote cast by a Philadelphia City Council member on a bill.
+
+    Populated by fetching Legistar EventItem vote records via the Legistar Web API.
+    One row per councilmember per bill vote event.  Deduplicated on (legislation_id,
+    voter_name) — only the most recent vote event is kept when a bill is voted on
+    multiple times.
+    """
+    __tablename__ = "bill_vote_records"
+
+    id               = Column(String, primary_key=True)   # "bvr_{uuid12}"
+    legislation_id   = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
+    councilmember_id = Column(String, ForeignKey("councilmembers.id"), nullable=True, index=True)
+    voter_name       = Column(String, nullable=False)     # raw "Last, First" from Legistar
+    vote             = Column(String, nullable=False)     # "Yea" | "Nay" | "Abstain" | "Absent"
+    action_date      = Column(DateTime, nullable=True)
+    result           = Column(String, nullable=True)      # overall action result, e.g. "Pass"
+    created_at       = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("legislation_id", "voter_name", name="uq_vote_record_per_member_bill"),
+    )
+
+    legislation    = relationship("Legislation", back_populates="vote_records")
+    councilmember  = relationship("Councilmember", back_populates="vote_records")

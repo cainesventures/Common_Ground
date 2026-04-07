@@ -44,6 +44,41 @@ interface Bill {
   next_hearing_date?: string
 }
 
+function ExportButtons({ analyzed, tag, impact, status, sponsor, year, month }: {
+  analyzed?: string; tag?: string; impact?: string; status?: string
+  sponsor?: string; year?: number; month?: number
+}) {
+  const [loadingCsv,  setLoadingCsv]  = useState(false)
+  const [loadingJson, setLoadingJson] = useState(false)
+
+  const doExport = async (format: 'csv' | 'json') => {
+    const setLoading = format === 'csv' ? setLoadingCsv : setLoadingJson
+    setLoading(true)
+    try {
+      await api.exportLegislation({ format, analyzed, tag, impact, status, sponsor, year, month })
+    } catch { /* ignore */ } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5 shrink-0">
+      <button
+        onClick={() => doExport('csv')}
+        disabled={loadingCsv}
+        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
+      >
+        {loadingCsv ? '…' : 'CSV'}
+      </button>
+      <button
+        onClick={() => doExport('json')}
+        disabled={loadingJson}
+        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
+      >
+        {loadingJson ? '…' : 'JSON'}
+      </button>
+    </div>
+  )
+}
+
 function isWithin7Days(isoDate: string): boolean {
   const d = new Date(isoDate)
   const now = new Date()
@@ -341,6 +376,7 @@ function LegislationPageInner() {
   const [selectedImpact,  setSelectedImpact]  = useState(() => sp.get('impact') ?? '')
   const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
   const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') !== '0')
+  const [hasVotesOnly,    setHasVotesOnly]    = useState(() => sp.get('has_votes') === '1')
   const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
   const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
 
@@ -355,17 +391,18 @@ function LegislationPageInner() {
     if (selectedStatus)  p.set('status',  selectedStatus)
     if (selectedImpact)  p.set('impact',  selectedImpact)
     if (selectedSponsor) p.set('sponsor', selectedSponsor)
-    if (!analyzedOnly)   p.set('analyzed', '0')  // default is true; only flag when off
+    if (!analyzedOnly)   p.set('analyzed', '0')
+    if (hasVotesOnly)    p.set('has_votes', '1')
     if (page > 1)        p.set('page',    String(page))
     const qs = p.toString()
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', url)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, selectedSponsor, analyzedOnly, page])
+  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, page])
 
   const fetchBills = useCallback(async (
     q: string, year: number | null, month: number | null, tag: string,
-    level: string, status: string, impact: string, analyzed: boolean, pageNum: number, sponsor: string
+    level: string, status: string, impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean
   ) => {
     setLoading(true)
     setError('')
@@ -374,7 +411,7 @@ function LegislationPageInner() {
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        tag, impact, year ?? 0, month ?? 0, status, sponsor
+        tag, impact, year ?? 0, month ?? 0, status, sponsor, hasVotes
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -401,8 +438,8 @@ function LegislationPageInner() {
   }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatus, selectedSponsor, selectedYear, selectedMonth])
 
   useEffect(() => {
-    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor)
-  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, fetchBills])
+    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly)
+  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, fetchBills])
 
   useEffect(() => {
     api.getCouncilmembers().then((d) => setCouncilMembers(d?.members ?? [])).catch(() => {})
@@ -410,7 +447,7 @@ function LegislationPageInner() {
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tag: string; level: string;
-    status: string; impact: string; analyzed: boolean; q: string; sponsor: string
+    status: string; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean
   }> = {}) => {
     setPage(1)
     if ('year'     in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
@@ -421,6 +458,7 @@ function LegislationPageInner() {
     if ('impact'   in overrides) setSelectedImpact(overrides.impact!)
     if ('analyzed' in overrides) setAnalyzedOnly(overrides.analyzed!)
     if ('sponsor'  in overrides) setSelectedSponsor(overrides.sponsor!)
+    if ('hasVotes' in overrides) setHasVotesOnly(overrides.hasVotes!)
     if ('q'        in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
   }
 
@@ -429,7 +467,7 @@ function LegislationPageInner() {
     setSelectedYear(null); setSelectedMonth(null)
     setSelectedTag(''); setSelectedLevel('local')
     setSelectedStatus(''); setSelectedImpact('')
-    setSelectedSponsor('')
+    setSelectedSponsor(''); setHasVotesOnly(false)
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
 
@@ -444,13 +482,25 @@ function LegislationPageInner() {
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
   if (selectedSponsor) filterParts.push(selectedSponsor)
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
+  if (hasVotesOnly)   filterParts.push('has roll call')
   if (query)          filterParts.push(`"${query}"`)
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold">Legislation</h1>
-        <p className="text-muted-foreground mt-1">Philadelphia City Council bills.</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Legislation</h1>
+          <p className="text-muted-foreground mt-1">Philadelphia City Council bills.</p>
+        </div>
+        <ExportButtons
+          analyzed={analyzedOnly ? 'true' : ''}
+          tag={selectedTag}
+          impact={selectedImpact}
+          status={selectedStatus}
+          sponsor={selectedSponsor}
+          year={selectedYear ?? undefined}
+          month={selectedMonth ?? undefined}
+        />
       </div>
 
       {/* Drill-down bar chart */}
@@ -538,6 +588,17 @@ function LegislationPageInner() {
               className="rounded border-input"
             />
             Analyzed only
+          </label>
+
+          {/* Has Roll Call toggle */}
+          <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+            <input
+              type="checkbox"
+              checked={hasVotesOnly}
+              onChange={(e) => reset({ hasVotes: e.target.checked })}
+              className="rounded border-input"
+            />
+            Has roll call
           </label>
         </div>
 

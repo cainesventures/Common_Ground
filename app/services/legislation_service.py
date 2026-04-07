@@ -5,7 +5,7 @@ import logging
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
-from app.models import Legislation
+from app.models import Legislation, Councilmember, BillVoteRecord
 from app.integrations.congress_gov import CongressGovIntegration
 from app.integrations.open_states import OpenStatesIntegration
 from app.integrations.legistar import LegistarClient
@@ -294,6 +294,7 @@ class LegislationIngestionService:
         month: Optional[int] = None,
         status: Optional[str] = None,
         sponsor: Optional[str] = None,
+        has_votes: Optional[bool] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -325,6 +326,11 @@ class LegislationIngestionService:
             base_query = base_query.filter(Legislation.status == status)
         if sponsor:
             base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+        if has_votes:
+            from sqlalchemy import exists
+            base_query = base_query.filter(
+                exists().where(BillVoteRecord.legislation_id == Legislation.id)
+            )
         total = base_query.count()
         results = (
             base_query
@@ -449,3 +455,86 @@ class LegislationIngestionService:
 
         logger.info(f"Status sync complete: checked={len(in_flight)}, updated={updated}")
         return {"checked": len(in_flight), "updated": updated}
+
+
+async def sync_vote_records(legislation_id: str, db: Session) -> dict:
+    """Fetch official roll call votes from phila.legistar.com and store as BillVoteRecord rows.
+
+    Uses the bill's stored external_url to scrape the LegislationDetail page with
+    Playwright (same approach as other Legistar scraping in this app), then upserts
+    individual member votes into the bill_vote_records table.
+
+    Returns a dict with counts: {"fetched": N, "matched": N, "upserted": N}
+    """
+    from app.integrations.legistar_scraper import PhilaLegistarScraper
+
+    bill = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not bill or not bill.external_url:
+        return {"fetched": 0, "matched": 0, "upserted": 0}
+
+    scraper = PhilaLegistarScraper(headless=True)
+    raw_votes = await asyncio.to_thread(scraper.scrape_vote_history, bill.external_url)
+
+    if not raw_votes:
+        return {"fetched": 0, "matched": 0, "upserted": 0}
+
+    # Build last-name → councilmember lookup
+    councilmembers = db.query(Councilmember).all()
+    name_map: dict = {}
+    for cm in councilmembers:
+        last = cm.name.split()[-1].lower()
+        name_map[last] = cm
+
+    matched = 0
+    upserted = 0
+
+    VOTE_NORMALIZE = {
+        "ayes": "Yea", "aye": "Yea", "yes": "Yea", "yea": "Yea",
+        "noes": "Nay", "nay": "Nay", "no": "Nay",
+        "abstain": "Abstain", "abstained": "Abstain",
+        "absent": "Absent",
+    }
+
+    for v in raw_votes:
+        voter_name = v["voter_name"]  # "Councilmember Bass" / "Council President Johnson"
+        # Strip title prefix — last word is always the last name
+        last_name = voter_name.split()[-1].strip().lower() if voter_name else ""
+        cm = name_map.get(last_name)
+        # Normalize vote value from Legistar web format to our canonical format
+        v["vote"] = VOTE_NORMALIZE.get(v["vote"].lower(), v["vote"])
+        if cm:
+            matched += 1
+
+        action_date = None
+        if v.get("action_date"):
+            try:
+                action_date = datetime.fromisoformat(v["action_date"].rstrip("Z"))
+            except (ValueError, AttributeError):
+                pass
+
+        existing = db.query(BillVoteRecord).filter(
+            BillVoteRecord.legislation_id == legislation_id,
+            BillVoteRecord.voter_name == voter_name,
+        ).first()
+
+        if existing:
+            existing.vote = v["vote"]
+            existing.councilmember_id = cm.id if cm else None
+            existing.action_date = action_date
+            existing.result = v.get("result")
+        else:
+            import uuid
+            record = BillVoteRecord(
+                id=f"bvr_{uuid.uuid4().hex[:12]}",
+                legislation_id=legislation_id,
+                councilmember_id=cm.id if cm else None,
+                voter_name=voter_name,
+                vote=v["vote"],
+                action_date=action_date,
+                result=v.get("result"),
+            )
+            db.add(record)
+        upserted += 1
+
+    db.commit()
+    return {"fetched": len(raw_votes), "matched": matched, "upserted": upserted}

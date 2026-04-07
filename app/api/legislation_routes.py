@@ -12,8 +12,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
 from app.models.database import get_db
-from app.services.legislation_service import LegislationIngestionService
-from app.models import Legislation, LegislationVote, BillPerspective
+from app.services.legislation_service import LegislationIngestionService, sync_vote_records
+from app.models import Legislation, LegislationVote, BillPerspective, BillVoteRecord
 from app.auth import require_dev_tier, get_optional_user
 from app.services.perspectives_service import ALL_PERSPECTIVES
 
@@ -341,6 +341,149 @@ async def count_legislation(
     return {"count": q.count()}
 
 
+@router.get("/export")
+async def export_legislation(
+    format: str = Query("csv", pattern="^(csv|json)$"),
+    q: str = Query("", max_length=200),
+    analyzed: str = Query("true"),
+    tag: str = Query(""),
+    impact: str = Query(""),
+    status: str = Query(""),
+    sponsor: str = Query(""),
+    year: int = Query(0),
+    month: int = Query(0),
+    tracked_only: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
+    """Export legislation as CSV or JSON. Pass tracked_only=true for the current user's saved bills."""
+    import csv
+    import io
+    from app.models import BillTracking
+
+    analyzed_filter: Optional[bool] = None
+    if analyzed == "true":
+        analyzed_filter = True
+    elif analyzed == "false":
+        analyzed_filter = False
+
+    if format == "json":
+        base_q = db.query(Legislation).options(joinedload(Legislation.perspectives))
+    else:
+        base_q = db.query(Legislation)
+
+    if tracked_only:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Login required for tracked bills export")
+        tracked_ids = [r.bill_id for r in db.query(BillTracking.bill_id).filter(BillTracking.user_id == current_user.id).all()]
+        base_q = base_q.filter(Legislation.id.in_(tracked_ids))
+    if q:
+        base_q = base_q.filter(
+            Legislation.title.ilike(f"%{q}%") | Legislation.bill_number.ilike(f"%{q}%")
+        )
+    if analyzed_filter is True:
+        base_q = base_q.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed_filter is False:
+        base_q = base_q.filter(Legislation.analyzed_at.is_(None))
+    if tag:
+        base_q = base_q.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+    if impact:
+        base_q = base_q.filter(Legislation.impact_level == impact)
+    if status:
+        base_q = base_q.filter(Legislation.status == status)
+    if sponsor:
+        base_q = base_q.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+    if year:
+        from sqlalchemy import extract
+        base_q = base_q.filter(extract("year", Legislation.introduced_date) == year)
+    if month:
+        from sqlalchemy import extract
+        base_q = base_q.filter(extract("month", Legislation.introduced_date) == month)
+
+    bills = base_q.order_by(Legislation.introduced_date.desc()).all()
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "Bill Number", "Title", "Status", "Introduced Date",
+            "Impact Level", "Impact Score", "Bill Type",
+            "Tags", "Sponsor", "Summary", "External URL",
+        ])
+        for b in bills:
+            try:
+                tags = ", ".join(_json.loads(b.tags)) if b.tags else ""
+            except Exception:
+                tags = b.tags or ""
+            writer.writerow([
+                b.bill_number,
+                b.plain_title or b.title,
+                b.status,
+                b.introduced_date.strftime("%Y-%m-%d") if b.introduced_date else "",
+                b.impact_level or "",
+                b.impact_score or "",
+                b.bill_type or "",
+                tags,
+                b.sponsor or "",
+                b.summary or "",
+                b.external_url or "",
+            ])
+        filename = "tracked-bills.csv" if tracked_only else "legislation.csv"
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    # JSON — includes perspectives
+    def _persp(p: BillPerspective) -> dict:
+        try:
+            args = _json.loads(p.key_arguments) if p.key_arguments else []
+        except Exception:
+            args = []
+        return {
+            "type": p.perspective_type,
+            "position": p.position,
+            "assessment": p.assessment,
+            "key_arguments": args,
+            "concerns": p.concerns,
+        }
+
+    data = []
+    for b in bills:
+        try:
+            tags = _json.loads(b.tags) if b.tags else []
+        except Exception:
+            tags = []
+        try:
+            city_context = _json.loads(b.supplementary_data) if b.supplementary_data else None
+        except Exception:
+            city_context = None
+        data.append({
+            "bill_number": b.bill_number,
+            "title": b.plain_title or b.title,
+            "original_title": b.title,
+            "status": b.status,
+            "introduced_date": b.introduced_date.strftime("%Y-%m-%d") if b.introduced_date else None,
+            "impact_level": b.impact_level,
+            "impact_score": b.impact_score,
+            "bill_type": b.bill_type,
+            "tags": tags,
+            "sponsor": b.sponsor,
+            "summary": b.summary,
+            "full_text": b.full_text,
+            "city_context": city_context,
+            "external_url": b.external_url,
+            "perspectives": [_persp(p) for p in sorted(b.perspectives, key=lambda x: x.perspective_type)],
+        })
+    filename = "tracked-bills.json" if tracked_only else "legislation.json"
+    return StreamingResponse(
+        iter([_json.dumps({"exported": len(data), "bills": data}, indent=2)]),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 @router.get("/search")
 async def search_legislation(
     q: str = Query('', max_length=200),
@@ -354,6 +497,7 @@ async def search_legislation(
     sponsor: str = Query("", max_length=100),
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
+    has_votes: bool = Query(False, description="Only return bills with cached roll call votes"),
     db: Session = Depends(get_db)
 ):
     """Search for legislation with optional filters."""
@@ -367,7 +511,8 @@ async def search_legislation(
         service = LegislationIngestionService(db)
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
-            year=year or None, month=month or None, status=status or None, sponsor=sponsor or None
+            year=year or None, month=month or None, status=status or None, sponsor=sponsor or None,
+            has_votes=has_votes or None,
         )
         return {
             "success": True,
@@ -524,6 +669,46 @@ async def generate_all_perspectives_bulk(
                 failed += 1
 
     return {"success": True, "generated": generated, "failed": failed, "bills_processed": len(bills)}
+
+
+@router.post("/backfill-vote-records")
+async def backfill_vote_records(
+    year: int = Query(0),
+    month: int = Query(0),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Fetch official roll call votes from Legistar for all local bills. Dev-tier only.
+
+    Scoped by year/month if provided. Skips non-Legistar bills.
+    Returns counts of fetched, matched, and upserted records.
+    """
+    q = db.query(Legislation).filter(Legislation.level == "local")
+    q = _apply_date_filters(q, year, month, "", "")
+    bills = q.all()
+
+    total_fetched = total_matched = total_upserted = 0
+    errors = 0
+    for bill in bills:
+        if not bill.id.startswith("legistar_"):
+            continue
+        try:
+            result = await sync_vote_records(bill.id, db)
+            total_fetched  += result["fetched"]
+            total_matched  += result["matched"]
+            total_upserted += result["upserted"]
+        except Exception as e:
+            logger.warning(f"backfill vote records failed for {bill.id}: {e}")
+            errors += 1
+
+    return {
+        "success": True,
+        "bills_processed": len(bills),
+        "fetched": total_fetched,
+        "matched": total_matched,
+        "upserted": total_upserted,
+        "errors": errors,
+    }
 
 
 @router.post("/backfill-city-context")
@@ -807,6 +992,61 @@ async def stream_fetch_news_all(
                 logger.warning(f"stream news fetch failed for {bill.bill_number}: {e}")
                 failed += 1
         yield _sse({"current": total, "total": total, "message": f"Done — {total_articles} articles across {fetched} bills, {failed} failed", "done": True})
+        await asyncio.sleep(0)
+
+    return _sse_stream(gen)
+
+
+@router.get("/stream/backfill-vote-records")
+async def stream_backfill_vote_records(
+    year: int = Query(0),
+    month: int = Query(0),
+    limit: int = Query(100, ge=1, le=8500),
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Stream roll-call vote backfill progress as Server-Sent Events. Dev-tier only."""
+
+    VOTED_STATUSES = {"signed_into_law", "failed", "vetoed"}
+
+    async def gen():
+        q = db.query(Legislation).filter(
+            Legislation.level == "local",
+            Legislation.status.in_(VOTED_STATUSES),
+        )
+        q = _apply_date_filters(q, year, month, "", "")
+        all_bills = [b for b in q.all() if b.id.startswith("legistar_")]
+
+        if force:
+            bills = all_bills[:limit]
+            skip_msg = ""
+        else:
+            already_done = {
+                row.legislation_id
+                for row in db.query(BillVoteRecord.legislation_id).distinct().all()
+            }
+            bills = [b for b in all_bills if b.id not in already_done][:limit]
+            skip_msg = f" ({len(already_done)} already cached, skipping)"
+
+        total = len(bills)
+        yield _sse({"current": 0, "total": total, "message": f"Found {total} voted bills to sync{skip_msg}", "done": False})
+        await asyncio.sleep(0)
+
+        upserted = matched = fetched = errors = 0
+        for i, bill in enumerate(bills, 1):
+            yield _sse({"current": i, "total": total, "message": f"Fetching votes for {bill.bill_number}…", "done": False})
+            await asyncio.sleep(0)
+            try:
+                result = await sync_vote_records(bill.id, db)
+                fetched  += result["fetched"]
+                matched  += result["matched"]
+                upserted += result["upserted"]
+            except Exception as e:
+                logger.warning(f"stream backfill vote records failed for {bill.id}: {e}")
+                errors += 1
+
+        yield _sse({"current": total, "total": total, "message": f"Done — {upserted} votes upserted, {matched} member-matched, {errors} errors", "done": True})
         await asyncio.sleep(0)
 
     return _sse_stream(gen)
@@ -1118,12 +1358,13 @@ async def fetch_bill_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-PIPELINE_STEP_ORDER = ["sponsors", "analyze", "perspectives", "news"]
+PIPELINE_STEP_ORDER = ["sponsors", "analyze", "perspectives", "news", "votes"]
 PIPELINE_STEP_LABELS = {
     "sponsors": "Backfill Sponsors",
     "analyze": "Analyze",
     "perspectives": "Generate Perspectives",
     "news": "Fetch News",
+    "votes": "Sync Vote Records",
 }
 
 
@@ -1291,6 +1532,18 @@ async def stream_pipeline(
                         await asyncio.get_event_loop().run_in_executor(None, lambda b=bill: fetch_and_store_news(b, db))
                     except Exception as e:
                         logger.warning(f"pipeline news fetch failed for {bill.bill_number}: {e}")
+
+            elif step == "votes":
+                local_bills = [b for b in scoped_bills if b.id.startswith("legistar_")]
+                for i, bill in enumerate(local_bills, 1):
+                    overall += 1
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} ({i}/{len(local_bills)})", "done": False})
+                    await asyncio.sleep(0)
+                    try:
+                        await sync_vote_records(bill.id, db)
+                    except Exception as e:
+                        logger.warning(f"pipeline vote sync failed for {bill.bill_number}: {e}")
+                overall += total_bills - len(local_bills)
 
         yield _sse({"current": total_bills * total_steps, "total": total_bills * total_steps, "message": f"Pipeline complete — {total_bills} bills processed", "done": True})
         await asyncio.sleep(0)
@@ -1536,6 +1789,151 @@ async def fetch_legislation_news(
     except Exception as e:
         logger.error(f"Error fetching news for {legislation_id}: {e}")
         raise HTTPException(status_code=500, detail=f"News fetch failed: {e}")
+
+
+@router.get("/{legislation_id}/export")
+async def export_single_bill(
+    legislation_id: str,
+    format: str = Query("json", pattern="^(csv|json)$"),
+    db: Session = Depends(get_db),
+):
+    """Export a single bill as CSV or JSON including full text, summary, and perspectives."""
+    import csv, io
+    leg = (
+        db.query(Legislation)
+        .options(joinedload(Legislation.perspectives))
+        .filter(Legislation.id == legislation_id)
+        .first()
+    )
+    if not leg:
+        raise HTTPException(status_code=404, detail="Bill not found")
+
+    try:
+        tags = _json.loads(leg.tags) if leg.tags else []
+    except Exception:
+        tags = []
+
+    safe_number = leg.bill_number.replace("/", "-").replace(" ", "_")
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Field", "Value"])
+        writer.writerow(["Bill Number",    leg.bill_number])
+        writer.writerow(["Title",          leg.plain_title or leg.title])
+        writer.writerow(["Official Title", leg.title])
+        writer.writerow(["Status",         leg.status or ""])
+        writer.writerow(["Introduced",     leg.introduced_date.strftime("%Y-%m-%d") if leg.introduced_date else ""])
+        writer.writerow(["Impact Level",   leg.impact_level or ""])
+        writer.writerow(["Impact Score",   leg.impact_score or ""])
+        writer.writerow(["Bill Type",      leg.bill_type or ""])
+        writer.writerow(["Tags",           ", ".join(tags)])
+        writer.writerow(["Sponsor",        leg.sponsor or ""])
+        writer.writerow(["Summary",        leg.summary or ""])
+        writer.writerow(["Full Text",      leg.full_text or ""])
+        writer.writerow(["External URL",   leg.external_url or ""])
+        writer.writerow([])
+        writer.writerow(["Perspective Type", "Position", "Assessment", "Key Arguments", "Concerns"])
+        for p in sorted(leg.perspectives, key=lambda x: x.perspective_type):
+            try:
+                args = "; ".join(_json.loads(p.key_arguments)) if p.key_arguments else ""
+            except Exception:
+                args = p.key_arguments or ""
+            writer.writerow([p.perspective_type, p.position or "", p.assessment or "", args, p.concerns or ""])
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{safe_number}.csv"'},
+        )
+
+    # JSON
+    def _persp(p: BillPerspective) -> dict:
+        try:
+            args = _json.loads(p.key_arguments) if p.key_arguments else []
+        except Exception:
+            args = []
+        return {
+            "type": p.perspective_type,
+            "position": p.position,
+            "assessment": p.assessment,
+            "key_arguments": args,
+            "concerns": p.concerns,
+        }
+
+    try:
+        city_context = _json.loads(leg.supplementary_data) if leg.supplementary_data else None
+    except Exception:
+        city_context = None
+
+    data = {
+        "bill_number": leg.bill_number,
+        "title": leg.plain_title or leg.title,
+        "official_title": leg.title,
+        "status": leg.status,
+        "introduced_date": leg.introduced_date.strftime("%Y-%m-%d") if leg.introduced_date else None,
+        "impact_level": leg.impact_level,
+        "impact_score": leg.impact_score,
+        "bill_type": leg.bill_type,
+        "tags": tags,
+        "sponsor": leg.sponsor,
+        "summary": leg.summary,
+        "full_text": leg.full_text,
+        "city_context": city_context,
+        "external_url": leg.external_url,
+        "perspectives": [_persp(p) for p in sorted(leg.perspectives, key=lambda x: x.perspective_type)],
+    }
+    return StreamingResponse(
+        iter([_json.dumps(data, indent=2)]),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{safe_number}.json"'},
+    )
+
+
+@router.get("/{legislation_id}/roll-call")
+async def get_roll_call(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+):
+    """Return official council roll call votes for a bill.
+
+    Returns cached records if present.  Pass ?refresh=true to re-fetch from Legistar.
+    """
+    records = (
+        db.query(BillVoteRecord)
+        .filter(BillVoteRecord.legislation_id == legislation_id)
+        .order_by(BillVoteRecord.voter_name)
+        .all()
+    )
+    return {
+        "success": True,
+        "data": [
+            {
+                "voter_name": r.voter_name,
+                "vote": r.vote,
+                "councilmember_id": r.councilmember_id,
+                "action_date": r.action_date,
+                "result": r.result,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.post("/{legislation_id}/sync-votes")
+async def sync_votes(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Fetch official roll call votes from Legistar and cache them. Dev-tier only."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+    try:
+        result = await sync_vote_records(legislation_id, db)
+        return {"success": True, **result}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{legislation_id}")

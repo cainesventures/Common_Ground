@@ -154,7 +154,97 @@ function SponsorActivityChart({ sponsorName }: { sponsorName: string }) {
   )
 }
 
+function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; memberName: string }) {
+  const [counts, setCounts] = useState<{ support: number; oppose: number }>({ support: 0, oppose: 0 })
+  const [myVote, setMyVote] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const voterToken = (() => {
+    if (typeof window === 'undefined') return ''
+    const key = 'cg_voter_token'
+    let t = localStorage.getItem(key)
+    if (!t) { t = crypto.randomUUID(); localStorage.setItem(key, t) }
+    return t
+  })()
+
+  useEffect(() => {
+    if (!voterToken) return
+    api.getCouncilmemberVotes(memberId, voterToken).then((d) => {
+      if (d?.counts) setCounts(d.counts)
+      if (d?.your_vote !== undefined) setMyVote(d.your_vote)
+    }).catch(() => {})
+  }, [memberId, voterToken])
+
+  const handleVote = async (vote: string) => {
+    if (loading) return
+    setLoading(true)
+    try {
+      const d = await api.castCouncilmemberVote(memberId, vote, voterToken)
+      if (d?.counts) setCounts(d.counts)
+      setMyVote(d?.your_vote ?? vote)
+    } catch { /* ignore */ } finally { setLoading(false) }
+  }
+
+  const total = counts.support + counts.oppose
+  const supportPct = total > 0 ? Math.round((counts.support / total) * 100) : 0
+  const opposePct  = total > 0 ? Math.round((counts.oppose  / total) * 100) : 0
+
+  return (
+    <div className="border rounded-lg p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Citizen Approval</h2>
+        {total > 0 && (
+          <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} {total === 1 ? 'vote' : 'votes'}</span>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        {(['support', 'oppose'] as const).map((v) => {
+          const isSelected = myVote === v
+          const isSupport = v === 'support'
+          return (
+            <button
+              key={v}
+              onClick={() => handleVote(v)}
+              disabled={loading}
+              className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                isSelected
+                  ? isSupport
+                    ? 'bg-green-500 text-white border-green-500'
+                    : 'bg-red-500 text-white border-red-500'
+                  : isSupport
+                    ? 'hover:border-green-400 hover:text-green-700'
+                    : 'hover:border-red-400 hover:text-red-700'
+              }`}
+            >
+              {isSupport ? 'Support' : 'Oppose'}
+              {counts[v] > 0 && (
+                <span className="ml-1.5 opacity-70 text-xs tabular-nums">({counts[v].toLocaleString()})</span>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {total > 0 && (
+        <div className="space-y-1">
+          <div className="h-2 rounded-full overflow-hidden flex bg-muted">
+            {supportPct > 0 && <div className="bg-green-500 transition-all" style={{ width: `${supportPct}%` }} />}
+            {opposePct  > 0 && <div className="bg-red-500 transition-all"   style={{ width: `${opposePct}%`  }} />}
+          </div>
+          <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+            <span className="text-green-600">{supportPct}% support</span>
+            <span className="text-red-600">{opposePct}% oppose</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ContactSection({ member }: { member: any }) {
+  const [phoneCopied, setPhoneCopied] = useState(false)
+
   const subject = 'Philadelphia City Council — Constituent Message'
   const body = `Dear ${member.name},
 
@@ -168,29 +258,42 @@ Sincerely,
 [Your name]
 [Your address]`
 
-  const gmailUrl = member.email
-    ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(member.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  const mailtoUrl = member.email
+    ? `mailto:${member.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
     : null
 
-  if (!gmailUrl && !member.phone && !member.profile_url) return null
+  if (!mailtoUrl && !member.phone && !member.profile_url) return null
+
+  const copyPhone = (e: React.MouseEvent) => {
+    if (!member.phone) return
+    // On mobile, let the tel: link handle it naturally
+    if (navigator.maxTouchPoints > 0) return
+    e.preventDefault()
+    navigator.clipboard.writeText(member.phone).then(() => {
+      setPhoneCopied(true)
+      setTimeout(() => setPhoneCopied(false), 2000)
+    })
+  }
 
   return (
     <div className="border rounded-lg p-5 space-y-3">
       <h2 className="text-sm font-semibold">Contact {member.name}</h2>
       <div className="flex gap-2 flex-wrap">
-        {gmailUrl && (
+        {mailtoUrl && (
           <a
-            href={gmailUrl}
-            target="_blank"
-            rel="noopener noreferrer"
+            href={mailtoUrl}
             className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
           >
-            Send email via Gmail
+            Send email
           </a>
         )}
         {member.phone && (
-          <a href={`tel:${member.phone}`} className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border hover:bg-muted transition-colors">
-            {member.phone}
+          <a
+            href={`tel:${member.phone}`}
+            onClick={copyPhone}
+            className="inline-flex items-center gap-1.5 text-sm px-4 py-2 rounded-lg border hover:bg-muted transition-colors"
+          >
+            {phoneCopied ? 'Copied!' : member.phone}
           </a>
         )}
         {member.profile_url && (
@@ -199,7 +302,98 @@ Sincerely,
           </a>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">Opens a pre-filled Gmail draft. Edit before sending.</p>
+      {mailtoUrl && <p className="text-xs text-muted-foreground">Opens a pre-filled draft in your email app. Edit before sending.</p>}
+    </div>
+  )
+}
+
+// ── Official vote history ──────────────────────────────────────────────────────
+
+const VOTE_BADGE: Record<string, string> = {
+  Yea:     'bg-green-100 text-green-800',
+  Nay:     'bg-red-100 text-red-800',
+  Abstain: 'bg-yellow-100 text-yellow-800',
+  Absent:  'bg-gray-100 text-gray-500',
+}
+
+function VoteHistorySection({ memberId }: { memberId: string }) {
+  const [records, setRecords]   = useState<any[]>([])
+  const [total, setTotal]       = useState(0)
+  const [page, setPage]         = useState(1)
+  const [loading, setLoading]   = useState(true)
+  const PAGE_SIZE = 10
+
+  useEffect(() => {
+    setLoading(true)
+    api.getCouncilmemberVoteHistory(memberId, page, PAGE_SIZE)
+      .then((d) => { setRecords(d?.data ?? []); setTotal(d?.total ?? 0) })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [memberId, page])
+
+  if (!loading && records.length === 0) return null
+
+  return (
+    <div>
+      <h2 className="text-lg font-semibold mb-3">
+        Voting Record
+        {total > 0 && <span className="text-sm font-normal text-muted-foreground ml-2">({total} votes)</span>}
+      </h2>
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-muted animate-pulse" />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {records.map((r) => (
+            <Link
+              key={r.legislation_id}
+              href={`/legislation/${r.legislation_id}`}
+              className="flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:border-primary/60 hover:shadow-sm transition-all group"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-muted-foreground">{r.bill_number}</p>
+                <p className="text-sm leading-snug line-clamp-1 group-hover:text-primary transition-colors mt-0.5">
+                  {r.plain_title}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {r.action_date && (
+                  <span className="text-xs text-muted-foreground hidden sm:block">
+                    {new Date(r.action_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${VOTE_BADGE[r.vote] ?? 'bg-gray-100 text-gray-600'}`}>
+                  {r.vote}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+      {total > PAGE_SIZE && (
+        <div className="flex items-center justify-between mt-3">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+          >
+            ← Previous
+          </button>
+          <span className="text-xs text-muted-foreground">
+            Page {page} of {Math.ceil(total / PAGE_SIZE)}
+          </span>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            disabled={page >= Math.ceil(total / PAGE_SIZE)}
+            className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-40"
+          >
+            Next →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -305,6 +499,9 @@ export default function CouncilmemberDetailClient() {
         </div>
       )}
 
+      {/* Citizen approval vote */}
+      <CouncilmemberVotePanel memberId={member.id} memberName={member.name} />
+
       {/* Contact */}
       <ContactSection member={member} />
 
@@ -331,6 +528,9 @@ export default function CouncilmemberDetailClient() {
           <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
         </div>
       </div>
+
+      {/* Official voting record */}
+      <VoteHistorySection memberId={id} />
 
       {/* Bill activity chart */}
       <SponsorActivityChart sponsorName={member.name} />

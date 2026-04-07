@@ -1,5 +1,6 @@
 """API routes for upcoming City Council hearings."""
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -21,7 +22,7 @@ async def refresh_hearings(
     """Scrape Calendar.aspx and update hearing dates for matching bills. Admin only."""
     from app.services.hearing_service import refresh_upcoming_hearings
     try:
-        result = refresh_upcoming_hearings(db)
+        result = await asyncio.to_thread(refresh_upcoming_hearings, db)
         return {"success": True, **result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

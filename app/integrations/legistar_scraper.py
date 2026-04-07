@@ -652,6 +652,87 @@ class PhilaLegistarScraper:
         logger.info(f"scrape_upcoming_hearings: {len(results)} future meetings found")
         return results
 
+    def scrape_vote_history(self, detail_url: str) -> List[Dict[str, Any]]:
+        """
+        Scrape roll call votes from a bill's detail page on phila.legistar.com.
+
+        Visits the LegislationDetail page, finds Action Details links in the
+        history table, then visits each to extract individual member votes.
+
+        Returns a list of dicts:
+          { voter_name: str, vote: str, action_date: str|None, result: str }
+        """
+        from playwright.sync_api import sync_playwright
+
+        votes: List[Dict[str, Any]] = []
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=self.headless)
+            page = browser.new_page()
+            try:
+                page.goto(detail_url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
+                page.wait_for_selector("#ctl00_ContentPlaceHolder1_lblFile2", timeout=10000)
+
+                # Find all "Action Details" links — Legistar uses onclick="radopen('HistoryDetail.aspx?...')"
+                # rather than href, so we extract the URL from the onclick attribute.
+                action_links = []
+                for a in page.query_selector_all("a[onclick*='HistoryDetail']"):
+                    onclick = a.get_attribute("onclick") or ""
+                    match = re.search(r"radopen\('([^']+)'", onclick)
+                    if not match:
+                        continue
+                    rel = match.group(1)
+                    full = rel if rel.startswith("http") else f"{BASE_URL}/{rel.lstrip('/')}"
+                    # Grab date/result from the parent table row
+                    row_el = a.evaluate_handle("el => el.closest('tr')")
+                    row_text = row_el.as_element().inner_text() if row_el.as_element() else ""
+                    cells = [c.strip() for c in row_text.split("\t") if c.strip()]
+                    action_date = cells[0] if cells else None
+                    result = ""
+                    for cell in cells:
+                        if cell.lower() in ("pass", "fail", "failed", "passed"):
+                            result = cell
+                            break
+                    action_links.append({"url": full, "action_date": action_date, "result": result})
+
+                logger.info(f"scrape_vote_history: found {len(action_links)} action detail link(s) at {detail_url}")
+
+                for link in action_links:
+                    try:
+                        detail_page = browser.new_page()
+                        detail_page.goto(link["url"], wait_until="domcontentloaded", timeout=20000)
+                        detail_page.wait_for_timeout(2000)
+                        # Vote table rows: each has voter name and vote value
+                        for row_el in detail_page.query_selector_all("tr.rgRow, tr.rgAltRow"):
+                            cells = row_el.query_selector_all("td")
+                            if len(cells) < 2:
+                                continue
+                            voter_name = cells[0].inner_text().strip()
+                            vote_value = cells[1].inner_text().strip()
+                            if voter_name and vote_value:
+                                votes.append({
+                                    "voter_name": voter_name,
+                                    "vote": vote_value,
+                                    "action_date": link["action_date"],
+                                    "result": link["result"],
+                                })
+                        detail_page.close()
+                    except Exception as e:
+                        logger.warning(f"scrape_vote_history: failed to scrape {link['url']}: {e}")
+                        continue
+
+            except Exception as e:
+                logger.error(f"scrape_vote_history failed for {detail_url}: {e}")
+            finally:
+                browser.close()
+
+        # Deduplicate — keep last vote per voter name
+        seen: Dict[str, Dict[str, Any]] = {}
+        for v in votes:
+            seen[v["voter_name"]] = v
+        return list(seen.values())
+
     def _parse_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
         matter_id = row.get("matter_id") or row.get("file_number", "unknown")
         intro_date = _parse_date(row.get("intro_date", ""))

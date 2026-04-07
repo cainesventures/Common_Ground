@@ -5,7 +5,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -27,6 +27,9 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
             "display_name": current_user.display_name,
             "avatar_url": current_user.avatar_url,
             "subscription_tier": current_user.subscription_tier,
+            "digest_enabled": current_user.digest_enabled,
+            "digest_frequency": current_user.digest_frequency or "weekly",
+            "digest_min_impact": current_user.digest_min_impact or "low",
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
         },
     }
@@ -167,6 +170,22 @@ async def get_tracked_bill_ids(
 
 class PreferencesUpdate(BaseModel):
     digest_enabled: bool
+    digest_frequency: str = "weekly"
+    digest_min_impact: str = "low"
+
+    @field_validator("digest_frequency")
+    @classmethod
+    def valid_frequency(cls, v: str) -> str:
+        if v not in ("daily", "weekly", "never"):
+            raise ValueError("digest_frequency must be 'daily', 'weekly', or 'never'")
+        return v
+
+    @field_validator("digest_min_impact")
+    @classmethod
+    def valid_impact(cls, v: str) -> str:
+        if v not in ("low", "medium", "high"):
+            raise ValueError("digest_min_impact must be 'low', 'medium', or 'high'")
+        return v
 
 
 @router.patch("/me/preferences")
@@ -175,10 +194,17 @@ async def update_preferences(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update user preferences (digest opt-in, etc.)."""
+    """Update user notification preferences."""
     current_user.digest_enabled = body.digest_enabled
+    current_user.digest_frequency = body.digest_frequency
+    current_user.digest_min_impact = body.digest_min_impact
     db.commit()
-    return {"success": True, "digest_enabled": current_user.digest_enabled}
+    return {
+        "success": True,
+        "digest_enabled": current_user.digest_enabled,
+        "digest_frequency": current_user.digest_frequency,
+        "digest_min_impact": current_user.digest_min_impact,
+    }
 
 
 # ── Email Digest (admin trigger) ──────────────────────────────────────────────

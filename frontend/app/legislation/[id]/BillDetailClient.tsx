@@ -79,6 +79,143 @@ function HearingBanner({ date, time, body, location, billTitle, billNumber }: {
   )
 }
 
+// ── Roll call vote section ────────────────────────────────────────────────────
+
+const VOTE_COLORS: Record<string, string> = {
+  Yea:     'bg-green-100 text-green-800',
+  Nay:     'bg-red-100 text-red-800',
+  Abstain: 'bg-yellow-100 text-yellow-800',
+  Absent:  'bg-gray-100 text-gray-600',
+}
+
+function RollCallSection({ legislationId }: { legislationId: string }) {
+  const [records, setRecords] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.getRollCall(legislationId)
+      .then((d) => setRecords(d?.data ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [legislationId])
+
+  if (loading) return null
+  if (records.length === 0) return null
+
+  const yeas    = records.filter((r) => r.vote === 'Yea').length
+  const nays    = records.filter((r) => r.vote === 'Nay').length
+  const abstain = records.filter((r) => r.vote === 'Abstain').length
+  const absent  = records.filter((r) => r.vote === 'Absent').length
+  const result  = records[0]?.result
+
+  return (
+    <div className="border rounded-lg p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold">Council Vote</h2>
+        {result && (
+          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+            result.toLowerCase().includes('pass') ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+          }`}>
+            {result}
+          </span>
+        )}
+      </div>
+      <div className="flex gap-4 text-sm">
+        <span className="text-green-700 font-semibold">{yeas} Yea</span>
+        <span className="text-red-700 font-semibold">{nays} Nay</span>
+        {abstain > 0 && <span className="text-yellow-700">{abstain} Abstain</span>}
+        {absent > 0  && <span className="text-gray-500">{absent} Absent</span>}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {records.map((r) => (
+          <div key={r.voter_name} className="flex items-center justify-between text-xs border rounded px-2 py-1">
+            <span className="truncate text-foreground/80">
+              {r.councilmember_id
+                ? <a href={`/councilmembers/${r.councilmember_id}`} className="hover:underline hover:text-primary">{formatVoterName(r.voter_name)}</a>
+                : formatVoterName(r.voter_name)
+              }
+            </span>
+            <span className={`ml-2 shrink-0 px-1.5 py-0.5 rounded font-medium ${VOTE_COLORS[r.vote] ?? 'bg-gray-100 text-gray-600'}`}>
+              {r.vote}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function formatVoterName(raw: string): string {
+  // Convert "Last, First" → "First Last"
+  const parts = raw.split(',')
+  if (parts.length === 2) return `${parts[1].trim()} ${parts[0].trim()}`
+  return raw
+}
+
+// ── Citizen vs rep callout ────────────────────────────────────────────────────
+
+const CITIZEN_TO_LEGISTAR: Record<string, string> = {
+  support: 'Yea',
+  oppose:  'Nay',
+}
+
+function RepVoteCallout({ legislationId, members, yourVote }: {
+  legislationId: string
+  members: any[]
+  yourVote: string | null
+}) {
+  const [repVote, setRepVote]   = useState<string | null>(null)
+  const [repName, setRepName]   = useState<string | null>(null)
+  const [repId, setRepId]       = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!yourVote || members.length === 0) return
+    const savedAddress = typeof window !== 'undefined' ? localStorage.getItem('cg_user_address') : null
+    if (!savedAddress) return
+
+    Promise.all([
+      resolveCouncilmember(savedAddress, members),
+      api.getRollCall(legislationId),
+    ]).then(([result, rollCallData]) => {
+      if (typeof result === 'string') return
+      const rollCall: any[] = rollCallData?.data ?? []
+      const memberLastName = result.member.name.split(' ').pop()?.toLowerCase() ?? ''
+      const matchedVote = rollCall.find((r) => {
+        const lastName = r.voter_name.split(',')[0].trim().toLowerCase()
+        return lastName === memberLastName
+      })
+      if (matchedVote) {
+        setRepName(result.member.name)
+        setRepId(result.member.id)
+        setRepVote(matchedVote.vote)
+      }
+    }).catch(() => {})
+  }, [legislationId, members, yourVote])
+
+  if (!repVote || !yourVote || !repName) return null
+
+  const citizenLegistar = CITIZEN_TO_LEGISTAR[yourVote]
+  const agree = citizenLegistar === repVote
+
+  return (
+    <div className={`border rounded-lg p-4 flex items-start gap-3 ${agree ? 'border-green-300 bg-green-50' : 'border-amber-300 bg-amber-50'}`}>
+      <div className="text-lg">{agree ? '✓' : '⚠'}</div>
+      <div className="text-sm">
+        <p className={`font-semibold ${agree ? 'text-green-900' : 'text-amber-900'}`}>
+          {agree ? 'You and your rep agree on this bill' : 'You and your rep disagree on this bill'}
+        </p>
+        <p className={`mt-0.5 ${agree ? 'text-green-800' : 'text-amber-800'}`}>
+          You <span className="font-medium capitalize">{yourVote}d</span> this bill.{' '}
+          <Link href={`/councilmembers/${repId}`} className="font-medium hover:underline">
+            {repName}
+          </Link>{' '}
+          voted <span className="font-medium">{repVote}</span>.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ── Point-in-polygon helpers (shared with councilmembers list) ────────────────
 function pipTest(lat: number, lng: number, ring: number[][]): boolean {
   let inside = false
@@ -213,8 +350,7 @@ Sincerely,
 [Your address]`
 
   if (member.email) {
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(member.email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
-    window.open(url, '_blank')
+    window.open(`mailto:${member.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`)
   } else if (member.profile_url) {
     window.open(member.profile_url, '_blank')
   }
@@ -418,6 +554,7 @@ export default function BillDetailClient() {
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
   const [isAdmin, setIsAdmin] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [yourVote, setYourVote] = useState<string | null>(null)
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
@@ -516,6 +653,32 @@ export default function BillDetailClient() {
             }
           </div>
           <div className="flex items-center gap-1 shrink-0 mt-1">
+            <div className="relative group">
+              <button
+                className="p-1.5 rounded-lg border-transparent text-muted-foreground hover:text-primary hover:border-muted border transition-colors"
+                title="Export bill"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+              <div className="absolute right-0 top-full mt-1 hidden group-hover:flex flex-col bg-background border rounded-lg shadow-md overflow-hidden z-10 min-w-[80px]">
+                <a
+                  href={`/api/legislation/${id}/export?format=csv`}
+                  download
+                  className="px-3 py-1.5 text-xs hover:bg-muted transition-colors"
+                >
+                  CSV
+                </a>
+                <a
+                  href={`/api/legislation/${id}/export?format=json`}
+                  download
+                  className="px-3 py-1.5 text-xs hover:bg-muted transition-colors border-t"
+                >
+                  JSON
+                </a>
+              </div>
+            </div>
             <button
               onClick={handleShare}
               className="p-1.5 rounded-lg border-transparent text-muted-foreground hover:text-primary hover:border-muted border transition-colors"
@@ -588,6 +751,9 @@ export default function BillDetailClient() {
         />
       )}
 
+      {/* Official Council Roll Call */}
+      <RollCallSection legislationId={id} />
+
       {/* Summary */}
       {leg.summary ? (
         <div className="border rounded-lg p-5 space-y-1">
@@ -656,7 +822,10 @@ export default function BillDetailClient() {
       )}
 
       {/* Vote */}
-      <VotePanel billId={id} onCountsChange={setVoteCounts} />
+      <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} />
+
+      {/* Citizen vs rep callout */}
+      <RepVoteCallout legislationId={id} members={members} yourVote={yourVote} />
 
       {/* Combined sentiment */}
       <CombinedSentimentBar billId={id} voteCounts={voteCounts} />
@@ -924,7 +1093,7 @@ function _getOrCreateVoterToken(): string {
   return token
 }
 
-function VotePanel({ billId, onCountsChange }: { billId: string; onCountsChange?: (c: Record<string, number>) => void }) {
+function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; onCountsChange?: (c: Record<string, number>) => void; onVoteChange?: (v: string | null) => void }) {
   const [counts, setCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -939,9 +1108,9 @@ function VotePanel({ billId, onCountsChange }: { billId: string; onCountsChange?
     if (!voterToken) return
     api.getVotes(billId, voterToken).then((data) => {
       if (data?.counts?.total) updateCounts(data.counts.total)
-      if (data?.your_vote !== undefined) setMyVote(data.your_vote)
+      if (data?.your_vote !== undefined) { setMyVote(data.your_vote); onVoteChange?.(data.your_vote) }
     }).catch(() => {})
-  }, [billId, voterToken, updateCounts])
+  }, [billId, voterToken, updateCounts, onVoteChange])
 
   const handleVote = async (vote: string) => {
     if (loading) return
@@ -949,7 +1118,9 @@ function VotePanel({ billId, onCountsChange }: { billId: string; onCountsChange?
     try {
       const data = await api.castVote(billId, vote, voterToken)
       if (data?.counts?.total) updateCounts(data.counts.total)
-      setMyVote(data?.your_vote ?? vote)
+      const v = data?.your_vote ?? vote
+      setMyVote(v)
+      onVoteChange?.(v)
       toast.success(`Vote cast: ${vote}`)
     } catch {
       toast.error('Failed to cast vote')

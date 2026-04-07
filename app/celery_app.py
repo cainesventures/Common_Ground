@@ -20,13 +20,7 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,  # results kept for 1 hour
 
-    # ── Beat schedule: auto-generate debates for new legislation ──────────────
-    beat_schedule={
-        "auto-generate-debates": {
-            "task": "app.tasks.auto_generate_debates",
-            "schedule": crontab(minute=0),  # top of every hour
-            "kwargs": {"max_debates": 1, "lookback_hours": 48},
-        },
-    },
+    # Beat schedule disabled — scheduled ingest will run via server cron after deployment
+    beat_schedule={},
     timezone="UTC",
 )

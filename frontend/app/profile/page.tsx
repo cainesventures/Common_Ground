@@ -19,8 +19,10 @@ export default function ProfilePage() {
   const [user, setUser] = useState<any>(null)
   const [votes, setVotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [digestEnabled, setDigestEnabled] = useState(false)
-  const [digestSaving, setDigestSaving] = useState(false)
+  const [digestEnabled,   setDigestEnabled]   = useState(false)
+  const [digestFrequency, setDigestFrequency] = useState('weekly')
+  const [digestMinImpact, setDigestMinImpact] = useState('low')
+  const [digestSaving,    setDigestSaving]    = useState(false)
 
   useEffect(() => {
     if (!isLoggedIn()) {
@@ -41,16 +43,24 @@ export default function ProfilePage() {
       const voteData = voteResult.status === 'fulfilled' ? voteResult.value : null
       setUser(meData?.user ?? null)
       setDigestEnabled(meData?.user?.digest_enabled ?? false)
+      setDigestFrequency(meData?.user?.digest_frequency ?? 'weekly')
+      setDigestMinImpact(meData?.user?.digest_min_impact ?? 'low')
       setVotes(voteData?.votes ?? [])
     }).finally(() => setLoading(false))
   }, [router])
 
-  const handleDigestToggle = async () => {
-    const next = !digestEnabled
+  const savePreferences = async (overrides: { digest_enabled?: boolean; digest_frequency?: string; digest_min_impact?: string } = {}) => {
     setDigestSaving(true)
+    const prefs = {
+      digest_enabled:   overrides.digest_enabled   ?? digestEnabled,
+      digest_frequency: overrides.digest_frequency ?? digestFrequency,
+      digest_min_impact: overrides.digest_min_impact ?? digestMinImpact,
+    }
     try {
-      await api.updatePreferences({ digest_enabled: next })
-      setDigestEnabled(next)
+      await api.updatePreferences(prefs)
+      if (overrides.digest_enabled   !== undefined) setDigestEnabled(overrides.digest_enabled)
+      if (overrides.digest_frequency !== undefined) setDigestFrequency(overrides.digest_frequency)
+      if (overrides.digest_min_impact !== undefined) setDigestMinImpact(overrides.digest_min_impact)
     } catch { /* ignore */ } finally {
       setDigestSaving(false)
     }
@@ -96,26 +106,65 @@ export default function ProfilePage() {
       </div>
 
       {/* Email Preferences */}
-      <div className="border rounded-lg px-4 py-3 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold">Weekly Digest</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Get a weekly email summary of new Philadelphia City Council bills with AI perspectives.
-          </p>
+      <div className="border rounded-lg divide-y">
+        {/* Toggle */}
+        <div className="px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold">Email Digest</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Get a summary of new Philadelphia City Council bills with AI perspectives.
+            </p>
+          </div>
+          <button
+            onClick={() => savePreferences({ digest_enabled: !digestEnabled })}
+            disabled={digestSaving}
+            className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              digestEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
+            } ${digestSaving ? 'opacity-50' : ''}`}
+            role="switch"
+            aria-checked={digestEnabled}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              digestEnabled ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
         </div>
-        <button
-          onClick={handleDigestToggle}
-          disabled={digestSaving}
-          className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-            digestEnabled ? 'bg-primary' : 'bg-muted-foreground/30'
-          } ${digestSaving ? 'opacity-50' : ''}`}
-          role="switch"
-          aria-checked={digestEnabled}
-        >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-            digestEnabled ? 'translate-x-6' : 'translate-x-1'
-          }`} />
-        </button>
+
+        {/* Frequency */}
+        <div className="px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Frequency</p>
+            <p className="text-xs text-muted-foreground mt-0.5">How often to receive the digest</p>
+          </div>
+          <select
+            value={digestFrequency}
+            disabled={!digestEnabled || digestSaving}
+            onChange={(e) => savePreferences({ digest_frequency: e.target.value })}
+            className="h-8 rounded border bg-background px-2 text-sm disabled:opacity-40"
+          >
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="never">Never</option>
+          </select>
+        </div>
+
+        {/* Min impact */}
+        <div className="px-4 py-3 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">Minimum impact level</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Only include bills at or above this impact</p>
+          </div>
+          <select
+            value={digestMinImpact}
+            disabled={!digestEnabled || digestSaving}
+            onChange={(e) => savePreferences({ digest_min_impact: e.target.value })}
+            className="h-8 rounded border bg-background px-2 text-sm disabled:opacity-40"
+          >
+            <option value="low">Low and above</option>
+            <option value="medium">Medium and above</option>
+            <option value="high">High only</option>
+          </select>
+        </div>
       </div>
 
       <div>

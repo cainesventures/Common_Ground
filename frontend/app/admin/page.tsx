@@ -216,6 +216,12 @@ export default function AdminPage() {
         <p className="text-muted-foreground mt-1">Manage bill ingestion, analysis pipeline, and utilities.</p>
       </div>
 
+      {/* ── Section 0: System Status ──────────────────────────────── */}
+      <section className="space-y-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">System Status</h2>
+        <SystemStatusSection />
+      </section>
+
       {/* ── Section A: Ingestion ───────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Ingestion</h2>
@@ -262,19 +268,37 @@ export default function AdminPage() {
           {scrapeResult && (
             <p className={`text-sm ${scrapeResult.ok ? 'text-green-600' : 'text-destructive'}`}>{scrapeResult.message}</p>
           )}
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={scrapeRunning} onClick={async () => {
-            setScrapeRunning(true); setScrapeResult(null)
-            try {
-              const data = await api.scrapeCouncilmembers()
-              setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
-            } catch (err: any) {
-              setScrapeResult({ ok: false, message: err.message })
-            } finally {
-              setScrapeRunning(false)
-            }
-          }}>
-            {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={scrapeRunning} onClick={async () => {
+              setScrapeRunning(true); setScrapeResult(null)
+              try {
+                const data = await api.scrapeCouncilmembers()
+                setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
+              } catch (err: any) {
+                setScrapeResult({ ok: false, message: err.message })
+              } finally {
+                setScrapeRunning(false)
+              }
+            }}>
+              {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
+            </Button>
+            <Button variant="outline" disabled={scrapeRunning} onClick={async () => {
+              setScrapeRunning(true); setScrapeResult(null)
+              try {
+                const data = await api.backfillCouncilmemberEmails()
+                const msg = data?.updated === 0
+                  ? `All members already have emails (checked ${data?.checked ?? 0}).`
+                  : `Updated ${data?.updated} email${data?.updated !== 1 ? 's' : ''} · still missing: ${(data?.still_missing ?? []).join(', ') || 'none'}.`
+                setScrapeResult({ ok: true, message: msg })
+              } catch (err: any) {
+                setScrapeResult({ ok: false, message: err.message })
+              } finally {
+                setScrapeRunning(false)
+              }
+            }}>
+              {scrapeRunning ? 'Running…' : 'Backfill Missing Emails'}
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -293,8 +317,107 @@ export default function AdminPage() {
         <CandidateManagementSection />
         <BackfillSponsorsSection />
         <BackfillCityContextSection />
+        <BackfillVoteRecordsSection />
         <SyncStatusesSection />
       </section>
+    </div>
+  )
+}
+
+// ── System Status ─────────────────────────────────────────────────────────────
+function SystemStatusSection() {
+  const [metrics, setMetrics] = useState<any>(null)
+  const [health, setHealth] = useState<{ db: string; ai_provider: string; ai_model: string } | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const [m, h] = await Promise.allSettled([api.getMetrics(), api.getSystemHealth()])
+      if (m.status === 'fulfilled') setMetrics(m.value?.metrics ?? null)
+      if (h.status === 'fulfilled') setHealth(h.value ?? null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
+  const unanalyzed = metrics ? metrics.bills.total - metrics.bills.analyzed : null
+  const pct = metrics?.bills?.analysis_rate_pct ?? 0
+
+  const statusColor = (val: number) => {
+    if (val === 0) return 'text-green-600'
+    if (val < 100) return 'text-yellow-600'
+    return 'text-red-600'
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Live snapshot of pipeline health and AI config.</p>
+        <Button variant="ghost" size="sm" onClick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</Button>
+      </div>
+
+      {metrics ? (
+        <>
+          {/* ── Key numbers ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="border rounded-lg p-3 text-center">
+              <p className="text-2xl font-bold">{metrics.bills.total.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Total Bills</p>
+            </div>
+            <div className="border rounded-lg p-3 text-center">
+              <p className={`text-2xl font-bold ${statusColor(unanalyzed ?? 0)}`}>
+                {unanalyzed?.toLocaleString() ?? '–'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">Unanalyzed</p>
+            </div>
+            <div className="border rounded-lg p-3 text-center">
+              <p className="text-2xl font-bold">{metrics.perspectives.total.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Perspectives</p>
+            </div>
+            <div className="border rounded-lg p-3 text-center">
+              <p className="text-2xl font-bold">{metrics.users.total.toLocaleString()}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Users</p>
+            </div>
+          </div>
+
+          {/* ── Analysis coverage bar ── */}
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Analysis coverage</span>
+              <span className="tabular-nums">{metrics.bills.analyzed.toLocaleString()} / {metrics.bills.total.toLocaleString()} ({pct}%)</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${pct}%`, backgroundColor: pct === 100 ? '#22c55e' : pct > 50 ? '#3b82f6' : '#f59e0b' }}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">{loading ? 'Loading…' : 'Failed to load metrics.'}</p>
+      )}
+
+      {/* ── AI + DB config ── */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span>
+          <span className="text-muted-foreground">DB: </span>
+          <span className={health?.db === 'ok' ? 'text-green-600 font-medium' : 'text-red-600 font-medium'}>
+            {health?.db ?? '–'}
+          </span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">AI provider: </span>
+          <span className="font-mono">{health?.ai_provider ?? '–'}</span>
+        </span>
+        <span>
+          <span className="text-muted-foreground">Model: </span>
+          <span className="font-mono">{health?.ai_model ?? '–'}</span>
+        </span>
+      </div>
     </div>
   )
 }
@@ -786,6 +909,7 @@ function MetricsSection({ filter }: { filter?: { year: string; month: string; da
           {statTile('Digest Opt-ins', metrics.users.digest_opted_in)}
           {statTile('With News', metrics.bills.with_news)}
           {statTile('Plain Titles', metrics.bills.with_plain_titles)}
+          {statTile('Vote Records', metrics.bills.with_vote_records ?? 0, 'bills backfilled')}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">{loading ? 'Loading metrics…' : 'Failed to load.'}</p>
@@ -1074,6 +1198,51 @@ function SyncStatusesSection() {
     </div>
   )
 }
+
+function BackfillVoteRecordsSection() {
+  const { progress, running, start, stop } = useStreamProgress()
+  const [limit, setLimit] = useState(100)
+  const [force, setForce] = useState(false)
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Backfill Vote Records</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Fetch official roll call votes from Legistar for all local bills and cache them in the database.
+        </p>
+      </div>
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground shrink-0">Bill limit:</label>
+          <input
+            type="number"
+            min={1}
+            max={8500}
+            value={limit}
+            disabled={running}
+            onChange={e => setLimit(Math.max(1, Math.min(8500, Number(e.target.value))))}
+            className="w-24 border rounded px-2 py-1 text-sm"
+          />
+          <span className="text-xs text-muted-foreground">(max 8500)</span>
+        </div>
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
+          <input
+            type="checkbox"
+            checked={force}
+            disabled={running}
+            onChange={e => setForce(e.target.checked)}
+          />
+          Force re-fetch
+        </label>
+      </div>
+      <ProgressBar progress={progress} running={running} onStop={stop} />
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start(`/api/legislation/stream/backfill-vote-records?limit=${limit}&force=${force}`)}>
+        {running ? 'Fetching votes…' : 'Backfill Vote Records'}
+      </Button>
+    </div>
+  )
+}
+
 
 function BackfillCityContextSection() {
   const { progress, running, start, stop } = useStreamProgress()

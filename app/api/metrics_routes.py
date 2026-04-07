@@ -3,9 +3,10 @@
 import logging
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.models import Legislation, BillPerspective, User, BillTracking
+from app.models import Legislation, BillPerspective, User, BillTracking, BillVoteRecord
 from app.models.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,24 @@ def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
         except ValueError:
             pass
     return q
+
+
+@router.get("/health")
+async def get_system_health(db: Session = Depends(get_db)):
+    """Return system status: DB connectivity and current AI provider config."""
+    from app.config import settings
+
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "ok"
+    except Exception:
+        db_status = "error"
+
+    return {
+        "db": db_status,
+        "ai_provider": settings.ai_provider,
+        "ai_model": settings.ai_model,
+    }
 
 
 @router.get("")
@@ -57,6 +76,7 @@ async def get_metrics(
     ).count()
 
     # Global counts (not date-scoped)
+    bills_with_votes = db.query(BillVoteRecord.legislation_id).distinct().count()
     perspectives    = db.query(BillPerspective).count()
     users           = db.query(User).count()
     trackings       = db.query(BillTracking).count()
@@ -76,6 +96,7 @@ async def get_metrics(
                 "analyzed": analyzed_bills,
                 "with_plain_titles": with_plain_titles,
                 "with_news": bills_with_news,
+                "with_vote_records": bills_with_votes,
                 "analysis_rate_pct": round(analyzed_bills / total_bills * 100) if total_bills else 0,
                 "scoped": bool(scoped),
             },

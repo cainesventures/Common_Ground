@@ -240,6 +240,47 @@ async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
     return results
 
 
+async def backfill_missing_emails(db: Session) -> dict:
+    """Scrape email only for council members where email IS NULL."""
+    from playwright.async_api import async_playwright
+
+    missing = db.query(Councilmember).filter(Councilmember.email.is_(None)).all()
+    if not missing:
+        return {"checked": 0, "updated": 0, "still_missing": []}
+
+    updated = []
+    still_missing = []
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        for member in missing:
+            if not member.profile_url:
+                still_missing.append(member.name)
+                continue
+            try:
+                await page.goto(member.profile_url, wait_until="networkidle", timeout=30000)
+                email_link = await page.query_selector("a[href^='mailto:']")
+                if email_link:
+                    href = await email_link.get_attribute("href") or ""
+                    email = href.replace("mailto:", "").strip()
+                    if email:
+                        member.email = email
+                        member.updated_at = datetime.utcnow()
+                        db.commit()
+                        updated.append(member.name)
+                        logger.info(f"  Backfilled email for {member.name}: {email}")
+                        continue
+            except Exception as e:
+                logger.warning(f"Failed email scrape for {member.name}: {e}")
+            still_missing.append(member.name)
+
+        await browser.close()
+
+    return {"checked": len(missing), "updated": len(updated), "still_missing": still_missing}
+
+
 def get_all_councilmembers(db: Session) -> list[Councilmember]:
     return db.query(Councilmember).order_by(Councilmember.district, Councilmember.name).all()
 

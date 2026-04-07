@@ -6,6 +6,39 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 
+function ExportButtons() {
+  const [loadingCsv,  setLoadingCsv]  = useState(false)
+  const [loadingJson, setLoadingJson] = useState(false)
+
+  const doExport = async (format: 'csv' | 'json') => {
+    const setLoading = format === 'csv' ? setLoadingCsv : setLoadingJson
+    setLoading(true)
+    try {
+      await api.exportLegislation({ format, trackedOnly: true })
+    } catch { /* ignore */ } finally { setLoading(false) }
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-xs text-muted-foreground">Export:</span>
+      <button
+        onClick={() => doExport('csv')}
+        disabled={loadingCsv}
+        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
+      >
+        {loadingCsv ? '…' : 'CSV'}
+      </button>
+      <button
+        onClick={() => doExport('json')}
+        disabled={loadingJson}
+        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
+      >
+        {loadingJson ? '…' : 'JSON'}
+      </button>
+    </div>
+  )
+}
+
 const IMPACT_COLORS: Record<string, string> = {
   high:   'bg-red-100 text-red-800',
   medium: 'bg-yellow-100 text-yellow-800',
@@ -64,11 +97,14 @@ export default function MyBillsPage() {
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">My Saved Bills</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Bills you&apos;ve bookmarked for easy access.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">My Saved Bills</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Bills you&apos;ve bookmarked for easy access.
+          </p>
+        </div>
+        {bills.length > 0 && <ExportButtons />}
       </div>
 
       {bills.length === 0 ? (

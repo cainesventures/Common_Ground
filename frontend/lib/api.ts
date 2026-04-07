@@ -102,8 +102,8 @@ export const api = {
     return apiFetch(`/api/legislation/month-counts?${p}`)
   },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag = '', impact = '', year = 0, month = 0, status = '', sponsor = '') =>
-    apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${status ? `&status=${encodeURIComponent(status)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}`),
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag = '', impact = '', year = 0, month = 0, status = '', sponsor = '', hasVotes = false) =>
+    apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${status ? `&status=${encodeURIComponent(status)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}`),
 
   tagAllBills: () =>
     apiFetch('/api/legislation/tag-all', { method: 'POST' }),
@@ -138,12 +138,77 @@ export const api = {
   getTrackedBills: () => apiFetch('/api/users/me/tracked-bills'),
   getTrackedBillIds: () => apiFetch('/api/users/me/tracked-bill-ids'),
   toggleTrackBill: (id: string) => apiFetch(`/api/users/me/track/${id}`, { method: 'POST' }),
-  updatePreferences: (prefs: { digest_enabled: boolean }) =>
+  updatePreferences: (prefs: { digest_enabled: boolean; digest_frequency?: string; digest_min_impact?: string }) =>
     apiFetch('/api/users/me/preferences', { method: 'PATCH', body: JSON.stringify(prefs) }),
   sendDigest: (lookbackDays = 7) =>
     apiFetch(`/api/users/send-digest?lookback_days=${lookbackDays}`, { method: 'POST' }),
 
+  // ── Export ───────────────────────────────────────────────────────────────
+  exportLegislation: async (params: {
+    format: 'csv' | 'json'
+    analyzed?: string
+    tag?: string
+    impact?: string
+    status?: string
+    sponsor?: string
+    year?: number
+    month?: number
+    trackedOnly?: boolean
+  }): Promise<void> => {
+    const p = new URLSearchParams({ format: params.format })
+    if (params.analyzed)    p.set('analyzed',      params.analyzed)
+    if (params.tag)         p.set('tag',            params.tag)
+    if (params.impact)      p.set('impact',         params.impact)
+    if (params.status)      p.set('status',         params.status)
+    if (params.sponsor)     p.set('sponsor',        params.sponsor)
+    if (params.year)        p.set('year',           String(params.year))
+    if (params.month)       p.set('month',          String(params.month))
+    if (params.trackedOnly) p.set('tracked_only',   'true')
+    const token = getToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`/api/legislation/export?${p.toString()}`, { headers })
+    if (!res.ok) throw new Error('Export failed')
+    const blob = await res.blob()
+    const filename = params.trackedOnly
+      ? `tracked-bills.${params.format}`
+      : `legislation.${params.format}`
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  },
+
+  backfillCouncilmemberEmails: () =>
+    apiFetch('/api/councilmembers/backfill-emails', { method: 'POST' }),
+
+  // ── Councilmember votes ───────────────────────────────────────────────────
+  getCouncilmemberVotes: (memberId: string, voterToken: string) =>
+    apiFetch(`/api/councilmembers/${memberId}/votes?voter_token=${encodeURIComponent(voterToken)}`),
+  castCouncilmemberVote: (memberId: string, vote: string, voterToken: string) =>
+    apiFetch(`/api/councilmembers/${memberId}/vote`, {
+      method: 'POST',
+      body: JSON.stringify({ vote, voter_token: voterToken }),
+    }),
+  getCouncilmemberVoteHistory: (memberId: string, page = 1, pageSize = 20) =>
+    apiFetch(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
+
+  // ── Official roll call votes ──────────────────────────────────────────────
+  getRollCall: (legislationId: string) =>
+    apiFetch(`/api/legislation/${legislationId}/roll-call`),
+  syncVotes: (legislationId: string) =>
+    apiFetch(`/api/legislation/${legislationId}/sync-votes`, { method: 'POST' }),
+  backfillVoteRecords: (year?: number, month?: number) => {
+    const p = new URLSearchParams()
+    if (year)  p.set('year',  String(year))
+    if (month) p.set('month', String(month))
+    const qs = p.toString()
+    return apiFetch(`/api/legislation/backfill-vote-records${qs ? `?${qs}` : ''}`, { method: 'POST' })
+  },
+
   // ── Metrics ───────────────────────────────────────────────────────────────
+  getSystemHealth: () => apiFetch('/api/metrics/health'),
+
   getMetrics: (params?: { year?: string; month?: string; date_from?: string; date_to?: string }) => {
     const p = new URLSearchParams()
     if (params?.year)      p.set('year',      params.year)

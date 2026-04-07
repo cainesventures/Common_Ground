@@ -3,18 +3,23 @@
 import json
 import logging
 import urllib.request
+import uuid
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, field_validator
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.database import get_db
-from app.auth import require_dev_tier
+from app.models import CouncilmemberVote, BillVoteRecord, Legislation
+from app.auth import require_dev_tier, get_optional_user
 from app.services.councilmember_service import (
     get_all_councilmembers,
     get_councilmember,
     get_councilmember_bills,
     scrape_and_upsert_councilmembers,
+    backfill_missing_emails,
 )
 
 # Known Philadelphia City Council district GeoJSON sources (tried in order)
@@ -68,6 +73,20 @@ async def get_districts_geojson():
             logger.warning(f"District GeoJSON source failed ({url}): {e}")
 
     raise HTTPException(status_code=502, detail=f"Could not fetch district boundaries: {last_error}")
+
+
+@router.post("/backfill-emails")
+async def backfill_emails(
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Scrape email addresses for council members that are currently missing one."""
+    try:
+        result = await backfill_missing_emails(db)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Email backfill failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/scrape")
@@ -168,4 +187,145 @@ async def get_member(
                 for b in bills
             ],
         },
+    }
+
+
+# ── Council member approval votes ────────────────────────────────────────────
+
+class CouncilmemberVoteRequest(BaseModel):
+    vote: str
+    voter_token: str
+
+    @field_validator("vote")
+    @classmethod
+    def valid_vote(cls, v: str) -> str:
+        if v not in ("support", "oppose"):
+            raise ValueError("vote must be 'support' or 'oppose'")
+        return v
+
+    @field_validator("voter_token")
+    @classmethod
+    def valid_token(cls, v: str) -> str:
+        try:
+            uuid.UUID(v)
+        except ValueError:
+            raise ValueError("voter_token must be a valid UUID")
+        return v
+
+
+def _cm_vote_counts(db: Session, councilmember_id: str) -> dict:
+    rows = (
+        db.query(CouncilmemberVote.vote, func.count(CouncilmemberVote.id))
+        .filter(CouncilmemberVote.councilmember_id == councilmember_id)
+        .group_by(CouncilmemberVote.vote)
+        .all()
+    )
+    counts = {"support": 0, "oppose": 0}
+    for vote, n in rows:
+        if vote in counts:
+            counts[vote] = n
+    return counts
+
+
+@router.get("/{member_id}/votes")
+async def get_member_votes(
+    member_id: str,
+    voter_token: str = Query(""),
+    db: Session = Depends(get_db),
+):
+    """Get support/oppose vote counts for a council member and the caller's current vote."""
+    counts = _cm_vote_counts(db, member_id)
+    your_vote = None
+    if voter_token:
+        row = (
+            db.query(CouncilmemberVote)
+            .filter(
+                CouncilmemberVote.councilmember_id == member_id,
+                CouncilmemberVote.voter_token == voter_token,
+            )
+            .first()
+        )
+        if row:
+            your_vote = row.vote
+    return {"success": True, "counts": counts, "your_vote": your_vote}
+
+
+@router.post("/{member_id}/vote")
+async def cast_member_vote(
+    member_id: str,
+    body: CouncilmemberVoteRequest,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_optional_user),
+):
+    """Cast or update a support/oppose vote on a council member."""
+    from app.services.councilmember_service import get_councilmember
+    if not get_councilmember(db, member_id):
+        raise HTTPException(status_code=404, detail="Council member not found")
+
+    existing = (
+        db.query(CouncilmemberVote)
+        .filter(
+            CouncilmemberVote.councilmember_id == member_id,
+            CouncilmemberVote.voter_token == body.voter_token,
+        )
+        .first()
+    )
+    if existing:
+        existing.vote = body.vote
+        existing.updated_at = datetime.utcnow()
+        if current_user:
+            existing.user_id = current_user.id
+    else:
+        db.add(CouncilmemberVote(
+            id=f"cmv_{uuid.uuid4().hex[:12]}",
+            councilmember_id=member_id,
+            user_id=current_user.id if current_user else None,
+            vote=body.vote,
+            voter_token=body.voter_token,
+        ))
+    db.commit()
+    return {"success": True, "counts": _cm_vote_counts(db, member_id), "your_vote": body.vote}
+
+
+@router.get("/{member_id}/vote-history")
+async def get_vote_history(
+    member_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Return official roll call vote history for a council member, paginated."""
+    if not get_councilmember(db, member_id):
+        raise HTTPException(status_code=404, detail="Council member not found")
+
+    total = db.query(BillVoteRecord).filter(BillVoteRecord.councilmember_id == member_id).count()
+
+    records = (
+        db.query(BillVoteRecord, Legislation)
+        .join(Legislation, BillVoteRecord.legislation_id == Legislation.id)
+        .filter(BillVoteRecord.councilmember_id == member_id)
+        .order_by(BillVoteRecord.action_date.desc().nullslast())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return {
+        "success": True,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "data": [
+            {
+                "legislation_id": rec.legislation_id,
+                "bill_number": leg.bill_number,
+                "plain_title": leg.plain_title or leg.title,
+                "vote": rec.vote,
+                "action_date": rec.action_date,
+                "result": rec.result,
+                "impact_level": leg.impact_level,
+                "status": leg.status,
+            }
+            for rec, leg in records
+        ],
     }
