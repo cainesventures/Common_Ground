@@ -3,6 +3,8 @@
 import { Suspense, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { setToken } from '@/lib/auth'
+import posthog from 'posthog-js'
+import { api } from '@/lib/api'
 
 function AuthCallbackInner() {
   const router = useRouter()
@@ -12,6 +14,13 @@ function AuthCallbackInner() {
     const token = params.get('token')
     if (token) {
       setToken(token)
+      // Identify user in PostHog after login
+      api.getMe().then((data) => {
+        const user = data?.user
+        if (user) {
+          posthog.identify(user.id, { email: user.email, subscription_tier: user.subscription_tier })
+        }
+      }).catch(() => {})
     }
     router.replace('/')
   }, [params, router])

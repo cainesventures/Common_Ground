@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { usePostHog } from 'posthog-js/react'
 
 const PAGE_SIZE = 20
 
@@ -320,7 +322,7 @@ function BillCard({ bill, query = '' }: { bill: Bill; query?: string }) {
           <Highlight text={bill.plain_title || bill.title} query={query} />
         </p>
         {bill.summary && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
             <Highlight text={bill.summary} query={query} />
           </p>
         )}
@@ -358,6 +360,7 @@ export default function LegislationPage() {
 
 function LegislationPageInner() {
   const searchParams = useSearchParams()
+  const posthog = usePostHog()
 
   // Initialize filter state from URL on first render
   const sp = searchParams
@@ -520,33 +523,35 @@ function LegislationPageInner() {
       />
 
       {/* ── Filter row ── */}
-      <div className="space-y-3">
+      <div className="space-y-3 sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4">
 
 
         {/* Status, Impact, Analyzed row */}
         <div className="flex flex-wrap gap-2 items-center">
           {/* Status dropdown */}
-          <select
-            value={selectedStatus}
-            onChange={(e) => reset({ status: e.target.value })}
-            className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">All statuses</option>
-            {STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
+          <Select value={selectedStatus || '__all__'} onValueChange={(v) => reset({ status: v === '__all__' ? '' : (v ?? '') })}>
+            <SelectTrigger className="h-8 text-sm w-[140px]">
+              <SelectValue placeholder="All statuses" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All statuses</SelectItem>
+              {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           {/* Sponsor dropdown */}
           {councilMembers.length > 0 && (
-            <select
-              value={selectedSponsor}
-              onChange={(e) => reset({ sponsor: e.target.value })}
-              className="h-8 rounded-md border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">All sponsors</option>
-              {councilMembers.map(m => (
-                <option key={m.id} value={m.name}>{m.name}</option>
-              ))}
-            </select>
+            <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
+              <SelectTrigger className="h-8 text-sm w-[160px]">
+                <SelectValue placeholder="All sponsors" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__all__">All sponsors</SelectItem>
+                {councilMembers.map(m => (
+                  <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
 
           {/* Impact chips */}
@@ -604,7 +609,7 @@ function LegislationPageInner() {
 
         {/* Search + tag */}
         <div className="flex flex-wrap gap-2">
-          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput) }} className="flex gap-2 flex-1 min-w-64">
+          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1 min-w-64">
             <input
               type="text"
               value={queryInput}

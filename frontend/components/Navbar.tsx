@@ -89,7 +89,7 @@ export function Navbar() {
   ]
 
   return (
-    <nav className="border-b bg-white/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
+    <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-bold text-lg tracking-tight shrink-0">
@@ -99,7 +99,7 @@ export function Navbar() {
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-6">
           {navLinks.map((l) => (
-            <Link key={l.href} href={l.href} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <Link key={l.href} href={l.href} className={`text-sm transition-colors ${pathname === l.href ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
             </Link>
           ))}
@@ -169,7 +169,7 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden border-t bg-white/95 backdrop-blur px-4 py-3 space-y-1">
+        <div className="md:hidden border-t bg-background/95 backdrop-blur px-4 py-3 space-y-1">
           {navLinks.map((l) => (
             <Link
               key={l.href}

@@ -69,6 +69,7 @@ class Legislation(Base):
     next_hearing_time     = Column(String, nullable=True)
     next_hearing_body     = Column(String, nullable=True)
     next_hearing_location = Column(String, nullable=True)
+    next_hearing_url      = Column(String, nullable=True)
 
     # Relationships
     debates = relationship("Debate", back_populates="legislation", cascade="all, delete-orphan")

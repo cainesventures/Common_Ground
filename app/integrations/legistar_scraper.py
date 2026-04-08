@@ -606,14 +606,17 @@ class PhilaLegistarScraper:
                     if not meeting_date or meeting_date < now:
                         continue  # skip past meetings
 
-                    # Find "Accessible Agenda" link in the row
+                    # Find "Meeting details" and "Accessible Agenda" links in the row
                     agenda_url: Optional[str] = None
+                    meeting_url: Optional[str] = None
                     for link in row.query_selector_all("a"):
-                        text = link.inner_text().strip()
+                        text = link.inner_text().strip().lower()
                         href = link.get_attribute("href") or ""
-                        if "accessible" in text.lower() and "agenda" in text.lower():
-                            agenda_url = href if href.startswith("http") else f"{BASE_URL}/{href.lstrip('/')}"
-                            break
+                        full_href = href if href.startswith("http") else f"{BASE_URL}/{href.lstrip('/')}"
+                        if "accessible" in text and "agenda" in text:
+                            agenda_url = full_href
+                        elif "meeting" in text and "detail" in text:
+                            meeting_url = full_href
 
                     bill_file_numbers: List[str] = []
                     if agenda_url:
@@ -641,6 +644,7 @@ class PhilaLegistarScraper:
                         "time":              time_text,
                         "body":              body_text,
                         "location":          location_text,
+                        "meeting_url":       meeting_url,
                         "bill_file_numbers": bill_file_numbers,
                     })
 

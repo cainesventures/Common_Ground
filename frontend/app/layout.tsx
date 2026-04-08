@@ -4,6 +4,9 @@ import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { PipelineProvider } from '@/app/contexts/pipeline-context'
 import { Toaster } from 'sonner'
+import { PostHogProvider } from '@/components/PostHogProvider'
+import { Suspense } from 'react'
+import { PostHogPageview } from '@/components/PostHogPageview'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
@@ -16,13 +19,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
-        <PipelineProvider>
-          <Navbar />
-          <main className="max-w-5xl mx-auto px-4 py-8">
-            {children}
-          </main>
-          <Toaster richColors closeButton position="bottom-right" />
-        </PipelineProvider>
+        <PostHogProvider>
+          <Suspense fallback={null}>
+            <PostHogPageview />
+          </Suspense>
+          <PipelineProvider>
+            <Navbar />
+            <main className="max-w-5xl mx-auto px-4 py-8">
+              {children}
+            </main>
+            <Toaster richColors closeButton position="bottom-right" />
+          </PipelineProvider>
+        </PostHogProvider>
       </body>
     </html>
   )

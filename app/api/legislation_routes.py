@@ -1635,11 +1635,9 @@ async def generate_perspective(
     legislation_id: str,
     perspective_type: str,
     db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
 ):
-    """Generate (or return cached) a single on-demand perspective for a bill.
-
-    Public endpoint — no auth required. Results are cached after first generation.
-    """
+    """Generate (or return cached) a single perspective for a bill. Admin only."""
     if perspective_type not in ALL_PERSPECTIVES:
         raise HTTPException(
             status_code=422,
@@ -1979,6 +1977,7 @@ async def get_legislation(
                 "next_hearing_time":     leg.next_hearing_time,
                 "next_hearing_body":     leg.next_hearing_body,
                 "next_hearing_location": leg.next_hearing_location,
+                "next_hearing_url":      leg.next_hearing_url,
             }
         }
     except HTTPException:

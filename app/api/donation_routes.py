@@ -88,9 +88,13 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
 
         if settings.stripe_webhook_secret:
             event = stripe.Webhook.construct_event(payload, sig_header, settings.stripe_webhook_secret)
+        elif settings.environment == "production":
+            raise HTTPException(status_code=400, detail="Webhook secret not configured")
         else:
             import json
             event = json.loads(payload)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.warning(f"Stripe webhook signature error: {e}")
         raise HTTPException(status_code=400, detail="Invalid webhook signature")

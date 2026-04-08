@@ -190,9 +190,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ vote, voter_token: voterToken }),
     }),
-  getCouncilmemberVoteHistory: (memberId: string, page = 1, pageSize = 20) =>
-    apiFetch(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
-
   // ── Official roll call votes ──────────────────────────────────────────────
   getRollCall: (legislationId: string) =>
     apiFetch(`/api/legislation/${legislationId}/roll-call`),
@@ -401,4 +398,7 @@ export const api = {
 
   clearPerspectives: (id: string) =>
     apiFetch(`/api/legislation/${id}/perspectives`, { method: 'DELETE' }),
+
+  getCouncilmemberVoteHistory: (memberId: string, page = 1, pageSize = 20) =>
+    apiFetch(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
 }

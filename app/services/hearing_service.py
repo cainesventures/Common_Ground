@@ -26,6 +26,7 @@ def refresh_upcoming_hearings(db: Session) -> dict:
         "next_hearing_time":     None,
         "next_hearing_body":     None,
         "next_hearing_location": None,
+        "next_hearing_url":      None,
     }, synchronize_session=False)
     db.flush()
 
@@ -52,6 +53,7 @@ def refresh_upcoming_hearings(db: Session) -> dict:
                     bill.next_hearing_time     = meeting["time"]
                     bill.next_hearing_body     = meeting["body"]
                     bill.next_hearing_location = meeting["location"]
+                    bill.next_hearing_url      = meeting.get("meeting_url")
                     bills_matched += 1
 
     db.commit()

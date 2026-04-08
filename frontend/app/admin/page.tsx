@@ -966,8 +966,7 @@ function BackfillSponsorsSection() {
 }
 
 function RefreshHearingsSection() {
-  const [running, setRunning] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const { progress, running, start, stop } = useStreamProgress()
 
   return (
     <div className="border rounded-lg p-4 space-y-3">
@@ -977,21 +976,11 @@ function RefreshHearingsSection() {
           Scrape phila.legistar.com/Calendar.aspx and update hearing dates on matching bills. Takes 1–3 minutes.
         </p>
       </div>
-      {result && (
-        <p className={`text-sm ${result.ok ? 'text-green-600' : 'text-destructive'}`}>{result.message}</p>
-      )}
+      <ProgressBar progress={progress} running={running} onStop={stop} />
       <Button
         disabled={running}
         className="bg-blue-600 hover:bg-blue-700 text-white"
-        onClick={async () => {
-          setRunning(true); setResult(null)
-          try {
-            const data = await api.refreshHearings()
-            setResult({ ok: true, message: `Scraped ${data?.meetings_scraped ?? 0} meetings, matched ${data?.bills_matched ?? 0} bills.` })
-          } catch (e: any) {
-            setResult({ ok: false, message: e.message || 'Failed' })
-          } finally { setRunning(false) }
-        }}
+        onClick={() => start('/api/hearings/stream/refresh')}
       >
         {running ? 'Refreshing Hearings…' : 'Refresh Hearings'}
       </Button>

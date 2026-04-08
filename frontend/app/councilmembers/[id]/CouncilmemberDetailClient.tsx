@@ -608,6 +608,8 @@ export default function CouncilmemberDetailClient() {
         )}
       </div>
 
+      <VoteHistorySection memberId={id} />
+
       <Link href="/councilmembers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
         ← All council members
       </Link>

@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { PerspectivesPanel } from '@/components/PerspectivesPanel'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
+import { usePostHog } from 'posthog-js/react'
 
 const LEVEL_LABELS: Record<string, string> = {
   federal: 'Federal',
@@ -55,8 +56,8 @@ function buildGcalUrl(opts: { date: string; time?: string; body?: string; locati
   return `https://calendar.google.com/calendar/render?${params}`
 }
 
-function HearingBanner({ date, time, body, location, billTitle, billNumber }: {
-  date: string; time?: string; body?: string; location?: string; billTitle: string; billNumber: string
+function HearingBanner({ date, time, body, location, meetingUrl, billTitle, billNumber }: {
+  date: string; time?: string; body?: string; location?: string; meetingUrl?: string; billTitle: string; billNumber: string
 }) {
   const d = new Date(date)
   const formattedDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
@@ -67,14 +68,26 @@ function HearingBanner({ date, time, body, location, billTitle, billNumber }: {
       {body && <p className="text-sm text-amber-800">{body}</p>}
       <p className="text-sm text-amber-700">{formattedDate}{time ? ` at ${time}` : ''}</p>
       {location && <p className="text-xs text-amber-600">{location}</p>}
-      <a
-        href={gcalUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-block text-xs text-amber-700 hover:text-amber-900 underline mt-1"
-      >
-        Add to Google Calendar →
-      </a>
+      <div className="flex gap-3 mt-1">
+        <a
+          href={gcalUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-amber-700 hover:text-amber-900 underline"
+        >
+          Add to Google Calendar →
+        </a>
+        {meetingUrl && (
+          <a
+            href={meetingUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-amber-700 hover:text-amber-900 underline"
+          >
+            View full agenda →
+          </a>
+        )}
+      </div>
     </div>
   )
 }
@@ -555,11 +568,13 @@ export default function BillDetailClient() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [copied, setCopied] = useState(false)
   const [yourVote, setYourVote] = useState<string | null>(null)
+  const posthog = usePostHog()
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+      posthog?.capture('bill_shared', { bill_id: id })
     })
   }
   const loggedIn = isLoggedIn()
@@ -572,10 +587,19 @@ export default function BillDetailClient() {
       loggedIn ? api.getMe().catch(() => null) : Promise.resolve(null),
     ])
       .then(([legData, cmData, trackData, meData]) => {
-        setLeg(legData?.data ?? null)
+        const bill = legData?.data ?? null
+        setLeg(bill)
         setMembers(cmData?.members ?? [])
         setTracked((trackData?.ids ?? []).includes(id))
         setIsAdmin(meData?.user?.subscription_tier === 'dev')
+        if (bill) {
+          posthog?.capture('bill_viewed', {
+            bill_id: id,
+            title: bill.plain_title || bill.title,
+            impact_level: bill.impact_level,
+            tags: bill.tags,
+          })
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false))
@@ -589,10 +613,11 @@ export default function BillDetailClient() {
       const nowTracked = data?.tracked ?? false
       setTracked(nowTracked)
       toast.success(nowTracked ? 'Bill saved to your list' : 'Bill removed from your list')
+      posthog?.capture('bill_tracked', { bill_id: id, tracked: nowTracked })
     } catch {
       toast.error('Failed to update saved bills')
     }
-  }, [id])
+  }, [id, posthog])
 
   if (loading) return <div className="h-32 bg-muted animate-pulse rounded-lg" />
 
@@ -746,6 +771,7 @@ export default function BillDetailClient() {
           time={leg.next_hearing_time}
           body={leg.next_hearing_body}
           location={leg.next_hearing_location}
+          meetingUrl={leg.next_hearing_url}
           billTitle={leg.plain_title || leg.title}
           billNumber={leg.bill_number}
         />
@@ -1098,6 +1124,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const voterToken = typeof window !== 'undefined' ? _getOrCreateVoterToken() : ''
+  const posthog = usePostHog()
 
   const updateCounts = useCallback((c: Record<string, number>) => {
     setCounts(c)
@@ -1122,6 +1149,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
       setMyVote(v)
       onVoteChange?.(v)
       toast.success(`Vote cast: ${vote}`)
+      posthog?.capture('vote_cast', { bill_id: billId, vote })
     } catch {
       toast.error('Failed to cast vote')
     } finally {

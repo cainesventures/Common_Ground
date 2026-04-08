@@ -21,11 +21,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         description,
         type: 'article',
         siteName: 'Common Ground',
+        images: [{ url: `/legislation/${id}/opengraph-image`, width: 1200, height: 630 }],
       },
       twitter: {
-        card: 'summary',
+        card: 'summary_large_image',
         title,
         description,
+        images: [`/legislation/${id}/opengraph-image`],
       },
     }
   } catch {

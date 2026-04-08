@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/lib/api'
+import { usePostHog } from 'posthog-js/react'
 
 const ALL_PERSPECTIVES = [
   { key: 'progressive',         label: 'Progressive',          group: 'Political',    icon: '🌹' },
@@ -119,8 +120,9 @@ const TALLY_BAR_COLORS: Record<string, string> = {
   mixed:   'bg-yellow-400',
 }
 
-function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
+function PerspectivesTally({ perspectives, billId }: { perspectives: Perspective[]; billId: string }) {
   const [expanded, setExpanded] = useState<string | null>(null)
+  const posthog = usePostHog()
 
   if (perspectives.length === 0) return null
 
@@ -184,7 +186,11 @@ function PerspectivesTally({ perspectives }: { perspectives: Perspective[] }) {
           return (
             <div key={p.perspective_type}>
               <button
-                onClick={() => setExpanded(isOpen ? null : p.perspective_type)}
+                onClick={() => {
+                  const next = isOpen ? null : p.perspective_type
+                  setExpanded(next)
+                  if (next) posthog?.capture('perspective_opened', { bill_id: billId, perspective_type: p.perspective_type })
+                }}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
               >
                 <span className="text-muted-foreground flex items-center gap-1.5">
@@ -402,7 +408,7 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
         </div>
       )}
 
-      <PerspectivesTally perspectives={perspectives} />
+      <PerspectivesTally perspectives={perspectives} billId={billId} />
 
       {groups.map((group) => {
         const groupKeys = ALL_PERSPECTIVES.filter((p) => p.group === group).map((p) => p.key)
