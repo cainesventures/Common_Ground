@@ -99,7 +99,7 @@ export function Navbar() {
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-6">
           {navLinks.map((l) => (
-            <Link key={l.href} href={l.href} className={`text-sm transition-colors ${pathname === l.href ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Link key={l.href} href={l.href} className={`text-sm transition-colors ${pathname === l.href ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
             </Link>
           ))}

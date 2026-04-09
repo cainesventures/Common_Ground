@@ -7,6 +7,7 @@ import { Toaster } from 'sonner'
 import { PostHogProvider } from '@/components/PostHogProvider'
 import { Suspense } from 'react'
 import { PostHogPageview } from '@/components/PostHogPageview'
+import NextTopLoader from 'nextjs-toploader'
 
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
         <PostHogProvider>
+          <NextTopLoader color="hsl(var(--primary))" height={2} showSpinner={false} />
           <Suspense fallback={null}>
             <PostHogPageview />
           </Suspense>
