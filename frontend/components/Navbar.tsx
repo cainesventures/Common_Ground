@@ -43,6 +43,14 @@ export function Navbar() {
     return () => document.removeEventListener('mousedown', handler)
   }, [mobileOpen])
 
+  // Close on Escape key
+  useEffect(() => {
+    if (!mobileOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [mobileOpen])
+
   useEffect(() => {
     if (getToken()) {
       api.getMe()

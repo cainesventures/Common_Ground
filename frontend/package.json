@@ -16,7 +16,7 @@
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.577.0",
-    "next": "16.1.6",
+    "next": "^15.3.0",
     "nextjs-toploader": "^3.9.17",
     "posthog-js": "^1.365.1",
     "react": "19.2.3",
@@ -32,7 +32,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "@sentry/nextjs": "^8.0.0",
+    "eslint-config-next": "^15.3.0",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

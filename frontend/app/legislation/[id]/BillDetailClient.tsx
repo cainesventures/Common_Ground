@@ -329,6 +329,7 @@ function ContactMyCouncilmember({ members, billTitle, billNumber }: { members: a
             <input
               type="text"
               autoFocus
+              aria-label="Your street address"
               placeholder="123 Main St"
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
@@ -685,6 +686,7 @@ export default function BillDetailClient() {
               <button
                 className="p-1.5 rounded-lg border-transparent text-muted-foreground hover:text-primary hover:border-muted border transition-colors"
                 title="Export bill"
+                aria-label="Export bill"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
@@ -711,6 +713,7 @@ export default function BillDetailClient() {
               onClick={handleShare}
               className="p-1.5 rounded-lg border-transparent text-muted-foreground hover:text-primary hover:border-muted border transition-colors"
               title="Copy link"
+              aria-label="Copy link to bill"
             >
               {copied ? (
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -729,6 +732,7 @@ export default function BillDetailClient() {
                   tracked ? 'border-primary text-primary bg-primary/5' : 'border-transparent text-muted-foreground hover:text-primary hover:border-muted'
                 }`}
                 title={tracked ? 'Unsave bill' : 'Save bill'}
+                aria-label={tracked ? 'Unsave bill' : 'Save bill'}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5" fill={tracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />

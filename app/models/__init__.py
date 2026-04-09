@@ -26,13 +26,6 @@ class LegislationStatus(str, PyEnum):
     FAILED = "failed"
 
 
-class AgentType(str, PyEnum):
-    """Type of AI agent."""
-    CLAUDE = "claude"
-    LOCAL = "local"
-    BYO = "byo"  # Bring Your Own AI
-
-
 class Legislation(Base):
     """Model for bills and legislation."""
     __tablename__ = "legislation"
@@ -72,7 +65,6 @@ class Legislation(Base):
     next_hearing_url      = Column(String, nullable=True)
 
     # Relationships
-    debates = relationship("Debate", back_populates="legislation", cascade="all, delete-orphan")
     votes = relationship("LegislationVote", back_populates="legislation", cascade="all, delete-orphan")
     perspectives = relationship("BillPerspective", back_populates="legislation", cascade="all, delete-orphan")
     tracked_by = relationship("BillTracking", back_populates="legislation", cascade="all, delete-orphan")
@@ -80,161 +72,6 @@ class Legislation(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class Agent(Base):
-    """Model for AI debate agents."""
-    __tablename__ = "agents"
-
-    id = Column(String, primary_key=True)
-    name = Column(String, nullable=False, unique=True)
-    description = Column(Text)
-    persona = Column(String)  # e.g., "Progressive Advocate", "Conservative Analyst"
-    system_prompt = Column(Text)  # System instruction for the agent
-    expertise_areas = Column(String)  # Comma-separated tags
-    agent_type = Column(String, default=AgentType.CLAUDE.value)  # claude, local, byo
-    model_name = Column(String, default="claude-3-sonnet-20240229")  # For local AI
-    api_url = Column(String)  # For BYO AI
-    api_key = Column(String)  # For BYO AI (encrypted in production)
-    is_active = Column(Boolean, default=True)
-
-    # Video generation avatar/voice (HeyGen or other providers)
-    avatar_id = Column(String)   # Provider avatar ID (e.g. HeyGen stock avatar)
-    voice_id = Column(String)    # Provider voice ID
-
-    # Personal AI Debator: user who owns this agent (NULL for preset/system agents)
-    owner_user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
-
-    # Relationships
-    debate_messages = relationship("DebateMessage", back_populates="agent")
-    ratings_given = relationship("Rating", foreign_keys="Rating.rater_agent_id", back_populates="rater_agent")
-    owner = relationship("User", back_populates="personal_agent", foreign_keys=[owner_user_id])
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class Debate(Base):
-    """Model for debate threads about legislation."""
-    __tablename__ = "debates"
-
-    id = Column(String, primary_key=True)
-    legislation_id = Column(String, ForeignKey("legislation.id"), nullable=False)
-    title = Column(String, nullable=False)
-    topic = Column(Text)  # Debate premise/question
-    status = Column(String, default="active")  # active, completed, paused
-    turn_count = Column(Integer, default=0)
-    max_turns = Column(Integer, default=5)
-    current_turn_agent_id = Column(String, ForeignKey("agents.id"))
-    
-    # Research phase
-    research_enabled = Column(Boolean, default=True)
-    research_data = Column(Text)  # JSON string of research from all agents
-    
-    # Per-agent settings JSON: {"agent_id": {"conviction": 1-5}, ...}
-    participant_settings = Column(Text, nullable=True)
-
-    # Creator (authenticated user who created this debate; NULL for auto-generated)
-    created_by_user_id = Column(String, ForeignKey("users.id"), nullable=True, index=True)
-
-    # Sharing and visibility
-    is_public = Column(Boolean, default=True)  # Allow public sharing
-    share_count = Column(Integer, default=0)  # Track shares
-    view_count = Column(Integer, default=0)  # Track views
-
-    # Relationships
-    legislation = relationship("Legislation", back_populates="debates")
-    created_by = relationship("User", foreign_keys=[created_by_user_id])
-    messages = relationship("DebateMessage", back_populates="debate", cascade="all, delete-orphan")
-    participating_agents = relationship("Agent", secondary="debate_participants")
-    videos = relationship("DebateVideo", back_populates="debate", cascade="all, delete-orphan")
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-
-class DebateMessage(Base):
-    """Model for individual messages/arguments in a debate."""
-    __tablename__ = "debate_messages"
-
-    id = Column(String, primary_key=True)
-    debate_id = Column(String, ForeignKey("debates.id"), nullable=False)
-    agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
-    turn_number = Column(Integer, nullable=False)
-    position = Column(String)  # "pro", "con", "neutral"
-    argument = Column(Text, nullable=False)
-    citations = Column(Text)  # JSON string of citations
-    reasoning_chain = Column(Text)  # Detail of how conclusion was reached
-    
-    # Research data for this agent
-    research_data = Column(Text)  # JSON string of agent's research
-
-    # Complexity variants: {"simple": "...", "moderate": "...", "expert": "..."}
-    argument_variants = Column(Text)
-    
-    # Relationships
-    debate = relationship("Debate", back_populates="messages")
-    agent = relationship("Agent", back_populates="debate_messages")
-    ratings = relationship("Rating", back_populates="message")
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class Rating(Base):
-    """Model for AI agents rating arguments."""
-    __tablename__ = "ratings"
-
-    id = Column(String, primary_key=True)
-    message_id = Column(String, ForeignKey("debate_messages.id"), nullable=False)
-    rater_agent_id = Column(String, ForeignKey("agents.id"), nullable=False)
-    
-    # Rating dimensions
-    persuasiveness_score = Column(Float)  # 0-10
-    logical_soundness_score = Column(Float)  # 0-10
-    factual_accuracy_score = Column(Float)  # 0-10
-    relevance_score = Column(Float)  # 0-10
-    overall_score = Column(Float)  # 0-10
-    
-    reasoning = Column(Text)  # Why the rater gave these scores
-    
-    # Relationships
-    message = relationship("DebateMessage", back_populates="ratings")
-    rater_agent = relationship("Agent", foreign_keys=[rater_agent_id], back_populates="ratings_given")
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-# Association table for debate participants
-from sqlalchemy import Table
-from uuid import uuid4
-
-debate_participants = Table(
-    "debate_participants",
-    Base.metadata,
-    Column("debate_id", String, ForeignKey("debates.id")),
-    Column("agent_id", String, ForeignKey("agents.id")),
-)
-
-
-class DebateVideo(Base):
-    """Model for AI-generated debate videos."""
-    __tablename__ = "debate_videos"
-
-    id = Column(String, primary_key=True, default=lambda: f"video_{uuid4().hex[:12]}")
-    debate_id = Column(String, ForeignKey("debates.id"), nullable=False, index=True)
-    status = Column(String, default="pending")       # pending | processing | completed | failed
-    provider = Column(String, nullable=False)         # "heygen", "d-id", etc.
-    provider_video_id = Column(String)               # Provider's internal video ID (for polling)
-    video_url = Column(String)                       # Final hosted video URL
-    thumbnail_url = Column(String)
-    duration_seconds = Column(Float)
-    error_message = Column(Text)
-    celery_task_id = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime)
-
-    # Relationships
-    debate = relationship("Debate", back_populates="videos")
 
 
 class BillPerspective(Base):
@@ -338,12 +175,6 @@ class User(Base):
 
     votes          = relationship("LegislationVote", back_populates="user")
     tracked_bills  = relationship("BillTracking", back_populates="user", cascade="all, delete-orphan")
-    personal_agent = relationship(
-        "Agent",
-        back_populates="owner",
-        foreign_keys="Agent.owner_user_id",
-        uselist=False,
-    )
 
 
 class LegislationVote(Base):
@@ -358,7 +189,6 @@ class LegislationVote(Base):
 
     id             = Column(String, primary_key=True)
     legislation_id = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
-    debate_id      = Column(String, ForeignKey("debates.id"), nullable=True)   # which debate prompted the vote
     user_id        = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     vote           = Column(String, nullable=False)   # "support" | "oppose" | "neutral"
     voter_token    = Column(String, nullable=False)   # client-generated UUID

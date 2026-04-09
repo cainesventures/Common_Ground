@@ -126,6 +126,7 @@ export default function ProfilePage() {
             } ${digestSaving ? 'opacity-50' : ''}`}
             role="switch"
             aria-checked={digestEnabled}
+            aria-label="Enable email digest"
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
               digestEnabled ? 'translate-x-6' : 'translate-x-1'
@@ -143,6 +144,7 @@ export default function ProfilePage() {
             value={digestFrequency}
             disabled={!digestEnabled || digestSaving}
             onChange={(e) => savePreferences({ digest_frequency: e.target.value })}
+            aria-label="Digest frequency"
             className="h-8 rounded border bg-background px-2 text-sm disabled:opacity-40"
           >
             <option value="daily">Daily</option>
@@ -161,6 +163,7 @@ export default function ProfilePage() {
             value={digestMinImpact}
             disabled={!digestEnabled || digestSaving}
             onChange={(e) => savePreferences({ digest_min_impact: e.target.value })}
+            aria-label="Minimum impact level"
             className="h-8 rounded border bg-background px-2 text-sm disabled:opacity-40"
           >
             <option value="low">Low and above</option>
@@ -204,6 +207,7 @@ export default function ProfilePage() {
                   <Link
                     href={`/legislation/${v.legislation.id}`}
                     className="text-xs text-primary hover:underline shrink-0 ml-auto"
+                    aria-label={`View ${v.legislation?.bill_number || 'bill'}`}
                   >
                     View
                   </Link>

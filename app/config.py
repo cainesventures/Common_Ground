@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     app_url: str = "http://localhost:8000"        # Base URL for OAuth redirect URI
     frontend_url: str = "http://localhost:3000"   # Next.js frontend (set in production)
 
+    # Sentry error tracking (optional — leave blank to disable)
+    sentry_dsn: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = False

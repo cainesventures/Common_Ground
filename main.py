@@ -2,7 +2,8 @@
 
 import logging
 import sys
-from fastapi import FastAPI, Depends, HTTPException
+import time
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from sqlalchemy import text
@@ -35,6 +36,15 @@ def _validate_startup():
 
 _validate_startup()
 
+if settings.sentry_dsn:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=0.1,
+    )
+    logger.info("Sentry initialized (environment=%s)", settings.environment)
+
 app = FastAPI(
     title="Common Ground",
     description="Philadelphia City Council Legislation Tracker",
@@ -42,6 +52,15 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
 )
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start) * 1000
+    logger.info("%s %s %d %.0fms", request.method, request.url.path, response.status_code, duration_ms)
+    return response
+
 
 # CORS — allow the Next.js frontend to call the API
 app.add_middleware(

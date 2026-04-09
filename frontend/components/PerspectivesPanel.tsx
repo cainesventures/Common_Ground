@@ -192,6 +192,8 @@ function PerspectivesTally({ perspectives, billId }: { perspectives: Perspective
                   if (next) posthog?.capture('perspective_opened', { bill_id: billId, perspective_type: p.perspective_type })
                 }}
                 className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
+                aria-expanded={isOpen}
+                aria-label={`${label}, ${p.position}. ${isOpen ? 'Collapse' : 'Expand'} details`}
               >
                 <span className="text-muted-foreground flex items-center gap-1.5">
                   {icon && <span className="text-base leading-none">{icon}</span>}

@@ -530,7 +530,7 @@ function LegislationPageInner() {
         <div className="flex flex-wrap gap-2 items-center">
           {/* Status dropdown */}
           <Select value={selectedStatus || '__all__'} onValueChange={(v) => reset({ status: v === '__all__' ? '' : (v ?? '') })}>
-            <SelectTrigger className="h-8 text-sm w-[140px]">
+            <SelectTrigger className="h-8 text-sm w-[140px]" aria-label="Filter by status">
               <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
@@ -542,7 +542,7 @@ function LegislationPageInner() {
           {/* Sponsor dropdown */}
           {councilMembers.length > 0 && (
             <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
-              <SelectTrigger className="h-8 text-sm w-[160px]">
+              <SelectTrigger className="h-8 text-sm w-[160px]" aria-label="Filter by sponsor">
                 <SelectValue placeholder="All sponsors" />
               </SelectTrigger>
               <SelectContent>
@@ -615,6 +615,7 @@ function LegislationPageInner() {
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
               placeholder="Search bills by title or number…"
+              aria-label="Search bills"
               className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <button
@@ -629,6 +630,7 @@ function LegislationPageInner() {
             <select
               value={selectedTag}
               onChange={(e) => reset({ tag: e.target.value })}
+              aria-label="Filter by tag"
               className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="">All Tags</option>
