@@ -239,6 +239,7 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
   const [perspectives, setPerspectives] = useState<Perspective[]>([])
   const [pending, setPending] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState(false)
   const [generating, setGenerating] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
   const [bulkRunning, setBulkRunning] = useState<'all' | 'clear' | null>(null)
@@ -251,8 +252,9 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
       const data = await api.getPerspectives(billId)
       setPerspectives(data?.perspectives ?? [])
       setPending(data?.pending_types ?? [])
+      setLoadError(false)
     } catch {
-      // silent
+      setLoadError(true)
     } finally {
       setLoading(false)
     }
@@ -357,6 +359,21 @@ export function PerspectivesPanel({ billId, analyzed, isAdmin = false }: { billI
         {[...Array(3)].map((_, i) => (
           <div key={i} className="h-32 rounded-lg bg-muted animate-pulse" />
         ))}
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="border rounded-lg p-5 text-center space-y-2">
+        <p className="text-sm text-destructive font-medium">Failed to load perspectives</p>
+        <p className="text-xs text-muted-foreground">There was a problem connecting to the server.</p>
+        <button
+          onClick={() => { setLoading(true); setLoadError(false); load() }}
+          className="text-xs text-primary hover:underline"
+        >
+          Try again
+        </button>
       </div>
     )
   }

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
@@ -61,7 +62,9 @@ export default function ProfilePage() {
       if (overrides.digest_enabled   !== undefined) setDigestEnabled(overrides.digest_enabled)
       if (overrides.digest_frequency !== undefined) setDigestFrequency(overrides.digest_frequency)
       if (overrides.digest_min_impact !== undefined) setDigestMinImpact(overrides.digest_min_impact)
-    } catch { /* ignore */ } finally {
+    } catch {
+      toast.error('Failed to save preferences — please try again')
+    } finally {
       setDigestSaving(false)
     }
   }

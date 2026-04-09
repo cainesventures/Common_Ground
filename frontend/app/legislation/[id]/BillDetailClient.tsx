@@ -251,10 +251,13 @@ function districtFromGeoJSON(lat: number, lng: number, geojson: any): number | n
   return null
 }
 async function resolveCouncilmember(address: string, members: any[]): Promise<{ member: any; district: string } | string> {
+  const geoAbort = new AbortController()
+  const geoTimeout = setTimeout(() => geoAbort.abort(), 8000)
   const geoRes = await fetch(
     `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Philadelphia, PA')}&format=json&limit=1`,
-    { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' } }
+    { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' }, signal: geoAbort.signal }
   )
+  clearTimeout(geoTimeout)
   const geoData = await geoRes.json()
   if (!geoData.length) return 'Address not found. Try including street number and name.'
   const lat = parseFloat(geoData[0].lat), lng = parseFloat(geoData[0].lon)
@@ -1123,6 +1126,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
   const [counts, setCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const submittingRef = useRef(false)
   const voterToken = typeof window !== 'undefined' ? _getOrCreateVoterToken() : ''
   const posthog = usePostHog()
 
@@ -1140,7 +1144,8 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
   }, [billId, voterToken, updateCounts, onVoteChange])
 
   const handleVote = async (vote: string) => {
-    if (loading) return
+    if (submittingRef.current || loading) return
+    submittingRef.current = true
     setLoading(true)
     try {
       const data = await api.castVote(billId, vote, voterToken)
@@ -1153,6 +1158,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
     } catch {
       toast.error('Failed to cast vote')
     } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }

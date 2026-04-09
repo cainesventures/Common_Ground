@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 
@@ -87,11 +88,15 @@ export default function MyBillsPage() {
   }, [router])
 
   const handleUntrack = useCallback(async (billId: string) => {
+    const snapshot = bills.find((b) => b.id === billId)
+    setBills((prev) => prev.filter((b) => b.id !== billId))
     try {
       await api.toggleTrackBill(billId)
-      setBills((prev) => prev.filter((b) => b.id !== billId))
-    } catch { /* ignore */ }
-  }, [])
+    } catch {
+      if (snapshot) setBills((prev) => [...prev, snapshot])
+      toast.error('Failed to remove bill — please try again')
+    }
+  }, [bills])
 
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
 

@@ -73,10 +73,13 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
     if (!address.trim()) return
     setLoading(true); setError(null); setResult(null)
     try {
+      const geoAbort = new AbortController()
+      const geoTimeout = setTimeout(() => geoAbort.abort(), 8000)
       const geoRes = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Philadelphia, PA')}&format=json&limit=1`,
-        { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' } }
+        { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' }, signal: geoAbort.signal }
       )
+      clearTimeout(geoTimeout)
       const geoData = await geoRes.json()
       if (!geoData.length) { setError('Address not found. Try including street number and street name.'); return }
       const lat = parseFloat(geoData[0].lat)
