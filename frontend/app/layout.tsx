@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Geist } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
+import { Footer } from '@/components/Footer'
 import { PipelineProvider } from '@/app/contexts/pipeline-context'
 import { Toaster } from 'sonner'
 import { PostHogProvider } from '@/components/PostHogProvider'
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="max-w-5xl mx-auto px-4 py-8">
               {children}
             </main>
+            <Footer />
             <Toaster richColors closeButton position="bottom-right" />
           </PipelineProvider>
         </PostHogProvider>

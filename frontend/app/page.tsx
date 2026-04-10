@@ -46,7 +46,7 @@ const FEATURES = [
       </svg>
     ),
     title: 'Plain English',
-    body: 'Cryptic legal titles rewritten into language anyone can understand. Know what a bill actually does before reading a word of legalese.',
+    body: 'Legal titles like "An Ordinance amending Chapter 9-1100…" become "Zoning change near the Navy Yard." No law degree required.',
   },
   {
     icon: (
@@ -55,7 +55,7 @@ const FEATURES = [
       </svg>
     ),
     title: '17 Perspectives',
-    body: 'Every analyzed bill gets viewpoints from 17 distinct lenses — progressive, conservative, working class, business owner, urban planner, and more.',
+    body: 'Every bill gets viewpoints from 17 distinct lenses — progressive, conservative, working class, business owner, urban planner, and more. See who wins and who loses.',
   },
   {
     icon: (
@@ -64,7 +64,7 @@ const FEATURES = [
       </svg>
     ),
     title: 'Impact Scoring',
-    body: 'Each bill is rated on how broadly it affects Philadelphians — from low-impact procedural items to high-impact legislation that touches everyday life.',
+    body: 'Not every bill is equal. Each one is rated on how broadly it affects daily life in Philadelphia — so you know what\'s actually worth your attention.',
   },
   {
     icon: (
@@ -73,7 +73,7 @@ const FEATURES = [
       </svg>
     ),
     title: 'In the News',
-    body: 'Related news articles surfaced automatically for each bill so you can see how local media is covering the legislation.',
+    body: 'Related news articles surfaced automatically for each bill — see how local media is covering the legislation and what reporters are missing.',
   },
   {
     icon: (
@@ -82,7 +82,7 @@ const FEATURES = [
       </svg>
     ),
     title: 'Council Members',
-    body: 'Profiles for all 17 Philadelphia City Council members — who sponsors what, their district, contact info, and every bill they\'ve introduced.',
+    body: 'Full profiles for all 17 council members — voting record, sponsored bills, district map, contact info. See exactly what your rep is doing.',
   },
   {
     icon: (
@@ -91,25 +91,25 @@ const FEATURES = [
       </svg>
     ),
     title: 'Save & Follow',
-    body: 'Bookmark bills you care about and get a weekly email digest of newly analyzed legislation with perspectives. Free, no spam.',
+    body: 'Bookmark the bills that matter to you. Get a weekly email digest of new legislation with AI perspectives — free, no spam, unsubscribe anytime.',
   },
 ]
 
 const STEPS = [
   {
     number: '1',
-    title: 'Bills are ingested daily',
-    body: 'New legislation introduced to Philadelphia City Council is automatically pulled from the city\'s Legistar system.',
+    title: 'Every bill, every day',
+    body: 'New legislation introduced to Philadelphia City Council is pulled automatically from the city\'s Legistar system. Nothing slips through.',
   },
   {
     number: '2',
-    title: 'AI analyzes each bill',
-    body: 'A plain-English title, summary, impact score, and category tags are generated so you can understand the bill at a glance.',
+    title: 'Plain English, instantly',
+    body: 'AI rewrites each bill with a clear title, plain-language summary, impact score, and category tags so you can understand it at a glance.',
   },
   {
     number: '3',
-    title: '17 perspectives are generated',
-    body: 'The bill is analyzed from 17 political, policy, and demographic viewpoints — each with a clear position and key arguments.',
+    title: '17 takes, zero spin',
+    body: 'The bill is analyzed from 17 political, policy, and demographic viewpoints — each one honest about who benefits and who doesn\'t.',
   },
 ]
 
@@ -190,13 +190,13 @@ export default function LandingPage() {
       {/* ── Hero ── */}
       <section className="pt-12 pb-4 text-center max-w-3xl mx-auto">
         <div className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200">
-          Philadelphia City Council · Free &amp; Open
+          Philadelphia · Free · No Ads · No Agenda
         </div>
         <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-5">
-          Understand what your City Council<br className="hidden sm:block" /> is actually doing
+          Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
         </h1>
         <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
-          Common Ground tracks every bill introduced to Philadelphia City Council and explains it in plain English — with AI perspectives from across the political spectrum.
+          Common Ground tracks every bill introduced to Philadelphia City Council, rewrites it in plain English, and shows you how 17 different communities see it — free, forever.
         </p>
         <form onSubmit={handleSearch} className="flex gap-2 max-w-lg mx-auto w-full mb-4">
           <input
@@ -253,6 +253,7 @@ export default function LandingPage() {
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground text-center mb-10">
           How it works
         </h2>
+
         <div className="grid sm:grid-cols-3 gap-6">
           {STEPS.map((step) => (
             <div key={step.number} className="text-center">
@@ -269,7 +270,7 @@ export default function LandingPage() {
       {/* ── Features ── */}
       <section className="max-w-4xl mx-auto">
         <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground text-center mb-10">
-          What you get
+          What makes it different
         </h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {FEATURES.map((f) => (
@@ -287,7 +288,7 @@ export default function LandingPage() {
         <section className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-5">
             <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-              Recently analyzed
+              High-impact bills right now
             </h2>
             <Link href="/legislation?analyzed=true&impact=high" className="text-sm text-primary hover:underline">
               See all →
@@ -304,10 +305,10 @@ export default function LandingPage() {
       {/* ── Perspectives callout ── */}
       <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">
         <h2 className="text-2xl font-bold tracking-tight mb-3">
-          17 perspectives on every bill
+          One bill. 17 perspectives. You decide.
         </h2>
         <p className="text-muted-foreground leading-relaxed max-w-xl mx-auto mb-6">
-          We don't tell you what to think. Instead, we show you how different communities — from progressive activists to business owners to conspiracy theorists — see each piece of legislation. Make up your own mind.
+          We don&apos;t tell you what to think. We show you how different communities — progressive activists, small business owners, urban planners, even conspiracy theorists — actually see the same legislation. Then you make up your own mind.
         </p>
         <div className="flex flex-wrap justify-center gap-2 mb-8 text-xs">
           {['Progressive', 'Conservative', 'Libertarian', 'Socialist', 'Working Class', 'Business', 'Urban Planner', 'Public Health', 'Youth', 'Elderly', 'Neighborhood', 'Christian Ethicist', '+ more'].map((p) => (
@@ -324,12 +325,12 @@ export default function LandingPage() {
 
       {/* ── Mission ── */}
       <section className="max-w-2xl mx-auto text-center">
-        <h2 className="text-2xl font-bold tracking-tight mb-4">Built for Philadelphians</h2>
+        <h2 className="text-2xl font-bold tracking-tight mb-4">Built for Philadelphians, by Philadelphians</h2>
         <p className="text-muted-foreground leading-relaxed mb-4">
-          City Council passes hundreds of bills every year — zoning changes, budget allocations, public safety measures, labor rules. Most residents never hear about them until they're already law.
+          Your City Council passes hundreds of bills every year — zoning changes, tax policy, public safety measures, housing rules. Decisions that affect your rent, your neighborhood, your commute. Most residents never find out until it&apos;s already law.
         </p>
         <p className="text-muted-foreground leading-relaxed mb-8">
-          Common Ground is a free, independent civic tool with no ads and no agenda. If it's useful to you, consider supporting it.
+          Common Ground is a free, independent civic tool with no ads, no corporate backing, and no political agenda. If it&apos;s useful to you, consider helping keep it running.
         </p>
         <Link
           href="/donate"
