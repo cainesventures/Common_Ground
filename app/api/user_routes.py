@@ -60,6 +60,7 @@ async def get_my_votes(
             "legislation": {
                 "id": vote_row.legislation_id,
                 "title": leg.title if leg else None,
+                "plain_title": leg.plain_title if leg else None,
                 "bill_number": leg.bill_number if leg else None,
                 "status": leg.status if leg else None,
                 "level": leg.level if leg else None,
