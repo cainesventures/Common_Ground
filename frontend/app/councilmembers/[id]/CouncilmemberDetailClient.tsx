@@ -6,6 +6,10 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
+import { fmtStatus } from '@/lib/utils'
+import { isLoggedIn } from '@/lib/auth'
+import { CITY } from '@/lib/city'
+import { LoginModal } from '@/components/LoginModal'
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -158,6 +162,7 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
   const [counts, setCounts] = useState<{ support: number; oppose: number }>({ support: 0, oppose: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
 
   const voterToken = (() => {
     if (typeof window === 'undefined') return ''
@@ -176,6 +181,7 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
   }, [memberId, voterToken])
 
   const handleVote = async (vote: string) => {
+    if (!isLoggedIn()) { setShowLogin(true); return }
     if (loading) return
     setLoading(true)
     try {
@@ -190,65 +196,73 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
   const opposePct  = total > 0 ? Math.round((counts.oppose  / total) * 100) : 0
 
   return (
-    <div className="border rounded-lg p-5 space-y-3">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold">Citizen Approval</h2>
+    <>
+      {showLogin && (
+        <LoginModal
+          onClose={() => setShowLogin(false)}
+          reason="Sign in to rate your councilmember and see how your community feels."
+        />
+      )}
+      <div className="border rounded-lg p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Citizen Approval</h2>
+          {total > 0 && (
+            <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} {total === 1 ? 'vote' : 'votes'}</span>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          {(['support', 'oppose'] as const).map((v) => {
+            const isSelected = myVote === v
+            const isSupport = v === 'support'
+            return (
+              <button
+                key={v}
+                onClick={() => handleVote(v)}
+                disabled={loading}
+                className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
+                  isSelected
+                    ? isSupport
+                      ? 'bg-green-500 text-white border-green-500'
+                      : 'bg-red-500 text-white border-red-500'
+                    : isSupport
+                      ? 'hover:border-green-400 hover:text-green-700'
+                      : 'hover:border-red-400 hover:text-red-700'
+                }`}
+              >
+                {isSupport ? 'Support' : 'Oppose'}
+                {counts[v] > 0 && (
+                  <span className="ml-1.5 opacity-70 text-xs tabular-nums">({counts[v].toLocaleString()})</span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
         {total > 0 && (
-          <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} {total === 1 ? 'vote' : 'votes'}</span>
+          <div className="space-y-1">
+            <div className="h-2 rounded-full overflow-hidden flex bg-muted">
+              {supportPct > 0 && <div className="bg-green-500 transition-all" style={{ width: `${supportPct}%` }} />}
+              {opposePct  > 0 && <div className="bg-red-500 transition-all"   style={{ width: `${opposePct}%`  }} />}
+            </div>
+            <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
+              <span className="text-green-600">{supportPct}% support</span>
+              <span className="text-red-600">{opposePct}% oppose</span>
+            </div>
+          </div>
         )}
       </div>
-
-      <div className="flex gap-2">
-        {(['support', 'oppose'] as const).map((v) => {
-          const isSelected = myVote === v
-          const isSupport = v === 'support'
-          return (
-            <button
-              key={v}
-              onClick={() => handleVote(v)}
-              disabled={loading}
-              className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
-                isSelected
-                  ? isSupport
-                    ? 'bg-green-500 text-white border-green-500'
-                    : 'bg-red-500 text-white border-red-500'
-                  : isSupport
-                    ? 'hover:border-green-400 hover:text-green-700'
-                    : 'hover:border-red-400 hover:text-red-700'
-              }`}
-            >
-              {isSupport ? 'Support' : 'Oppose'}
-              {counts[v] > 0 && (
-                <span className="ml-1.5 opacity-70 text-xs tabular-nums">({counts[v].toLocaleString()})</span>
-              )}
-            </button>
-          )
-        })}
-      </div>
-
-      {total > 0 && (
-        <div className="space-y-1">
-          <div className="h-2 rounded-full overflow-hidden flex bg-muted">
-            {supportPct > 0 && <div className="bg-green-500 transition-all" style={{ width: `${supportPct}%` }} />}
-            {opposePct  > 0 && <div className="bg-red-500 transition-all"   style={{ width: `${opposePct}%`  }} />}
-          </div>
-          <div className="flex justify-between text-xs text-muted-foreground tabular-nums">
-            <span className="text-green-600">{supportPct}% support</span>
-            <span className="text-red-600">{opposePct}% oppose</span>
-          </div>
-        </div>
-      )}
-    </div>
+    </>
   )
 }
 
 function ContactSection({ member }: { member: any }) {
   const [phoneCopied, setPhoneCopied] = useState(false)
 
-  const subject = 'Philadelphia City Council — Constituent Message'
+  const subject = `${CITY.fullCouncilName} — Constituent Message`
   const body = `Dear ${member.name},
 
-I am a Philadelphia resident writing to share my perspective on legislation currently before City Council.
+I am a ${CITY.name} resident writing to share my perspective on legislation currently before City Council.
 
 [Describe the bill and your position here.]
 
@@ -417,13 +431,23 @@ const IMPACT_COLORS: Record<string, string> = {
   low:    'bg-green-100 text-green-800',
 }
 
+type TabKey = 'overview' | 'bills' | 'votes' | 'map'
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'bills',    label: 'Bills' },
+  { key: 'votes',    label: 'Voting Record' },
+  { key: 'map',      label: 'Map' },
+]
+
 const BILLS_PER_PAGE = 20
 
 export default function CouncilmemberDetailClient() {
   const { id } = useParams<{ id: string }>()
-  const [data, setData] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [billsPage, setBillsPage] = useState(1)
+  const [data, setData]           = useState<any>(null)
+  const [loading, setLoading]     = useState(true)
+  const [activeTab, setActiveTab] = useState<TabKey>('overview')
+  const [billsPage, setBillsPage]     = useState(1)
   const [billsLoading, setBillsLoading] = useState(false)
 
   useEffect(() => {
@@ -439,12 +463,28 @@ export default function CouncilmemberDetailClient() {
       const d = await api.getCouncilmember(id, page, BILLS_PER_PAGE)
       setData((prev: any) => ({ ...prev, bills: d?.bills }))
       setBillsPage(page)
-      window.scrollTo({ top: document.getElementById('bills-section')?.offsetTop ?? 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch { /* ignore */ }
     finally { setBillsLoading(false) }
   }
 
-  if (loading) return <div className="h-32 bg-muted animate-pulse rounded-lg" />
+  if (loading) return (
+    <div className="max-w-3xl space-y-6">
+      <div className="flex gap-6">
+        <div className="w-24 h-24 rounded-full bg-muted animate-pulse shrink-0" />
+        <div className="flex-1 space-y-3 pt-2">
+          <div className="h-6 bg-muted animate-pulse rounded w-48" />
+          <div className="h-4 bg-muted animate-pulse rounded w-32" />
+        </div>
+      </div>
+      <div className="h-10 bg-muted animate-pulse rounded" />
+      <div className="space-y-3">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-20 bg-muted animate-pulse rounded-lg" />
+        ))}
+      </div>
+    </div>
+  )
 
   if (!data?.member) return (
     <div className="text-center py-16 text-muted-foreground">Council member not found.</div>
@@ -456,24 +496,25 @@ export default function CouncilmemberDetailClient() {
   }
 
   return (
-    <div className="max-w-3xl space-y-8">
-      {/* Header */}
-      <div className="flex items-start gap-6">
-        <div className="shrink-0 w-24 h-24 rounded-full overflow-hidden bg-muted flex items-center justify-center">
+    <div className="max-w-3xl space-y-6">
+
+      {/* ── Always-visible header ── */}
+      <div className="flex items-start gap-5">
+        <div className="shrink-0 w-20 h-20 rounded-full overflow-hidden bg-muted flex items-center justify-center">
           {member.photo_url ? (
-            <Image src={member.photo_url} alt={member.name} width={96} height={96} className="w-full h-full object-cover object-top" />
+            <Image src={member.photo_url} alt={member.name} width={80} height={80} className="w-full h-full object-cover object-top" />
           ) : (
-            <span className="text-3xl font-bold text-muted-foreground">{member.name[0]}</span>
+            <span className="text-2xl font-bold text-muted-foreground">{member.name[0]}</span>
           )}
         </div>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">{member.name}</h1>
-          <p className="text-muted-foreground mt-0.5">
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold leading-tight">{member.name}</h1>
+          <p className="text-muted-foreground mt-0.5 text-sm">
             {member.district === 'At-Large' ? 'Councilmember At-Large' : `Councilmember, ${member.district}`}
           </p>
-          <div className="flex flex-wrap gap-3 mt-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
             {member.email && (
-              <a href={`mailto:${member.email}`} className="hover:text-foreground transition-colors">
+              <a href={`mailto:${member.email}`} className="hover:text-foreground transition-colors truncate">
                 {member.email}
               </a>
             )}
@@ -484,133 +525,166 @@ export default function CouncilmemberDetailClient() {
             )}
             {member.profile_url && (
               <a href={member.profile_url} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">
-                phlcouncil.com →
+                council profile →
               </a>
             )}
           </div>
         </div>
       </div>
 
-      {/* Bio */}
-      {member.bio && (
-        <div className="border rounded-lg p-5">
-          <h2 className="text-sm font-semibold mb-2">About</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">{member.bio}</p>
+      {/* ── Tab bar ── */}
+      <div className="flex border-b overflow-x-auto scrollbar-hide">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
+              activeTab === tab.key
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+            }`}
+          >
+            {tab.label}
+            {tab.key === 'bills' && bills?.total > 0 && (
+              <span className="ml-1.5 text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full tabular-nums">
+                {bills.total}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Overview tab ── */}
+      {activeTab === 'overview' && (
+        <div className="space-y-6">
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold">{member.bills_sponsored}</p>
+              <p className="text-xs text-muted-foreground mt-1">Bills Sponsored</p>
+            </div>
+            {member.term_start && (
+              <div className="border rounded-lg p-4 text-center">
+                <p className="text-2xl font-bold">{member.years_serving}y</p>
+                <p className="text-xs text-muted-foreground mt-1">Since {member.term_start}</p>
+              </div>
+            )}
+            {member.next_election && (
+              <div className="border rounded-lg p-4 text-center">
+                <p className="text-2xl font-bold">{member.next_election}</p>
+                <p className="text-xs text-muted-foreground mt-1">Next Election</p>
+              </div>
+            )}
+            <div className="border rounded-lg p-4 text-center">
+              <p className="text-2xl font-bold">{member.district === 'At-Large' ? '–' : member.district.replace('District ', '')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
+            </div>
+          </div>
+
+          {/* Bio */}
+          {member.bio && (
+            <div className="border rounded-lg p-5">
+              <h2 className="text-sm font-semibold mb-2">About</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">{member.bio}</p>
+            </div>
+          )}
+
+          {/* Citizen approval */}
+          <CouncilmemberVotePanel memberId={member.id} memberName={member.name} />
+
+          {/* Contact */}
+          <ContactSection member={member} />
         </div>
       )}
 
-      {/* Citizen approval vote */}
-      <CouncilmemberVotePanel memberId={member.id} memberName={member.name} />
+      {/* ── Bills tab ── */}
+      {activeTab === 'bills' && (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Bills sponsored by {member.name.split(' ')[0]}
+            {bills?.total > 0 ? ` · ${bills.total} total` : ''}
+          </p>
 
-      {/* Contact */}
-      <ContactSection member={member} />
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="border rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold">{member.bills_sponsored}</p>
-          <p className="text-xs text-muted-foreground mt-1">Bills Sponsored</p>
-        </div>
-        {member.term_start && (
-          <div className="border rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold">{member.years_serving}y</p>
-            <p className="text-xs text-muted-foreground mt-1">Since {member.term_start}</p>
-          </div>
-        )}
-        {member.next_election && (
-          <div className="border rounded-lg p-4 text-center">
-            <p className="text-2xl font-bold">{member.next_election}</p>
-            <p className="text-xs text-muted-foreground mt-1">Next Election</p>
-          </div>
-        )}
-        <div className="border rounded-lg p-4 text-center">
-          <p className="text-2xl font-bold">{member.district === 'At-Large' ? '–' : member.district.replace('District ', '')}</p>
-          <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
-        </div>
-      </div>
-
-      {/* Official voting record */}
-      <VoteHistorySection memberId={id} />
-
-      {/* Bill activity chart */}
-      <SponsorActivityChart sponsorName={member.name} />
-
-      {/* District Map */}
-      <DistrictMap district={member.district} />
-
-      {/* Bills */}
-      <div id="bills-section">
-        <h2 className="text-lg font-semibold mb-4">
-          Sponsored Bills
-          {bills?.total > 0 && <span className="text-sm font-normal text-muted-foreground ml-2">({bills.total} total)</span>}
-        </h2>
-
-        {(!bills?.results || bills.results.length === 0) ? (
-          <div className="border rounded-lg p-10 text-center space-y-2">
-            <p className="text-sm text-muted-foreground">No sponsored bills found in the database yet.</p>
-            <p className="text-xs text-muted-foreground">Bills are ingested daily from Philadelphia Legistar.</p>
-          </div>
-        ) : (
-          <>
-            <div className={`space-y-2 transition-opacity ${billsLoading ? 'opacity-50' : 'opacity-100'}`}>
-              {bills.results.map((bill: any) => (
-                <Link
-                  key={bill.id}
-                  href={`/legislation/${bill.id}`}
-                  className="flex items-start justify-between gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-muted-foreground">{bill.bill_number}</p>
-                    <p className="text-sm font-medium leading-snug line-clamp-2 mt-0.5">{bill.title}</p>
-                    {bill.introduced_date && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(bill.introduced_date).toLocaleDateString()}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    {bill.impact_level && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${IMPACT_COLORS[bill.impact_level] ?? ''}`}>
-                        {bill.impact_level}
-                      </span>
-                    )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'}`}>
-                      {bill.status?.replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+          {(!bills?.results || bills.results.length === 0) ? (
+            <div className="border rounded-lg p-10 text-center space-y-2">
+              <p className="text-sm text-muted-foreground">No sponsored bills found in the database yet.</p>
+              <p className="text-xs text-muted-foreground">Bills are ingested daily from {CITY.fullCouncilName} Legistar.</p>
             </div>
-            {bills.total > BILLS_PER_PAGE && (
-              <div className="flex items-center justify-between mt-4 text-sm">
-                <span className="text-muted-foreground">
-                  {((billsPage - 1) * BILLS_PER_PAGE) + 1}–{Math.min(billsPage * BILLS_PER_PAGE, bills.total)} of {bills.total}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => loadBillsPage(billsPage - 1)}
-                    disabled={billsPage <= 1 || billsLoading}
-                    className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-muted transition-colors"
+          ) : (
+            <>
+              <div className={`space-y-2 transition-opacity ${billsLoading ? 'opacity-50' : 'opacity-100'}`}>
+                {bills.results.map((bill: any) => (
+                  <Link
+                    key={bill.id}
+                    href={`/legislation/${bill.id}`}
+                    className="flex items-start justify-between gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all"
                   >
-                    ← Prev
-                  </button>
-                  <button
-                    onClick={() => loadBillsPage(billsPage + 1)}
-                    disabled={billsPage * BILLS_PER_PAGE >= bills.total || billsLoading}
-                    className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-muted transition-colors"
-                  >
-                    Next →
-                  </button>
-                </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-mono text-muted-foreground">{bill.bill_number}</p>
+                      <p className="text-sm font-medium leading-snug line-clamp-2 mt-0.5">
+                        {bill.plain_title || bill.title}
+                      </p>
+                      {bill.introduced_date && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(bill.introduced_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {bill.impact_level && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${IMPACT_COLORS[bill.impact_level] ?? ''}`}>
+                          {bill.impact_level}
+                        </span>
+                      )}
+                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'}`}>
+                        {bill.status ? fmtStatus(bill.status) : ''}
+                      </span>
+                    </div>
+                  </Link>
+                ))}
               </div>
-            )}
-          </>
-        )}
-      </div>
+              {bills.total > BILLS_PER_PAGE && (
+                <div className="flex items-center justify-between pt-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {((billsPage - 1) * BILLS_PER_PAGE) + 1}–{Math.min(billsPage * BILLS_PER_PAGE, bills.total)} of {bills.total}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => loadBillsPage(billsPage - 1)}
+                      disabled={billsPage <= 1 || billsLoading}
+                      className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-muted transition-colors"
+                    >
+                      ← Prev
+                    </button>
+                    <button
+                      onClick={() => loadBillsPage(billsPage + 1)}
+                      disabled={billsPage * BILLS_PER_PAGE >= bills.total || billsLoading}
+                      className="px-3 py-1 rounded border text-sm disabled:opacity-40 hover:bg-muted transition-colors"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
-      <VoteHistorySection memberId={id} />
+      {/* ── Votes tab ── */}
+      {activeTab === 'votes' && (
+        <div className="space-y-6">
+          <VoteHistorySection memberId={id} />
+          <SponsorActivityChart sponsorName={member.name} />
+        </div>
+      )}
 
-      <Link href="/councilmembers" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      {/* ── Map tab ── */}
+      {activeTab === 'map' && (
+        <DistrictMap district={member.district} />
+      )}
+
+      <Link href="/councilmembers" className="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors pt-2">
         ← All council members
       </Link>
     </div>

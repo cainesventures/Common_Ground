@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { api } from '@/lib/api'
 
 const AMOUNTS = [5, 10, 20, 50, 100]
-const MIN = 1
+const MIN = 5
 const MAX = 10_000
 
 function parseCustomAmount(raw: string): number | null {
@@ -120,19 +120,24 @@ export default function DonatePage() {
                 onChange={handleCustomInput}
                 autoFocus
                 className={`w-full pl-7 pr-3 py-2 rounded-lg border text-sm ${
-                  customInvalid ? 'border-red-400 bg-red-50' : 'border-border bg-background'
+                  customInvalid
+                    ? 'border-red-400 bg-red-50 dark:bg-red-900/20 dark:border-red-700'
+                    : 'border-border bg-background'
                 } focus:outline-none focus:ring-2 focus:ring-primary/40`}
               />
             </div>
-            {customInvalid && (
-              <p className="text-xs text-red-600 mt-1">Enter a whole number between ${MIN} and ${MAX.toLocaleString()}.</p>
-            )}
+            <p className={`text-xs mt-1 ${customInvalid ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+              {customInvalid
+                ? `Enter a whole number between $${MIN} and $${MAX.toLocaleString()}.`
+                : `Minimum $${MIN} · Maximum $${MAX.toLocaleString()}`
+              }
+            </p>
           </div>
         )}
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 mb-4 border border-red-200 bg-red-50 rounded-md px-4 py-2">
+        <p className="text-sm text-red-600 dark:text-red-400 mb-4 border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-md px-4 py-2">
           {error}
         </p>
       )}

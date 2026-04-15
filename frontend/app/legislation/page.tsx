@@ -5,30 +5,16 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MultiSelect } from '@/components/ui/multi-select'
 import { usePostHog } from 'posthog-js/react'
+import { STATUS_COLORS as STATUS_BADGE, STATUS_COLORS_FALLBACK, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
+import { isWithin7Days, fmtStatus } from '@/lib/utils'
+import { BillCard } from '@/components/BillCard'
 
 const PAGE_SIZE = 20
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December']
-
-const IMPACT_ACCENT: Record<string, string> = {
-  high:   '#ef4444',
-  medium: '#f59e0b',
-  low:    '#22c55e',
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  active:             'bg-green-100 text-green-700',
-  passed:             'bg-blue-100 text-blue-700',
-  failed:             'bg-red-100 text-red-700',
-  pending:            'bg-yellow-100 text-yellow-700',
-  in_committee:       'bg-purple-100 text-purple-700',
-  introduced:         'bg-gray-100 text-gray-600',
-  signed:             'bg-emerald-100 text-emerald-700',
-  signed_into_law:    'bg-emerald-100 text-emerald-700',
-  vetoed:             'bg-red-100 text-red-700',
-}
 
 interface Bill {
   id: string
@@ -46,8 +32,8 @@ interface Bill {
   next_hearing_date?: string
 }
 
-function ExportButtons({ analyzed, tag, impact, status, sponsor, year, month }: {
-  analyzed?: string; tag?: string; impact?: string; status?: string
+function ExportButtons({ analyzed, tags, impact, statuses, sponsor, year, month }: {
+  analyzed?: string; tags?: string[]; impact?: string; statuses?: string[]
   sponsor?: string; year?: number; month?: number
 }) {
   const [loadingCsv,  setLoadingCsv]  = useState(false)
@@ -57,7 +43,7 @@ function ExportButtons({ analyzed, tag, impact, status, sponsor, year, month }: 
     const setLoading = format === 'csv' ? setLoadingCsv : setLoadingJson
     setLoading(true)
     try {
-      await api.exportLegislation({ format, analyzed, tag, impact, status, sponsor, year, month })
+      await api.exportLegislation({ format, analyzed, tag: tags?.join(','), impact, status: statuses?.join(','), sponsor, year, month })
     } catch { /* ignore */ } finally { setLoading(false) }
   }
 
@@ -81,108 +67,131 @@ function ExportButtons({ analyzed, tag, impact, status, sponsor, year, month }: 
   )
 }
 
-function isWithin7Days(isoDate: string): boolean {
-  const d = new Date(isoDate)
-  const now = new Date()
-  const diff = d.getTime() - now.getTime()
-  return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000
-}
 
 interface YearCount  { year: number;  count: number }
 interface MonthCount { month: number; count: number }
 
-// ── Bar Chart ────────────────────────────────────────────────────────────────
+// ── Year Picker ───────────────────────────────────────────────────────────────
+// Pill-based year selector. Works at any data density (1 year or 15).
 
-function BarChart<T extends { count: number }>({
-  data,
-  getLabel,
-  getKey,
-  activeKey,
-  onSelect,
-  title,
-  subtitle,
+function YearPicker({
+  yearCounts,
+  onYearSelect,
 }: {
-  data: T[]
-  getLabel: (item: T) => string
-  getKey:   (item: T) => string | number
-  activeKey: string | number | null
-  onSelect:  (key: string | number) => void
-  title: string
-  subtitle?: string
+  yearCounts: YearCount[]
+  onYearSelect: (year: number) => void
 }) {
-  const [hoveredKey, setHoveredKey] = useState<string | number | null>(null)
-  if (data.length === 0) return null
-  const max = Math.max(...data.map(d => d.count), 1)
-  const total = data.reduce((s, d) => s + d.count, 0)
+  if (yearCounts.length === 0) return null
+  const total = yearCounts.reduce((s, y) => s + y.count, 0)
+  const max   = Math.max(...yearCounts.map(y => y.count), 1)
+
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <span className="text-sm font-semibold">Bill Activity</span>
+          <span className="text-xs text-muted-foreground ml-2">select a year to drill down by month</span>
+        </div>
+        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {yearCounts.map((y) => {
+          const pct = Math.round((y.count / max) * 100)
+          return (
+            <button
+              key={y.year}
+              onClick={() => onYearSelect(y.year)}
+              title={`${y.year}: ${y.count.toLocaleString()} bill${y.count !== 1 ? 's' : ''}`}
+              className="group relative flex flex-col items-center justify-center rounded-lg border border-border hover:border-primary overflow-hidden transition-colors min-w-[72px] px-4 py-3"
+            >
+              {/* Volume fill — subtle background bar rising from the bottom */}
+              <div
+                className="absolute inset-x-0 bottom-0 bg-primary/8 dark:bg-primary/15 transition-all duration-200 group-hover:bg-primary/15 dark:group-hover:bg-primary/25"
+                style={{ height: `${pct}%` }}
+              />
+              <span className="relative text-sm font-bold tabular-nums group-hover:text-primary transition-colors">{y.year}</span>
+              <span className="relative text-[11px] text-muted-foreground tabular-nums group-hover:text-primary/70 transition-colors mt-0.5">
+                {y.count.toLocaleString()}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Month Bar Chart ────────────────────────────────────────────────────────────
+// Only used for the month drill-down — 12 bars always renders well.
+
+function MonthBarChart({
+  monthCounts,
+  selectedMonth,
+  onMonthSelect,
+  year,
+}: {
+  monthCounts: MonthCount[]
+  selectedMonth: number | null
+  onMonthSelect: (month: number | null) => void
+  year: number
+}) {
+  const [hoveredMonth, setHoveredMonth] = useState<number | null>(null)
+  if (monthCounts.length === 0) return null
+  const max   = Math.max(...monthCounts.map(m => m.count), 1)
+  const total = monthCounts.reduce((s, m) => s + m.count, 0)
 
   return (
     <div className="rounded-xl border bg-card p-4">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <span className="text-sm font-semibold">{title}</span>
-          {subtitle && <span className="text-xs text-muted-foreground ml-2">{subtitle}</span>}
+          <span className="text-sm font-semibold">{year}</span>
+          <span className="text-xs text-muted-foreground ml-2">click a month to filter</span>
         </div>
         <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
       </div>
       <div className="flex items-end gap-1" style={{ height: 108 }}>
-        {data.map((item) => {
-          const key  = getKey(item)
-          const label = getLabel(item)
-          const isActive = activeKey === key
-          const isHovered = hoveredKey === key
-          const barH = Math.max((item.count / max) * 72, 3)
+        {monthCounts.map((m) => {
+          const isActive  = selectedMonth === m.month
+          const isHovered = hoveredMonth  === m.month
+          const barH = Math.max((m.count / max) * 72, 3)
           const barColor = isActive ? '#3b82f6' : isHovered ? '#1d4ed8' : '#3b82f630'
 
           return (
             <button
-              key={key}
-              onClick={() => onSelect(key)}
-              onMouseEnter={() => setHoveredKey(key)}
-              onMouseLeave={() => setHoveredKey(null)}
+              key={m.month}
+              onClick={() => onMonthSelect(isActive ? null : m.month)}
+              onMouseEnter={() => setHoveredMonth(m.month)}
+              onMouseLeave={() => setHoveredMonth(null)}
               className="bar-hover flex-1 flex flex-col items-center gap-0.5 min-w-0"
-              title={`${label}: ${item.count.toLocaleString()} bill${item.count !== 1 ? 's' : ''}`}
+              title={`${MONTH_NAMES_FULL[m.month - 1]}: ${m.count.toLocaleString()} bill${m.count !== 1 ? 's' : ''}`}
             >
-              {/* Count label — visible on active or hover */}
               <span style={{
-                fontSize: 11,
-                fontWeight: 600,
-                lineHeight: 1,
-                fontVariantNumeric: 'tabular-nums',
-                color: '#000000',
+                fontSize: 11, fontWeight: 600, lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums', color: 'currentColor',
                 opacity: isActive || isHovered ? 1 : 0,
                 transition: 'opacity 150ms ease',
               }}>
-                {item.count.toLocaleString()}
+                {m.count}
               </span>
-
-              {/* Bar */}
               <div className="w-full flex items-end" style={{ height: 72 }}>
                 <div
                   className="w-full rounded-t-sm"
                   style={{
-                    height: barH,
-                    backgroundColor: barColor,
+                    height: barH, backgroundColor: barColor,
                     outline: isActive ? '2px solid #3b82f6' : 'none',
                     outlineOffset: '1px',
                     transition: 'background-color 150ms ease',
                   }}
                 />
               </div>
-
-              {/* X-axis label */}
               <span style={{
-                fontSize: 10,
-                lineHeight: 1,
-                textAlign: 'center',
-                width: '100%',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
+                fontSize: 10, lineHeight: 1, textAlign: 'center',
+                width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 color: isActive ? '#2563eb' : '#6b7280',
                 fontWeight: isActive ? 600 : 400,
                 transition: 'color 150ms ease',
               }}>
-                {label}
+                {MONTH_NAMES[m.month - 1]}
               </span>
             </button>
           )
@@ -231,29 +240,16 @@ function DrilldownChart({
   }, [selectedYear, filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
 
   if (!selectedYear) {
-    return (
-      <BarChart
-        data={yearCounts}
-        getLabel={(y) => String(y.year)}
-        getKey={(y) => y.year}
-        activeKey={null}
-        onSelect={(k) => onYearSelect(k as number)}
-        title="Bill Activity"
-        subtitle="click a year to drill down"
-      />
-    )
+    return <YearPicker yearCounts={yearCounts} onYearSelect={onYearSelect} />
   }
 
   return (
     <div className="space-y-2">
-      <BarChart
-        data={monthCounts}
-        getLabel={(m) => MONTH_NAMES[m.month - 1]}
-        getKey={(m) => m.month}
-        activeKey={selectedMonth}
-        onSelect={(k) => onMonthSelect(selectedMonth === k ? null : k as number)}
-        title={`${selectedYear}`}
-        subtitle="click a month to filter"
+      <MonthBarChart
+        monthCounts={monthCounts}
+        selectedMonth={selectedMonth}
+        onMonthSelect={onMonthSelect}
+        year={selectedYear}
       />
       <button
         onClick={() => { onYearSelect(null); onMonthSelect(null) }}
@@ -265,74 +261,6 @@ function DrilldownChart({
   )
 }
 
-// ── Bill Card ────────────────────────────────────────────────────────────────
-
-function Highlight({ text, query }: { text: string; query: string }) {
-  if (!query.trim()) return <>{text}</>
-  const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const parts = text.split(new RegExp(`(${escaped})`, 'gi'))
-  return (
-    <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === query.trim().toLowerCase()
-          ? <mark key={i} className="bg-yellow-200 text-yellow-900 rounded-sm px-0.5">{part}</mark>
-          : part
-      )}
-    </>
-  )
-}
-
-function BillCard({ bill, query = '' }: { bill: Bill; query?: string }) {
-  const accent = IMPACT_ACCENT[bill.impact_level ?? ''] ?? '#e5e7eb'
-  const statusClass = STATUS_BADGE[bill.status] ?? 'bg-gray-100 text-gray-600'
-
-  return (
-    <Link
-      href={`/legislation/${bill.id}`}
-      className="flex rounded-lg border bg-background hover:shadow-md transition-all group overflow-hidden"
-    >
-      <div className="w-1 shrink-0" style={{ backgroundColor: accent }} />
-      <div className="flex-1 min-w-0 p-3">
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          {bill.bill_number && (
-            <span className="text-xs font-mono text-muted-foreground shrink-0">{bill.bill_number}</span>
-          )}
-          {bill.status && (
-            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full capitalize shrink-0 ${statusClass}`}>
-              {bill.status.replace(/_/g, ' ')}
-            </span>
-          )}
-          {bill.impact_level && (
-            <span className="text-[11px] font-medium capitalize shrink-0" style={{ color: accent }}>
-              {bill.impact_level} impact
-            </span>
-          )}
-          {bill.next_hearing_date && isWithin7Days(bill.next_hearing_date) && (
-            <span className="text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 shrink-0">
-              Hearing {new Date(bill.next_hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          )}
-          {bill.introduced_date && (
-            <span className="text-[11px] text-muted-foreground/60 shrink-0 ml-auto">
-              {new Date(bill.introduced_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-            </span>
-          )}
-        </div>
-        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-          <Highlight text={bill.plain_title || bill.title} query={query} />
-        </p>
-        {bill.summary && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-            <Highlight text={bill.summary} query={query} />
-          </p>
-        )}
-      </div>
-      <div className="flex items-center pr-3 shrink-0">
-        <span className="text-muted-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity">→</span>
-      </div>
-    </Link>
-  )
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -373,39 +301,40 @@ function LegislationPageInner() {
   const [error,          setError]          = useState('')
   const [selectedYear,   setSelectedYear]   = useState<number | null>(() => sp.get('year') ? Number(sp.get('year')) : null)
   const [selectedMonth,  setSelectedMonth]  = useState<number | null>(() => sp.get('month') ? Number(sp.get('month')) : null)
-  const [selectedTag,    setSelectedTag]    = useState(() => sp.get('tag') ?? '')
+  const [selectedTags,   setSelectedTags]   = useState<string[]>(() => sp.get('tag') ? sp.get('tag')!.split(',').filter(Boolean) : [])
   const [selectedLevel,  setSelectedLevel]  = useState(() => sp.get('level') ?? 'local')
-  const [selectedStatus,  setSelectedStatus]  = useState(() => sp.get('status') ?? '')
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => sp.get('status') ? sp.get('status')!.split(',').filter(Boolean) : [])
   const [selectedImpact,  setSelectedImpact]  = useState(() => sp.get('impact') ?? '')
   const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
   const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') !== '0')
   const [hasVotesOnly,    setHasVotesOnly]    = useState(() => sp.get('has_votes') === '1')
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
   const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
 
   // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
   useEffect(() => {
     const p = new URLSearchParams()
-    if (query)          p.set('q',        query)
-    if (selectedYear)   p.set('year',     String(selectedYear))
-    if (selectedMonth)  p.set('month',    String(selectedMonth))
-    if (selectedTag)    p.set('tag',      selectedTag)
+    if (query)                p.set('q',        query)
+    if (selectedYear)         p.set('year',     String(selectedYear))
+    if (selectedMonth)        p.set('month',    String(selectedMonth))
+    if (selectedTags.length)  p.set('tag',      selectedTags.join(','))
     if (selectedLevel && selectedLevel !== 'local') p.set('level', selectedLevel)
-    if (selectedStatus)  p.set('status',  selectedStatus)
-    if (selectedImpact)  p.set('impact',  selectedImpact)
-    if (selectedSponsor) p.set('sponsor', selectedSponsor)
-    if (!analyzedOnly)   p.set('analyzed', '0')
-    if (hasVotesOnly)    p.set('has_votes', '1')
-    if (page > 1)        p.set('page',    String(page))
+    if (selectedStatuses.length) p.set('status', selectedStatuses.join(','))
+    if (selectedImpact)       p.set('impact',  selectedImpact)
+    if (selectedSponsor)      p.set('sponsor', selectedSponsor)
+    if (!analyzedOnly)        p.set('analyzed', '0')
+    if (hasVotesOnly)         p.set('has_votes', '1')
+    if (page > 1)             p.set('page',    String(page))
     const qs = p.toString()
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', url)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, page])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, page])
 
   const fetchBills = useCallback(async (
-    q: string, year: number | null, month: number | null, tag: string,
-    level: string, status: string, impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean
+    q: string, year: number | null, month: number | null, tags: string[],
+    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean
   ) => {
     setLoading(true)
     setError('')
@@ -414,7 +343,7 @@ function LegislationPageInner() {
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        tag, impact, year ?? 0, month ?? 0, status, sponsor, hasVotes
+        tags, impact, year ?? 0, month ?? 0, statuses, sponsor, hasVotes
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -433,31 +362,31 @@ function LegislationPageInner() {
       level: selectedLevel,
       analyzed: analyzedOnly ? 'true' : '',
       impact: selectedImpact,
-      status: selectedStatus,
+      status: selectedStatuses.join(',') || undefined,
       sponsor: selectedSponsor || undefined,
       year: selectedYear ?? undefined,
       month: selectedMonth ?? undefined,
     }).then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
-  }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatus, selectedSponsor, selectedYear, selectedMonth])
+  }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatuses, selectedSponsor, selectedYear, selectedMonth])
 
   useEffect(() => {
-    fetchBills(query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly)
-  }, [query, selectedYear, selectedMonth, selectedTag, selectedLevel, selectedStatus, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, fetchBills])
+    fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly)
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, fetchBills])
 
   useEffect(() => {
     api.getCouncilmembers().then((d) => setCouncilMembers(d?.members ?? [])).catch(() => {})
   }, [])
 
   const reset = (overrides: Partial<{
-    year: number | null; month: number | null; tag: string; level: string;
-    status: string; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean
+    year: number | null; month: number | null; tags: string[]; level: string;
+    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean
   }> = {}) => {
     setPage(1)
     if ('year'     in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
     if ('month'    in overrides) setSelectedMonth(overrides.month!)
-    if ('tag'      in overrides) setSelectedTag(overrides.tag!)
+    if ('tags'     in overrides) setSelectedTags(overrides.tags!)
     if ('level'    in overrides) setSelectedLevel(overrides.level!)
-    if ('status'   in overrides) setSelectedStatus(overrides.status!)
+    if ('statuses' in overrides) setSelectedStatuses(overrides.statuses!)
     if ('impact'   in overrides) setSelectedImpact(overrides.impact!)
     if ('analyzed' in overrides) setAnalyzedOnly(overrides.analyzed!)
     if ('sponsor'  in overrides) setSelectedSponsor(overrides.sponsor!)
@@ -468,11 +397,30 @@ function LegislationPageInner() {
   const clearAll = () => {
     setPage(1)
     setSelectedYear(null); setSelectedMonth(null)
-    setSelectedTag(''); setSelectedLevel('local')
-    setSelectedStatus(''); setSelectedImpact('')
+    setSelectedTags([]); setSelectedLevel('local')
+    setSelectedStatuses([]); setSelectedImpact('')
     setSelectedSponsor(''); setHasVotesOnly(false)
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
+
+  // Close drawer on Escape
+  useEffect(() => {
+    if (!mobileFiltersOpen) return
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileFiltersOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [mobileFiltersOpen])
+
+  // Count active drawer filters (excludes search query)
+  const drawerFilterCount = [
+    selectedStatuses.length > 0,
+    !!selectedSponsor,
+    !!selectedImpact,
+    selectedTags.length > 0,
+    !analyzedOnly,
+    hasVotesOnly,
+    selectedYear !== null,
+  ].filter(Boolean).length
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
@@ -480,8 +428,8 @@ function LegislationPageInner() {
   if (selectedLevel  && selectedLevel !== 'local') filterParts.push(selectedLevel)
   if (selectedYear)   filterParts.push(String(selectedYear))
   if (selectedMonth)  filterParts.push(MONTH_NAMES_FULL[selectedMonth - 1])
-  if (selectedTag)    filterParts.push(selectedTag)
-  if (selectedStatus)  filterParts.push(selectedStatus.replace(/_/g, ' '))
+  if (selectedTags.length)     selectedTags.forEach(t => filterParts.push(t))
+  if (selectedStatuses.length) selectedStatuses.forEach(s => filterParts.push(fmtStatus(s)))
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
   if (selectedSponsor) filterParts.push(selectedSponsor)
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
@@ -492,14 +440,21 @@ function LegislationPageInner() {
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Legislation</h1>
-          <p className="text-muted-foreground mt-1">Philadelphia City Council bills.</p>
+          <h1 className="text-2xl font-bold tracking-tight">Legislation</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {loading
+              ? 'Philadelphia City Council bills'
+              : filterParts.length > 0
+                ? <>{total.toLocaleString()} bill{total !== 1 ? 's' : ''} matching <span className="font-medium text-foreground">{filterParts.join(', ')}</span></>
+                : <>{total.toLocaleString()} Philadelphia City Council bill{total !== 1 ? 's' : ''}</>
+            }
+          </p>
         </div>
         <ExportButtons
           analyzed={analyzedOnly ? 'true' : ''}
-          tag={selectedTag}
+          tags={selectedTags}
           impact={selectedImpact}
-          status={selectedStatus}
+          statuses={selectedStatuses}
           sponsor={selectedSponsor}
           year={selectedYear ?? undefined}
           month={selectedMonth ?? undefined}
@@ -515,35 +470,66 @@ function LegislationPageInner() {
         filters={{
           q: query || undefined,
           analyzed: analyzedOnly ? 'true' : undefined,
-          tag: selectedTag || undefined,
+          tag: selectedTags.join(',') || undefined,
           impact: selectedImpact || undefined,
-          status: selectedStatus || undefined,
+          status: selectedStatuses.join(',') || undefined,
           sponsor: selectedSponsor || undefined,
         }}
       />
 
       {/* ── Filter row ── */}
-      <div className="space-y-3 sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4">
+      <div className="sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4 space-y-3">
 
+        {/* Mobile: search always visible + toggle button */}
+        <div className="flex gap-2 sm:hidden">
+          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1">
+            <input
+              type="text"
+              value={queryInput}
+              onChange={(e) => setQueryInput(e.target.value)}
+              placeholder="Search bills…"
+              aria-label="Search bills"
+              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            />
+            <button type="submit" disabled={loading} className="inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              Search
+            </button>
+          </form>
+          <button
+            onClick={() => setMobileFiltersOpen((v) => !v)}
+            className="relative inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-sm font-medium hover:bg-muted transition-colors shrink-0"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M10 12h4" />
+            </svg>
+            Filters
+            {drawerFilterCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+                {drawerFilterCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Desktop filter controls — hidden on mobile (mobile uses the bottom drawer) */}
+        <div className="hidden sm:block space-y-3">
 
         {/* Status, Impact, Analyzed row */}
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Status dropdown */}
-          <Select value={selectedStatus || '__all__'} onValueChange={(v) => reset({ status: v === '__all__' ? '' : (v ?? '') })}>
-            <SelectTrigger className="h-8 text-sm w-[140px]" aria-label="Filter by status">
-              <SelectValue placeholder="All statuses" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">All statuses</SelectItem>
-              {STATUSES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          {/* Status multi-select */}
+          <MultiSelect
+            options={STATUSES}
+            selected={selectedStatuses}
+            onChange={(v) => { reset({ statuses: v }) }}
+            placeholder="All Statuses"
+            className="h-8 min-w-[140px]"
+          />
 
           {/* Sponsor dropdown */}
           {councilMembers.length > 0 && (
             <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
               <SelectTrigger className="h-8 text-sm w-[160px]" aria-label="Filter by sponsor">
-                <SelectValue placeholder="All sponsors" />
+                <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__all__">All sponsors</SelectItem>
@@ -607,8 +593,8 @@ function LegislationPageInner() {
           </label>
         </div>
 
-        {/* Search + tag */}
-        <div className="flex flex-wrap gap-2">
+        {/* Search + tag — desktop only (mobile has its own search above) */}
+        <div className="hidden sm:flex flex-wrap gap-2">
           <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1 min-w-64">
             <input
               type="text"
@@ -627,30 +613,171 @@ function LegislationPageInner() {
             </button>
           </form>
           {tagCounts.length > 0 && (
-            <select
-              value={selectedTag}
-              onChange={(e) => reset({ tag: e.target.value })}
-              aria-label="Filter by tag"
-              className="h-9 rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">All Tags</option>
-              {tagCounts.map(({ tag, count }) => (
-                <option key={tag} value={tag}>{tag} ({count})</option>
-              ))}
-            </select>
+            <MultiSelect
+              options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
+              selected={selectedTags}
+              onChange={(v) => reset({ tags: v })}
+              placeholder="All Tags"
+              className="h-9 min-w-[150px]"
+            />
           )}
         </div>
+        </div>{/* end desktop panel */}
       </div>
+
+      {/* ── Mobile Filter Drawer ── */}
+      {mobileFiltersOpen && (
+        <div className="sm:hidden fixed inset-0 z-50 flex flex-col justify-end">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileFiltersOpen(false)}
+          />
+          {/* Sheet */}
+          <div className="relative bg-background rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+            {/* Drag handle */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0">
+              <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+            </div>
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
+              <span className="font-semibold text-sm">Filters</span>
+              <div className="flex items-center gap-4">
+                {drawerFilterCount > 0 && (
+                  <button
+                    onClick={() => { clearAll(); setMobileFiltersOpen(false) }}
+                    className="text-sm text-red-600 hover:text-red-700 transition-colors"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  onClick={() => setMobileFiltersOpen(false)}
+                  className="text-sm font-semibold text-primary hover:opacity-80 transition-opacity"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+            {/* Scrollable content */}
+            <div className="overflow-y-auto flex-1 px-4 py-5 space-y-6">
+
+              {/* Status */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+                <MultiSelect
+                  options={STATUSES}
+                  selected={selectedStatuses}
+                  onChange={(v) => reset({ statuses: v })}
+                  placeholder="All Statuses"
+                  className="h-10 w-full"
+                />
+              </div>
+
+              {/* Sponsor */}
+              {councilMembers.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sponsor</p>
+                  <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
+                    <SelectTrigger className="h-10 text-sm w-full" aria-label="Filter by sponsor">
+                      <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All sponsors</SelectItem>
+                      {councilMembers.map(m => (
+                        <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Impact */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Impact</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => reset({ impact: '' })}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      !selectedImpact
+                        ? 'bg-foreground text-background border-foreground'
+                        : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
+                    }`}
+                  >All</button>
+                  {IMPACTS.map(imp => (
+                    <button
+                      key={imp}
+                      onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize border transition-colors ${
+                        selectedImpact === imp
+                          ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
+                          : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
+                          :                   'bg-green-500 text-white border-green-500'
+                          : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 dark:hover:bg-red-900/20'
+                          : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400 dark:hover:bg-amber-900/20'
+                          :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 dark:hover:bg-green-900/20'
+                      }`}
+                    >
+                      {imp}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tags */}
+              {tagCounts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
+                  <MultiSelect
+                    options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
+                    selected={selectedTags}
+                    onChange={(v) => reset({ tags: v })}
+                    placeholder="All Tags"
+                    className="h-10 w-full"
+                  />
+                </div>
+              )}
+
+              {/* Options */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Options</p>
+                <label className="flex items-center justify-between py-2 border-b">
+                  <span className="text-sm">Analyzed only</span>
+                  <input
+                    type="checkbox"
+                    checked={analyzedOnly}
+                    onChange={(e) => reset({ analyzed: e.target.checked })}
+                    className="rounded border-input w-4 h-4"
+                  />
+                </label>
+                <label className="flex items-center justify-between py-2">
+                  <span className="text-sm">Has roll call vote</span>
+                  <input
+                    type="checkbox"
+                    checked={hasVotesOnly}
+                    onChange={(e) => reset({ hasVotes: e.target.checked })}
+                    className="rounded border-input w-4 h-4"
+                  />
+                </label>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Active filter breadcrumb */}
       {filterParts.length > 0 && (
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Showing:</span>
-          <span className="font-medium">{filterParts.join(' · ')}</span>
+        <div className="flex items-center gap-2 text-sm flex-wrap">
+          <span className="text-muted-foreground shrink-0">Filters:</span>
+          <span className="font-medium text-foreground">{filterParts.join(' · ')}</span>
           <button
             onClick={clearAll}
-            className="text-xs text-muted-foreground hover:text-foreground underline transition-colors"
+            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-300 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/30 transition-colors"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
             Clear all
           </button>
         </div>
@@ -658,13 +785,10 @@ function LegislationPageInner() {
 
       {error && <p className="text-sm text-destructive">Error: {error}</p>}
 
-      {/* Bill count + pagination top */}
-      {!loading && !error && total > 0 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>{total.toLocaleString()} bill{total !== 1 ? 's' : ''}</span>
-          {totalPages > 1 && (
-            <span>Page {page} of {totalPages}</span>
-          )}
+      {/* Pagination position indicator */}
+      {!loading && !error && total > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-end text-sm text-muted-foreground">
+          <span>Page {page} of {totalPages}</span>
         </div>
       )}
 
@@ -688,19 +812,32 @@ function LegislationPageInner() {
 
       {/* Empty state */}
       {!loading && !error && bills.length === 0 && (
-        <div className="text-center py-16 space-y-3">
-          <svg xmlns="http://www.w3.org/2000/svg" className="w-10 h-10 mx-auto text-muted-foreground/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
-          </svg>
+        <div className="text-center py-20 space-y-4">
           {filterParts.length > 0 ? (
             <>
-              <p className="text-sm font-medium text-muted-foreground">No bills match these filters.</p>
-              <button onClick={clearAll} className="text-sm text-primary hover:underline">Clear filters and try again</button>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-muted-foreground/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
+              </svg>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">No bills match these filters</p>
+                <p className="text-sm text-muted-foreground">Try adjusting or removing some of the active filters.</p>
+              </div>
+              <button onClick={clearAll} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
+                Clear all filters
+              </button>
             </>
           ) : (
             <>
-              <p className="text-sm font-medium text-muted-foreground">No legislation has been ingested yet.</p>
-              <Link href="/admin" className="text-sm text-primary hover:underline">Ingest bills from the admin panel →</Link>
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-muted-foreground/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
+              </svg>
+              <div className="space-y-1">
+                <p className="text-sm font-semibold">No legislation yet</p>
+                <p className="text-sm text-muted-foreground">Bills will appear here once they&apos;ve been ingested.</p>
+              </div>
+              <Link href="/admin" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
+                Go to admin panel →
+              </Link>
             </>
           )}
         </div>

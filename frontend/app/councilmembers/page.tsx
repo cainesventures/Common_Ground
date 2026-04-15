@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
+import { CITY } from '@/lib/city'
 
 const DistrictMap = dynamic(
   () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
@@ -228,6 +229,7 @@ export default function CouncilmembersPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     api.getCouncilmembers()
@@ -243,15 +245,21 @@ export default function CouncilmembersPage() {
     }, 100)
   }
 
-  const district = members.filter((m) => m.district !== 'At-Large')
-  const atLarge = members.filter((m) => m.district === 'At-Large')
+  const filtered = search.trim()
+    ? members.filter((m) => m.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : members
+  const district = filtered.filter((m) => m.district !== 'At-Large')
+  const atLarge = filtered.filter((m) => m.district === 'At-Large')
 
   return (
     <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Philadelphia City Council</h1>
+        <h1 className="text-2xl font-bold tracking-tight">{CITY.fullCouncilName}</h1>
         <p className="text-muted-foreground mt-1">
-          17 members — 10 district seats and 7 at-large seats.
+          {CITY.totalMembers} members
+          {CITY.atLargeCount > 0
+            ? ` — ${CITY.districtCount} district seats and ${CITY.atLargeCount} at-large seats.`
+            : ` — ${CITY.districtCount} district seats.`}
         </p>
       </div>
 
@@ -272,6 +280,22 @@ export default function CouncilmembersPage() {
         <SponsorshipChart members={members} />
       )}
 
+      {!loading && members.length > 0 && (
+        <div className="relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search council members…"
+            aria-label="Search council members"
+            className="w-full rounded-md border border-input bg-background pl-9 pr-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        </div>
+      )}
+
       {loading && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[...Array(8)].map((_, i) => (
@@ -290,6 +314,13 @@ export default function CouncilmembersPage() {
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-sm">No council members yet.</p>
           <p className="text-xs mt-1">An admin can scrape profiles from the <a href="/admin" className="underline">admin panel</a>.</p>
+        </div>
+      )}
+
+      {!loading && search.trim() !== '' && district.length === 0 && atLarge.length === 0 && (
+        <div className="text-center py-12 space-y-2">
+          <p className="text-sm font-semibold">No members match &ldquo;{search}&rdquo;</p>
+          <button onClick={() => setSearch('')} className="text-sm text-primary hover:underline">Clear search</button>
         </div>
       )}
 

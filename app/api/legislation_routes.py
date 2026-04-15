@@ -212,7 +212,9 @@ async def get_tag_counts(
     if impact:
         base_query = base_query.filter(Legislation.impact_level == impact)
     if status:
-        base_query = base_query.filter(Legislation.status == status)
+        from sqlalchemy import or_
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        base_query = base_query.filter(Legislation.status.in_(status_list))
     if sponsor:
         base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
     if year:
@@ -264,11 +266,14 @@ async def get_year_counts(
     elif analyzed == "false":
         base = base.filter(Legislation.analyzed_at.is_(None))
     if tag:
-        base = base.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+        from sqlalchemy import or_
+        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+        base = base.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
     if impact:
         base = base.filter(Legislation.impact_level == impact)
     if status:
-        base = base.filter(Legislation.status == status)
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        base = base.filter(Legislation.status.in_(status_list))
     if sponsor:
         base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
 
@@ -308,11 +313,14 @@ async def get_month_counts(
     elif analyzed == "false":
         base = base.filter(Legislation.analyzed_at.is_(None))
     if tag:
-        base = base.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+        from sqlalchemy import or_
+        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+        base = base.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
     if impact:
         base = base.filter(Legislation.impact_level == impact)
     if status:
-        base = base.filter(Legislation.status == status)
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        base = base.filter(Legislation.status.in_(status_list))
     if sponsor:
         base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
 
@@ -386,11 +394,14 @@ async def export_legislation(
     elif analyzed_filter is False:
         base_q = base_q.filter(Legislation.analyzed_at.is_(None))
     if tag:
-        base_q = base_q.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+        from sqlalchemy import or_
+        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+        base_q = base_q.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
     if impact:
         base_q = base_q.filter(Legislation.impact_level == impact)
     if status:
-        base_q = base_q.filter(Legislation.status == status)
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        base_q = base_q.filter(Legislation.status.in_(status_list))
     if sponsor:
         base_q = base_q.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
     if year:
@@ -491,13 +502,14 @@ async def search_legislation(
     offset: int = Query(0, ge=0),
     level: str = Query("", max_length=20),
     analyzed: str = Query("", description="Filter: 'true' = analyzed, 'false' = pending, '' = all"),
-    tag: str = Query("", max_length=60),
+    tag: str = Query("", max_length=200),
     impact: str = Query("", max_length=20),
-    status: str = Query("", max_length=40),
+    status: str = Query("", max_length=200),
     sponsor: str = Query("", max_length=100),
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     has_votes: bool = Query(False, description="Only return bills with cached roll call votes"),
+    city: str = Query("", max_length=50, description="City slug filter (e.g. 'philadelphia', 'chicago'). Defaults to 'philadelphia' for local searches."),
     db: Session = Depends(get_db)
 ):
     """Search for legislation with optional filters."""
@@ -508,11 +520,14 @@ async def search_legislation(
         elif analyzed == "false":
             analyzed_filter = False
 
+        # Default local searches to Philadelphia so other cities' data stays hidden
+        effective_city = city or ('philadelphia' if level == 'local' else '')
+
         service = LegislationIngestionService(db)
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
             year=year or None, month=month or None, status=status or None, sponsor=sponsor or None,
-            has_votes=has_votes or None,
+            has_votes=has_votes or None, city=effective_city or None,
         )
         return {
             "success": True,

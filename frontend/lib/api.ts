@@ -102,8 +102,11 @@ export const api = {
     return apiFetch(`/api/legislation/month-counts?${p}`)
   },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag = '', impact = '', year = 0, month = 0, status = '', sponsor = '', hasVotes = false) =>
-    apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tag ? `&tag=${encodeURIComponent(tag)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${status ? `&status=${encodeURIComponent(status)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}`),
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false) => {
+    const tagStr = Array.isArray(tag) ? tag.join(',') : tag
+    const statusStr = Array.isArray(status) ? status.join(',') : status
+    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}`)
+  },
 
   tagAllBills: () =>
     apiFetch('/api/legislation/tag-all', { method: 'POST' }),

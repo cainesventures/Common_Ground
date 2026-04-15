@@ -3,7 +3,7 @@ import BillDetailClient from './BillDetailClient'
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
-    const res = await fetch(`http://localhost:8000/api/legislation/${id}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`, {
       next: { revalidate: 3600 },
     })
     if (!res.ok) return { title: 'Bill — Common Ground' }

@@ -3,7 +3,7 @@ import CouncilmemberDetailClient from './CouncilmemberDetailClient'
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   try {
-    const res = await fetch(`http://localhost:8000/api/councilmembers/${id}`, {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}`, {
       next: { revalidate: 3600 },
     })
     if (!res.ok) return { title: 'Councilmember — Common Ground' }
@@ -19,11 +19,13 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
         description,
         type: 'profile',
         siteName: 'Common Ground',
+        images: [{ url: `/councilmembers/${id}/opengraph-image`, width: 1200, height: 630 }],
       },
       twitter: {
-        card: 'summary',
+        card: 'summary_large_image',
         title,
         description,
+        images: [`/councilmembers/${id}/opengraph-image`],
       },
     }
   } catch {

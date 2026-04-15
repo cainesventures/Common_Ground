@@ -4,39 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
-
-const IMPACT_COLORS: Record<string, string> = {
-  high:   'bg-red-100 text-red-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low:    'bg-green-100 text-green-800',
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  introduced:      'bg-blue-100 text-blue-800',
-  in_committee:    'bg-yellow-100 text-yellow-800',
-  signed_into_law: 'bg-green-100 text-green-800',
-  failed:          'bg-red-100 text-red-800',
-  vetoed:          'bg-orange-100 text-orange-800',
-}
-
-interface Bill {
-  id: string
-  bill_number: string
-  title: string
-  plain_title?: string
-  status: string
-  impact_level?: string
-  summary?: string
-  tags?: string
-  next_hearing_date?: string
-}
-
-function isWithin7Days(isoDate: string): boolean {
-  const d = new Date(isoDate)
-  const now = new Date()
-  const diff = d.getTime() - now.getTime()
-  return diff > 0 && diff < 7 * 24 * 60 * 60 * 1000
-}
+import { BillCard, type BillCardBill } from '@/components/BillCard'
 
 const FEATURES = [
   {
@@ -113,47 +81,95 @@ const STEPS = [
   },
 ]
 
-function BillPreviewCard({ bill }: { bill: Bill }) {
-  let tags: string[] = []
-  try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
-  const statusColor = STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'
-  const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
-
+// ── Philadelphia City Hall silhouette ─────────────────────────────────────────
+// Simplified architectural silhouette used as a decorative hero element.
+// Key features: main block, corner pavilions, central tower, William Penn.
+function CityHallSilhouette({ className }: { className?: string }) {
   return (
-    <Link
-      href={`/legislation/${bill.id}`}
-      className="block border rounded-lg px-4 py-3 hover:border-primary/60 hover:bg-muted/20 transition-all"
-    >
-      <div className="flex items-center gap-2 flex-wrap mb-1">
-        <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
-        <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
-          {bill.status?.replace(/_/g, ' ')}
-        </span>
-        {impactColor && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
-            {bill.impact_level} impact
-          </span>
-        )}
-        {bill.next_hearing_date && isWithin7Days(bill.next_hearing_date) && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">
-            Hearing {new Date(bill.next_hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </span>
-        )}
-      </div>
-      <p className="text-sm font-semibold leading-snug">
-        {bill.plain_title || bill.title}
-      </p>
-      {bill.summary && (
-        <p className="text-xs text-muted-foreground leading-relaxed mt-1 line-clamp-2">{bill.summary}</p>
-      )}
-      {tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {tags.slice(0, 3).map((t) => (
-            <span key={t} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{t}</span>
-          ))}
-        </div>
-      )}
-    </Link>
+    <svg viewBox="0 0 400 280" fill="currentColor" className={className} aria-hidden="true">
+      {/* Base steps */}
+      <rect x="20" y="270" width="360" height="10" />
+      <rect x="34" y="262" width="332" height="8" />
+
+      {/* Corner pavilions — slightly taller than main block */}
+      <rect x="44" y="152" width="62" height="110" />
+      <rect x="294" y="152" width="62" height="110" />
+
+      {/* Main building block */}
+      <rect x="50" y="168" width="300" height="94" />
+
+      {/* Tower lower base */}
+      <rect x="144" y="118" width="112" height="144" />
+
+      {/* Tower middle */}
+      <rect x="158" y="96" width="84" height="26" />
+
+      {/* Tower upper */}
+      <rect x="168" y="74" width="64" height="26" />
+
+      {/* Cupola */}
+      <rect x="176" y="56" width="48" height="22" rx="2" />
+
+      {/* Lantern */}
+      <rect x="186" y="42" width="28" height="16" rx="1" />
+
+      {/* Finial */}
+      <rect x="198" y="28" width="4" height="16" />
+
+      {/* William Penn — head + body */}
+      <ellipse cx="200" cy="20" rx="5" ry="6" />
+      <path d="M196 26 Q200 24 204 26 L205 37 Q200 35 195 37 Z" />
+
+      {/* Clock suggestion on tower */}
+      <circle cx="200" cy="108" r="13" fill="none" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+
+      {/* Windows — left pavilion */}
+      <rect x="56" y="176" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="76" y="176" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="56" y="206" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="76" y="206" width="12" height="18" rx="1.5" opacity="0.25" />
+
+      {/* Windows — center main block */}
+      <rect x="168" y="180" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="188" y="180" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="208" y="180" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="228" y="180" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="168" y="208" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="188" y="208" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="208" y="208" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="228" y="208" width="12" height="18" rx="1.5" opacity="0.25" />
+
+      {/* Windows — right pavilion */}
+      <rect x="312" y="176" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="332" y="176" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="312" y="206" width="12" height="18" rx="1.5" opacity="0.25" />
+      <rect x="332" y="206" width="12" height="18" rx="1.5" opacity="0.25" />
+
+      {/* Tower windows */}
+      <rect x="162" y="132" width="10" height="14" rx="1.5" opacity="0.25" />
+      <rect x="178" y="132" width="10" height="14" rx="1.5" opacity="0.25" />
+      <rect x="212" y="132" width="10" height="14" rx="1.5" opacity="0.25" />
+      <rect x="228" y="132" width="10" height="14" rx="1.5" opacity="0.25" />
+      <rect x="162" y="156" width="10" height="14" rx="1.5" opacity="0.25" />
+      <rect x="228" y="156" width="10" height="14" rx="1.5" opacity="0.25" />
+
+      {/* Arched ground entrances */}
+      <rect x="86" y="230" width="22" height="32" rx="11 11 0 0" opacity="0.3" />
+      <rect x="189" y="226" width="22" height="36" rx="11 11 0 0" opacity="0.3" />
+      <rect x="292" y="230" width="22" height="32" rx="11 11 0 0" opacity="0.3" />
+
+      {/* Columns — left pavilion suggestion */}
+      <rect x="52"  y="192" width="3" height="70" opacity="0.18" />
+      <rect x="60"  y="192" width="3" height="70" opacity="0.18" />
+      <rect x="96"  y="192" width="3" height="70" opacity="0.18" />
+      <rect x="104" y="192" width="3" height="70" opacity="0.18" />
+
+      {/* Columns — right pavilion */}
+      <rect x="293" y="192" width="3" height="70" opacity="0.18" />
+      <rect x="301" y="192" width="3" height="70" opacity="0.18" />
+      <rect x="337" y="192" width="3" height="70" opacity="0.18" />
+      <rect x="345" y="192" width="3" height="70" opacity="0.18" />
+    </svg>
   )
 }
 
@@ -164,7 +180,7 @@ interface SiteMetrics {
 
 export default function LandingPage() {
   const router = useRouter()
-  const [recentBills, setRecentBills] = useState<Bill[]>([])
+  const [recentBills, setRecentBills] = useState<BillCardBill[]>([])
   const [metrics, setMetrics] = useState<SiteMetrics | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -188,44 +204,49 @@ export default function LandingPage() {
     <div className="space-y-20 pb-20">
 
       {/* ── Hero ── */}
-      <section className="pt-12 pb-4 text-center max-w-3xl mx-auto">
-        <div className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200">
-          Philadelphia · Free · No Ads · No Agenda
-        </div>
-        <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-5">
-          Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
-        </h1>
-        <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
-          Common Ground tracks every bill introduced to Philadelphia City Council, rewrites it in plain English, and shows you how 17 different communities see it — free, forever.
-        </p>
-        <form onSubmit={handleSearch} className="flex gap-2 max-w-lg mx-auto w-full mb-4">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search bills by title, topic, or number…"
-            className="flex-1 rounded-lg border border-input bg-background px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-          />
-          <button
-            type="submit"
-            className="px-5 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors"
-          >
-            Search
-          </button>
-        </form>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/legislation"
-            className="btn-primary-hover px-6 py-3 rounded-lg border border-black bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90"
-          >
-            Browse legislation
-          </Link>
-          <Link
-            href="/councilmembers"
-            className="btn-primary-hover px-6 py-3 rounded-lg border font-semibold text-base"
-          >
-            View council members
-          </Link>
+      <section className="relative pt-12 pb-4 text-center max-w-3xl mx-auto overflow-hidden">
+        {/* City Hall silhouette — decorative background */}
+        <CityHallSilhouette className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[520px] max-w-none opacity-[0.13] dark:opacity-[0.1] text-blue-900 dark:text-blue-200 pointer-events-none select-none" />
+        {/* Fade to page at the bottom */}
+        <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-background to-transparent pointer-events-none" />
+
+        <div className="relative z-10">
+          <div className="inline-block bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200 dark:border-blue-700">
+            The City of Brotherly Love · Free · No Agenda
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight leading-tight mb-5">
+            Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
+          </h1>
+          <p className="text-lg text-muted-foreground leading-relaxed max-w-xl mx-auto mb-8">
+            Common Ground tracks every bill introduced to Philadelphia City Council — from Fishtown to Kensington, South Philly to Germantown — and rewrites it in plain English so every resident can follow along.
+          </p>
+          <form onSubmit={handleSearch} className="relative max-w-lg mx-auto w-full mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
+            </svg>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search bills by title, topic, or number…"
+              autoFocus={typeof window !== 'undefined' && window.innerWidth > 768}
+              className="w-full rounded-lg border border-input bg-background pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </form>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              href="/legislation"
+              className="btn-primary-hover px-6 py-3 rounded-lg border border-foreground bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90"
+            >
+              Browse legislation
+            </Link>
+            <Link
+              href="/councilmembers"
+              className="btn-primary-hover px-6 py-3 rounded-lg border font-semibold text-base"
+            >
+              View council members
+            </Link>
+          </div>
         </div>
       </section>
 
@@ -296,7 +317,7 @@ export default function LandingPage() {
           </div>
           <div className="flex flex-col gap-3">
             {recentBills.map((bill) => (
-              <BillPreviewCard key={bill.id} bill={bill} />
+              <BillCard key={bill.id} bill={bill} showDate={false} />
             ))}
           </div>
         </section>
@@ -317,7 +338,7 @@ export default function LandingPage() {
         </div>
         <Link
           href="/legislation?analyzed=true"
-          className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border border-black bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
+          className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border border-foreground bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
         >
           Read the perspectives
         </Link>
@@ -327,10 +348,10 @@ export default function LandingPage() {
       <section className="max-w-2xl mx-auto text-center">
         <h2 className="text-2xl font-bold tracking-tight mb-4">Built for Philadelphians, by Philadelphians</h2>
         <p className="text-muted-foreground leading-relaxed mb-4">
-          Your City Council passes hundreds of bills every year — zoning changes, tax policy, public safety measures, housing rules. Decisions that affect your rent, your neighborhood, your commute. Most residents never find out until it&apos;s already law.
+          City Council passes hundreds of bills every year — zoning changes that reshape your block in East Kensington, tax breaks that shift the burden onto renters in West Philly, public safety measures that affect every neighborhood from Roxborough to Point Breeze. Most residents never find out until it&apos;s already law.
         </p>
         <p className="text-muted-foreground leading-relaxed mb-8">
-          Common Ground is a free, independent civic tool with no ads, no corporate backing, and no political agenda. If it&apos;s useful to you, consider helping keep it running.
+          Common Ground is a free, independent civic tool with no ads, no corporate backing, and no political agenda. We just want Philly residents to know what their council is doing. If that&apos;s useful to you, consider helping keep the lights on.
         </p>
         <Link
           href="/donate"

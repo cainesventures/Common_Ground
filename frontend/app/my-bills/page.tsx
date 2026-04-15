@@ -6,6 +6,8 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
+import { STATUS_COLORS, STATUS_COLORS_FALLBACK, IMPACT_COLORS } from '@/lib/badge-colors'
+import { fmtStatus } from '@/lib/utils'
 
 function ExportButtons() {
   const [loadingCsv,  setLoadingCsv]  = useState(false)
@@ -38,20 +40,6 @@ function ExportButtons() {
       </button>
     </div>
   )
-}
-
-const IMPACT_COLORS: Record<string, string> = {
-  high:   'bg-red-100 text-red-800',
-  medium: 'bg-yellow-100 text-yellow-800',
-  low:    'bg-green-100 text-green-800',
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  introduced:      'bg-blue-100 text-blue-800',
-  in_committee:    'bg-yellow-100 text-yellow-800',
-  signed_into_law: 'bg-green-100 text-green-800',
-  failed:          'bg-red-100 text-red-800',
-  vetoed:          'bg-orange-100 text-orange-800',
 }
 
 interface TrackedBill {
@@ -98,7 +86,29 @@ export default function MyBillsPage() {
     }
   }, [bills])
 
-  if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
+  if (loading) return (
+    <div className="max-w-3xl space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div className="space-y-2">
+          <div className="h-7 w-40 bg-muted animate-pulse rounded" />
+          <div className="h-4 w-52 bg-muted animate-pulse rounded" />
+        </div>
+        <div className="h-8 w-24 bg-muted animate-pulse rounded" />
+      </div>
+      <div className="flex flex-col gap-2">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="border rounded-lg px-4 py-3 space-y-2">
+            <div className="flex gap-2">
+              <div className="h-4 w-16 bg-muted animate-pulse rounded-full" />
+              <div className="h-4 w-20 bg-muted animate-pulse rounded-full" />
+            </div>
+            <div className="h-4 w-3/4 bg-muted animate-pulse rounded" />
+            <div className="h-3 w-full bg-muted animate-pulse rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -113,9 +123,15 @@ export default function MyBillsPage() {
       </div>
 
       {bills.length === 0 ? (
-        <div className="border rounded-lg p-12 text-center space-y-3">
-          <p className="text-muted-foreground">You haven&apos;t saved any bills yet.</p>
-          <Link href="/" className="text-sm text-primary hover:underline">
+        <div className="border rounded-lg py-20 px-8 text-center space-y-4">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-12 h-12 mx-auto text-muted-foreground/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold">No saved bills yet</p>
+            <p className="text-sm text-muted-foreground">Bookmark bills to track their progress and come back to them easily.</p>
+          </div>
+          <Link href="/legislation" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
             Browse legislation →
           </Link>
         </div>
@@ -123,7 +139,7 @@ export default function MyBillsPage() {
         <div className="flex flex-col gap-2">
           {bills.map((bill) => {
             const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
-            const statusColor = STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'
+            const statusColor = STATUS_COLORS[bill.status] ?? STATUS_COLORS_FALLBACK
             let tags: string[] = []
             try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
 
@@ -133,7 +149,7 @@ export default function MyBillsPage() {
                   <div className="flex items-center gap-2 flex-wrap mb-1 pr-8">
                     <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>
-                      {bill.status?.replace(/_/g, ' ')}
+                      {bill.status ? fmtStatus(bill.status) : ''}
                     </span>
                     {impactColor && (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${impactColor}`}>
@@ -167,7 +183,7 @@ export default function MyBillsPage() {
                   {tags.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {tags.map((tag) => (
-                        <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
+                        <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
                       ))}
                     </div>
                   )}

@@ -191,6 +191,7 @@ class LegislationIngestionService:
         for raw in raw_matters:
             try:
                 parsed = LegistarClient.parse_matter_data(raw, city)
+                parsed['city'] = city.lower()
 
                 existing = self.db.query(Legislation).filter(
                     Legislation.id == parsed["id"]
@@ -258,6 +259,8 @@ class LegislationIngestionService:
 
         for parsed in bills:
             try:
+                parsed['city'] = 'philadelphia'
+
                 existing = self.db.query(Legislation).filter(
                     Legislation.id == parsed["id"]
                 ).first()
@@ -295,6 +298,7 @@ class LegislationIngestionService:
         status: Optional[str] = None,
         sponsor: Optional[str] = None,
         has_votes: Optional[bool] = None,
+        city: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -306,12 +310,16 @@ class LegislationIngestionService:
             )
         if level:
             base_query = base_query.filter(Legislation.level == level)
+        if city:
+            base_query = base_query.filter(Legislation.city == city)
         if analyzed is True:
             base_query = base_query.filter(Legislation.analyzed_at.isnot(None))
         elif analyzed is False:
             base_query = base_query.filter(Legislation.analyzed_at.is_(None))
         if tag:
-            base_query = base_query.filter(Legislation.tags.ilike(f'%"{tag}"%'))
+            from sqlalchemy import or_
+            tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+            base_query = base_query.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
         if impact:
             base_query = base_query.filter(Legislation.impact_level == impact)
         if year:
@@ -323,7 +331,8 @@ class LegislationIngestionService:
                 extract("month", Legislation.introduced_date) == month
             )
         if status:
-            base_query = base_query.filter(Legislation.status == status)
+            status_list = [s.strip() for s in status.split(',') if s.strip()]
+            base_query = base_query.filter(Legislation.status.in_(status_list))
         if sponsor:
             base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
         if has_votes:

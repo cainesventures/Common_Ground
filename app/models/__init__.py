@@ -57,6 +57,9 @@ class Legislation(Base):
     times_tracked = Column(Integer, default=0)
     analyzed_at = Column(DateTime)        # NULL = not yet analyzed
 
+    # City this legislation belongs to (used for multi-city support)
+    city = Column(String, default='philadelphia')
+
     # Upcoming hearing fields (populated by hearings scraper)
     next_hearing_date     = Column(DateTime, nullable=True)
     next_hearing_time     = Column(String, nullable=True)
