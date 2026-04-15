@@ -202,27 +202,18 @@ function PerspectivesTally({
                   </button>
 
                   {isOpen && (
-                    <div className="px-4 pb-3 pt-1 bg-muted/10 border-t space-y-2">
-                      {p.assessment && (
-                        <p className="text-sm text-muted-foreground leading-relaxed">{p.assessment}</p>
-                      )}
-                      {args.length > 0 && (
-                        <ul className="space-y-1">
-                          {args.map((arg, i) => (
-                            <li key={i} className="text-xs text-muted-foreground flex gap-2">
-                              <span className="shrink-0 text-primary mt-0.5">•</span>
-                              <span>{arg}</span>
-                            </li>
+                    <div className="px-4 pb-4 pt-2 bg-muted/10 border-t">
+                      {p.assessment ? (
+                        <div className="space-y-2.5">
+                          {p.assessment.split('\n\n').filter(Boolean).map((para, i) => (
+                            <p key={i} className="text-sm text-foreground/80 leading-relaxed">{para}</p>
                           ))}
-                        </ul>
-                      )}
-                      {p.concerns && (
-                        <p className="text-xs text-muted-foreground border-t pt-2">
-                          <span className="font-medium text-foreground">Concerns: </span>{p.concerns}
-                        </p>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground italic">No analysis available.</p>
                       )}
                       {p.generated_at && (
-                        <p className="text-[11px] text-muted-foreground/50 text-right">
+                        <p className="text-[11px] text-muted-foreground/40 text-right mt-3">
                           Generated {timeAgo(p.generated_at)}
                         </p>
                       )}
