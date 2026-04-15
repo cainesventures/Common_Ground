@@ -250,6 +250,25 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Live bill preview — right after the hero so users see real content first ── */}
+      {recentBills.length > 0 && (
+        <section className="max-w-3xl mx-auto">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
+              High-impact bills right now
+            </h2>
+            <Link href="/legislation?analyzed=true&impact=high" className="text-sm text-primary hover:underline">
+              See all →
+            </Link>
+          </div>
+          <div className="flex flex-col gap-3">
+            {recentBills.map((bill) => (
+              <BillCard key={bill.id} bill={bill} showDate={false} />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Live metrics ── */}
       {metrics && (
         <section className="max-w-2xl mx-auto">
@@ -303,25 +322,6 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
-
-      {/* ── Live bill preview ── */}
-      {recentBills.length > 0 && (
-        <section className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
-              High-impact bills right now
-            </h2>
-            <Link href="/legislation?analyzed=true&impact=high" className="text-sm text-primary hover:underline">
-              See all →
-            </Link>
-          </div>
-          <div className="flex flex-col gap-3">
-            {recentBills.map((bill) => (
-              <BillCard key={bill.id} bill={bill} showDate={false} />
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* ── Perspectives callout ── */}
       <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">

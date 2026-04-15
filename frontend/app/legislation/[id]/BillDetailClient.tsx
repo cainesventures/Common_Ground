@@ -887,16 +887,7 @@ export default function BillDetailClient() {
       {/* ── Summary tab ─────────────────────────────────────── */}
       {activeTab === 'summary' && (
         <div className="space-y-6">
-          {/* Contact My Councilmember */}
-          {members.length > 0 && (
-            <ContactMyCouncilmember
-              members={members}
-              billTitle={leg.plain_title || leg.title}
-              billNumber={leg.bill_number}
-            />
-          )}
-
-          {/* Upcoming Hearing Banner */}
+          {/* Upcoming Hearing Banner — most time-sensitive, first */}
           {leg.next_hearing_date && (
             <HearingBanner
               date={leg.next_hearing_date}
@@ -920,6 +911,24 @@ export default function BillDetailClient() {
               <p className="text-sm font-medium text-muted-foreground">This bill hasn&apos;t been analyzed yet.</p>
               <p className="text-xs text-muted-foreground">A plain-English summary, impact score, and AI perspectives will appear here once it&apos;s processed.</p>
             </div>
+          )}
+
+          {/* Vote CTA — prominent, right after the summary */}
+          <div className="border rounded-lg p-5 space-y-3">
+            <div>
+              <h2 className="text-sm font-semibold">What do you think?</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Cast your vote and see how the community stands.</p>
+            </div>
+            <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} inline />
+          </div>
+
+          {/* Contact My Councilmember — after user has read the summary */}
+          {members.length > 0 && (
+            <ContactMyCouncilmember
+              members={members}
+              billTitle={leg.plain_title || leg.title}
+              billNumber={leg.bill_number}
+            />
           )}
 
           {/* Related bills — discovery, shown right after the summary */}
@@ -1254,7 +1263,7 @@ function _getOrCreateVoterToken(): string {
   return token
 }
 
-function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; onCountsChange?: (c: Record<string, number>) => void; onVoteChange?: (v: string | null) => void }) {
+function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: string; onCountsChange?: (c: Record<string, number>) => void; onVoteChange?: (v: string | null) => void; inline?: boolean }) {
   const [counts, setCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -1307,16 +1316,18 @@ function VotePanel({ billId, onCountsChange, onVoteChange }: { billId: string; o
           reason="Sign in to vote on legislation and see how your community stands."
         />
       )}
-      <div className="border rounded-lg p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold">Community Vote</h2>
-            <p className="text-xs text-muted-foreground">How real people are voting — independent of AI perspectives</p>
+      <div className={inline ? 'space-y-3' : 'border rounded-lg p-5 space-y-3'}>
+        {!inline && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">Community Vote</h2>
+              <p className="text-xs text-muted-foreground">How real people are voting — independent of AI perspectives</p>
+            </div>
+            {total > 0 && (
+              <span className="text-xs text-muted-foreground shrink-0 ml-4">{total} {total === 1 ? 'vote' : 'votes'}</span>
+            )}
           </div>
-          {total > 0 && (
-            <span className="text-xs text-muted-foreground shrink-0 ml-4">{total} {total === 1 ? 'vote' : 'votes'}</span>
-          )}
-        </div>
+        )}
 
         <div className="flex gap-2">
           {VOTE_OPTIONS.map(({ value, label, active, inactive }) => {
