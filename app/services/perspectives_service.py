@@ -226,7 +226,7 @@ matters, make the stakes feel real.
 
 Return a JSON object with exactly these two fields:
 {{
-  "position": "<support|oppose|neutral|mixed>",
+  "position": "<support|oppose|neutral>",
   "response": "Your 2–3 paragraph response written entirely in your voice. No bullets. No formal structure."
 }}
 
@@ -356,14 +356,9 @@ def generate_perspective(
             db.add(persp)
 
         raw_position = str(data.get("position", "neutral")).lower()
-        valid_positions = {"support", "oppose", "neutral", "mixed"}
-        if raw_position in valid_positions:
-            normalized = raw_position
-        elif "support" in raw_position and "oppose" in raw_position:
-            normalized = "mixed"
-        elif "support" in raw_position:
+        if "support" in raw_position and "oppose" not in raw_position:
             normalized = "support"
-        elif "oppose" in raw_position:
+        elif "oppose" in raw_position and "support" not in raw_position:
             normalized = "oppose"
         else:
             normalized = "neutral"

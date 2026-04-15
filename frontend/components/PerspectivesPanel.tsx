@@ -98,7 +98,6 @@ const POSITION_LABELS: Record<string, string> = {
   support: 'Support',
   oppose: 'Oppose',
   neutral: 'Neutral',
-  mixed: 'Mixed',
 }
 
 function PerspectivesTally({
@@ -120,18 +119,21 @@ function PerspectivesTally({
 
   if (!hasPerspectives && !hasPending) return null
 
-  const counts: Record<string, number> = { support: 0, oppose: 0, neutral: 0, mixed: 0 }
+  const counts: Record<string, number> = { support: 0, oppose: 0, neutral: 0 }
   for (const p of perspectives) {
-    if (counts[p.position] !== undefined) counts[p.position]++
+    const pos = p.position === 'mixed' ? 'neutral' : p.position
+    if (counts[pos] !== undefined) counts[pos]++
     else counts.neutral++
   }
 
   const total = perspectives.length
-  const positionOrder = ['support', 'neutral', 'mixed', 'oppose'] as const
+  const positionOrder = ['support', 'neutral', 'oppose'] as const
 
   const sorted = perspectives.slice().sort((a, b) => {
-    const order = ['support', 'neutral', 'mixed', 'oppose']
-    return order.indexOf(a.position) - order.indexOf(b.position)
+    const order = ['support', 'neutral', 'oppose']
+    const pa = a.position === 'mixed' ? 'neutral' : a.position
+    const pb = b.position === 'mixed' ? 'neutral' : b.position
+    return order.indexOf(pa) - order.indexOf(pb)
   })
 
   return (
@@ -171,7 +173,8 @@ function PerspectivesTally({
             {sorted.map((p) => {
               const meta = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)
               const label = meta?.label ?? p.perspective_type
-              const posStyle = POSITION_STYLES[p.position] ?? POSITION_STYLES.neutral
+              const displayPos = p.position === 'mixed' ? 'neutral' : p.position
+              const posStyle = POSITION_STYLES[displayPos] ?? POSITION_STYLES.neutral
               const isOpen = expanded === p.perspective_type
               const args: string[] = Array.isArray(p.key_arguments)
                 ? p.key_arguments
@@ -187,7 +190,7 @@ function PerspectivesTally({
                     }}
                     className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
                     aria-expanded={isOpen}
-                    aria-label={`${label}, ${p.position}. ${isOpen ? 'Collapse' : 'Expand'} details`}
+                    aria-label={`${label}, ${displayPos}. ${isOpen ? 'Collapse' : 'Expand'} details`}
                   >
                     <span className="text-muted-foreground flex items-center gap-1.5">
                       <PerspectiveMonogram perspKey={p.perspective_type} group={meta?.group ?? 'Special'} />
@@ -195,7 +198,7 @@ function PerspectivesTally({
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${posStyle}`}>
-                        {p.position}
+                        {displayPos}
                       </span>
                       <span className="text-muted-foreground text-xs">{isOpen ? '▲' : '▼'}</span>
                     </div>
