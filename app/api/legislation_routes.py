@@ -1645,6 +1645,36 @@ async def analyze_legislation(
         raise HTTPException(status_code=500, detail=f"Analysis failed: {e}")
 
 
+@router.post("/{legislation_id}/perspectives/generate-all")
+async def generate_all_perspectives(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Generate all 17 perspectives for a bill (skips already-cached ones)."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+    if not leg.analyzed_at:
+        raise HTTPException(status_code=400, detail="Bill must be analyzed first.")
+
+    from app.services.perspectives_service import generate_perspective as _gen
+    generated = []
+    failed = []
+    for ptype in ALL_PERSPECTIVES:
+        try:
+            persp = _gen(leg, ptype, db)
+            if persp:
+                generated.append(ptype)
+            else:
+                failed.append(ptype)
+        except Exception as e:
+            logger.warning(f"Failed to generate {ptype} for {legislation_id}: {e}")
+            failed.append(ptype)
+
+    return {"success": True, "generated": generated, "failed": failed}
+
+
 @router.post("/{legislation_id}/perspectives/{perspective_type}")
 async def generate_perspective(
     legislation_id: str,
@@ -1714,36 +1744,6 @@ async def clear_perspectives(
     )
     db.commit()
     return {"success": True, "deleted": deleted}
-
-
-@router.post("/{legislation_id}/perspectives/generate-all")
-async def generate_all_perspectives(
-    legislation_id: str,
-    db: Session = Depends(get_db),
-    _user=Depends(require_dev_tier),
-):
-    """Generate all 17 perspectives for a bill (skips already-cached ones)."""
-    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
-    if not leg:
-        raise HTTPException(status_code=404, detail="Legislation not found")
-    if not leg.analyzed_at:
-        raise HTTPException(status_code=400, detail="Bill must be analyzed first.")
-
-    from app.services.perspectives_service import generate_perspective as _gen
-    generated = []
-    failed = []
-    for ptype in ALL_PERSPECTIVES:
-        try:
-            persp = _gen(leg, ptype, db)
-            if persp:
-                generated.append(ptype)
-            else:
-                failed.append(ptype)
-        except Exception as e:
-            logger.warning(f"Failed to generate {ptype} for {legislation_id}: {e}")
-            failed.append(ptype)
-
-    return {"success": True, "generated": generated, "failed": failed}
 
 
 @router.get("/{legislation_id}/perspectives")
