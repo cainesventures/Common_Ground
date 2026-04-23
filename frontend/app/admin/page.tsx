@@ -135,6 +135,13 @@ interface Bill {
   status: string
   analyzed_at?: string
   introduced_date?: string
+  full_text?: string
+  sponsor?: string
+  headline?: string
+  committee?: string
+  metadata_fetched_at?: string
+  news_fetched_at?: string
+  perspective_count?: number
 }
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -206,120 +213,157 @@ export default function AdminPage() {
     }
   }
 
+  const [adminTab, setAdminTab] = useState<'active' | 'archive' | 'data' | 'comms'>('active')
+
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
   if (!authorized) return null
 
+  const TAB_LABELS: { key: typeof adminTab; label: string }[] = [
+    { key: 'active',   label: 'Active Pipeline' },
+    { key: 'archive',  label: 'Archive' },
+    { key: 'data',     label: 'Data' },
+    { key: 'comms',    label: 'Comms' },
+  ]
+
   return (
-    <div className="max-w-2xl space-y-8">
+    <div className="max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Admin</h1>
         <p className="text-muted-foreground mt-1">Manage bill ingestion, analysis pipeline, and utilities.</p>
       </div>
 
-      {/* ── Section 0: System Status ──────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">System Status</h2>
-        <SystemStatusSection />
-      </section>
+      {/* ── Tab bar ── */}
+      <div className="flex border-b gap-0">
+        {TAB_LABELS.map(({ key, label }) => (
+          <button
+            key={key}
+            onClick={() => setAdminTab(key)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              adminTab === key
+                ? 'border-primary text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted-foreground/40'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {/* ── Section A: Ingestion ───────────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Ingestion</h2>
+      {/* ── Tab 1: Active Pipeline ── */}
+      {adminTab === 'active' && (
+        <div className="space-y-6">
+          <SystemStatusSection />
+          <DataHealthSection />
+          <section className="space-y-4">
+            <p className="text-xs text-muted-foreground">Introduced & in-committee bills. Analyze step generates summary, tags, headline, lede, and base perspectives.</p>
+            <BillPipelineSection mode="active" authorized={authorized} reloadKey={reloadKey} onReload={() => setReloadKey(k => k + 1)} onFilterChange={setPipelineFilter} />
+          </section>
+          <section className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Maintenance</h2>
+            <RefreshHearingsSection />
+          </section>
+        </div>
+      )}
 
-        <div className="border rounded-lg p-4 space-y-4">
-          <div>
-            <h3 className="font-semibold">Philadelphia Bills</h3>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Fetch bills from Legistar. Enable <strong>Bulk Export</strong> to import all ~8,500 bills at once via Excel export.
-            </p>
-          </div>
-          <form onSubmit={ingestLocal} className="space-y-3">
-            <div className="flex items-end gap-3">
-              <div className="space-y-1 flex-1">
-                <label className="text-xs font-medium text-muted-foreground">Limit <span className="opacity-60">(ignored for bulk)</span></label>
-                <input
-                  type="number" min={1} max={250}
-                  value={localLimit}
-                  onChange={(e) => setLocalLimit(e.target.value)}
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
+      {/* ── Tab 2: Archive Pipeline ── */}
+      {adminTab === 'archive' && (
+        <div className="space-y-6">
+          <section className="space-y-4">
+            <p className="text-xs text-muted-foreground">Signed, failed & vetoed bills. Summaries and tags only — perspectives and news are disabled.</p>
+            <BillPipelineSection mode="archive" authorized={authorized} reloadKey={reloadKey} onReload={() => setReloadKey(k => k + 1)} />
+          </section>
+        </div>
+      )}
+
+      {/* ── Tab 3: Data ── */}
+      {adminTab === 'data' && (
+        <div className="space-y-4">
+          {/* Ingest bills */}
+          <div className="border rounded-lg p-4 space-y-4">
+            <div>
+              <h3 className="font-semibold">Philadelphia Bills</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Fetch bills from Legistar. Enable <strong>Bulk Export</strong> to import all ~8,500 bills at once via Excel export.
+              </p>
+            </div>
+            <form onSubmit={ingestLocal} className="space-y-3">
+              <div className="flex items-end gap-3">
+                <div className="space-y-1 flex-1">
+                  <label className="text-xs font-medium text-muted-foreground">Limit <span className="opacity-60">(ignored for bulk)</span></label>
+                  <input
+                    type="number" min={1} max={250}
+                    value={localLimit}
+                    onChange={(e) => setLocalLimit(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+                <Button type="submit" disabled={localRunning} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {localRunning ? 'Ingesting…' : 'Ingest Bills'}
+                </Button>
               </div>
-              <Button type="submit" disabled={localRunning} className="bg-blue-600 hover:bg-blue-700 text-white">
-                {localRunning ? 'Ingesting…' : 'Ingest Bills'}
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={localBulk} onChange={(e) => setLocalBulk(e.target.checked)} className="rounded border-input" />
+                <span>Bulk export — exports all bills via Excel, ignores limit</span>
+              </label>
+              {localResult && (
+                <p className={`text-sm ${localResult.ok ? 'text-green-600' : 'text-destructive'}`}>{localResult.message}</p>
+              )}
+            </form>
+          </div>
+
+          {/* Council members */}
+          <div className="border rounded-lg p-4 space-y-3">
+            <div>
+              <h3 className="font-semibold">Council Members</h3>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Scrape all 17 current Philadelphia City Council member profiles from phlcouncil.com. Takes ~2 minutes. Safe to re-run.
+              </p>
+            </div>
+            {scrapeResult && (
+              <p className={`text-sm ${scrapeResult.ok ? 'text-green-600' : 'text-destructive'}`}>{scrapeResult.message}</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={scrapeRunning} onClick={async () => {
+                setScrapeRunning(true); setScrapeResult(null)
+                try {
+                  const data = await api.scrapeCouncilmembers()
+                  setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
+                } catch (err: any) {
+                  setScrapeResult({ ok: false, message: err.message })
+                } finally { setScrapeRunning(false) }
+              }}>
+                {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
+              </Button>
+              <Button variant="outline" disabled={scrapeRunning} onClick={async () => {
+                setScrapeRunning(true); setScrapeResult(null)
+                try {
+                  const data = await api.backfillCouncilmemberEmails()
+                  const msg = data?.updated === 0
+                    ? `All members already have emails (checked ${data?.checked ?? 0}).`
+                    : `Updated ${data?.updated} email${data?.updated !== 1 ? 's' : ''} · still missing: ${(data?.still_missing ?? []).join(', ') || 'none'}.`
+                  setScrapeResult({ ok: true, message: msg })
+                } catch (err: any) {
+                  setScrapeResult({ ok: false, message: err.message })
+                } finally { setScrapeRunning(false) }
+              }}>
+                {scrapeRunning ? 'Running…' : 'Backfill Missing Emails'}
               </Button>
             </div>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="checkbox" checked={localBulk} onChange={(e) => setLocalBulk(e.target.checked)} className="rounded border-input" />
-              <span>Bulk export — exports all bills via Excel, ignores limit</span>
-            </label>
-            {localResult && (
-              <p className={`text-sm ${localResult.ok ? 'text-green-600' : 'text-destructive'}`}>{localResult.message}</p>
-            )}
-          </form>
-        </div>
-
-        <div className="border rounded-lg p-4 space-y-3">
-          <div>
-            <h3 className="font-semibold">Council Members</h3>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Scrape all 17 current Philadelphia City Council member profiles from phlcouncil.com. Takes ~2 minutes. Safe to re-run.
-            </p>
           </div>
-          {scrapeResult && (
-            <p className={`text-sm ${scrapeResult.ok ? 'text-green-600' : 'text-destructive'}`}>{scrapeResult.message}</p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button className="bg-blue-600 hover:bg-blue-700 text-white" disabled={scrapeRunning} onClick={async () => {
-              setScrapeRunning(true); setScrapeResult(null)
-              try {
-                const data = await api.scrapeCouncilmembers()
-                setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
-              } catch (err: any) {
-                setScrapeResult({ ok: false, message: err.message })
-              } finally {
-                setScrapeRunning(false)
-              }
-            }}>
-              {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
-            </Button>
-            <Button variant="outline" disabled={scrapeRunning} onClick={async () => {
-              setScrapeRunning(true); setScrapeResult(null)
-              try {
-                const data = await api.backfillCouncilmemberEmails()
-                const msg = data?.updated === 0
-                  ? `All members already have emails (checked ${data?.checked ?? 0}).`
-                  : `Updated ${data?.updated} email${data?.updated !== 1 ? 's' : ''} · still missing: ${(data?.still_missing ?? []).join(', ') || 'none'}.`
-                setScrapeResult({ ok: true, message: msg })
-              } catch (err: any) {
-                setScrapeResult({ ok: false, message: err.message })
-              } finally {
-                setScrapeRunning(false)
-              }
-            }}>
-              {scrapeRunning ? 'Running…' : 'Backfill Missing Emails'}
-            </Button>
-          </div>
+
+          <BackfillCityContextSection />
+          <TagUntaggedSection />
         </div>
-      </section>
+      )}
 
-      {/* ── Section B: Bill Pipeline ───────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Bill Pipeline</h2>
-        <BillPipelineSection authorized={authorized} reloadKey={reloadKey} onReload={() => setReloadKey(k => k + 1)} onFilterChange={setPipelineFilter} />
-      </section>
-
-      {/* ── Section C: Utilities ───────────────────────────────────── */}
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Utilities</h2>
-        <MetricsSection filter={pipelineFilter} />
-        <DigestSection />
-        <RefreshHearingsSection />
-        <CandidateManagementSection />
-        <BackfillSponsorsSection />
-        <BackfillCityContextSection />
-        <BackfillVoteRecordsSection />
-        <SyncStatusesSection />
-      </section>
+      {/* ── Tab 4: Comms ── */}
+      {adminTab === 'comms' && (
+        <div className="space-y-4">
+          <MetricsSection filter={pipelineFilter} />
+          <DigestSection />
+          <CandidateManagementSection />
+        </div>
+      )}
     </div>
   )
 }
@@ -422,16 +466,97 @@ function SystemStatusSection() {
   )
 }
 
+// ── Data Health Section ───────────────────────────────────────────────────────
+function DataHealthSection() {
+  const [rows, setRows] = useState<CompletenessRow[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.getPipelineStats({}).then(data => {
+      if (data?.completeness) setRows(data.completeness)
+    }).catch(() => {}).finally(() => setLoading(false))
+  }, [])
+
+  if (loading) return <div className="border rounded-lg p-4 text-xs text-muted-foreground">Loading data health…</div>
+  if (!rows.length) return null
+  return <DataHealthTable rows={rows} />
+}
+
+// ── Data Health Table ─────────────────────────────────────────────────────────
+type CompletenessRow = { year: number; total: number; full_text: number; sponsor: number; analyzed: number; headline: number; committee: number; perspectives: number }
+
+function DataHealthTable({ rows }: { rows: CompletenessRow[] }) {
+  const COLS: { key: keyof CompletenessRow; label: string }[] = [
+    { key: 'full_text',    label: 'Full Text' },
+    { key: 'sponsor',      label: 'Sponsor' },
+    { key: 'analyzed',     label: 'Analyzed' },
+    { key: 'headline',     label: 'Headline' },
+    { key: 'committee',    label: 'Committee' },
+    { key: 'perspectives', label: 'Perspectives' },
+  ]
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 border-b bg-muted/30 flex items-center justify-between">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Data Health by Year</p>
+        <p className="text-[10px] text-muted-foreground">green = 100% · yellow = partial · red = &lt;50%</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-1.5 px-3 font-medium text-muted-foreground">Year</th>
+              <th className="text-center py-1.5 px-2 font-medium text-muted-foreground">Bills</th>
+              {COLS.map(c => (
+                <th key={c.key} className="text-center py-1.5 px-2 font-medium text-muted-foreground">{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => {
+              const total = r.total || 1
+              return (
+                <tr key={r.year} className="border-b last:border-0 hover:bg-muted/20">
+                  <td className="py-1.5 px-3 font-semibold">{r.year}</td>
+                  <td className="text-center py-1.5 px-2 text-muted-foreground tabular-nums">{r.total}</td>
+                  {COLS.map(c => {
+                    const n = Number(r[c.key]) || 0
+                    const p = Math.round(n / total * 100)
+                    const color = p === 100 ? 'text-green-600 dark:text-green-400' : p >= 50 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500 dark:text-red-400'
+                    return (
+                      <td key={c.key} className={`text-center tabular-nums text-xs py-1.5 px-2 ${color}`}>
+                        {p}%
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Bill Pipeline ─────────────────────────────────────────────────────────────
-function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }: { authorized: boolean; reloadKey: number; onReload: () => void; onFilterChange?: (f: { year: string; month: string; date_from: string; date_to: string }) => void }) {
+const ACTIVE_STATUSES = ['introduced', 'in_committee']
+const ARCHIVE_STATUSES = ['signed_into_law', 'failed', 'vetoed']
+
+function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload, onFilterChange }: { mode?: 'active' | 'archive'; authorized: boolean; reloadKey: number; onReload: () => void; onFilterChange?: (f: { year: string; month: string; date_from: string; date_to: string }) => void }) {
+  const isArchive = mode === 'archive'
+  const statusFilter = isArchive ? ARCHIVE_STATUSES : ACTIVE_STATUSES
   const { progress, running, start, stop } = usePipeline()
   const PAGE_SIZE = 20
 
-  // Step toggles
+  // Step toggles — perspectives and news disabled entirely in archive mode
+  const [stepSyncStatuses,  setStepSyncStatuses]  = useState(false)
   const [stepSponsors,      setStepSponsors]      = useState(false)
+  const [stepMetadata,      setStepMetadata]      = useState(false)
   const [stepAnalyze,       setStepAnalyze]       = useState(true)
-  const [stepPerspectives,  setStepPerspectives]  = useState(true)
+  const [stepHeadlines,     setStepHeadlines]     = useState(false)
+  const [stepPerspectives,  setStepPerspectives]  = useState(!isArchive)
   const [stepNews,          setStepNews]          = useState(false)
+  const [stepVotes,         setStepVotes]         = useState(isArchive)
   const [forceAnalyze,      setForceAnalyze]      = useState(false)
 
   // Perspective type multi-select
@@ -451,6 +576,14 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
   const [filterDateTo,   setFilterDateTo]   = useState('')
   const [filterCount,    setFilterCount]    = useState<number | null>(null)
   const [counting,       setCounting]       = useState(false)
+
+  // Analysis / perspectives display filters
+  const [analyzedFilter,      setAnalyzedFilter]      = useState<'all' | 'unanalyzed' | 'analyzed'>('all')
+  const [perspectivesFilter,  setPerspectivesFilter]  = useState<'all' | 'missing' | 'complete'>('all')
+
+  // Pipeline stats (tallies)
+  type CompletenessRow = { year: number; total: number; full_text: number; sponsor: number; analyzed: number; headline: number; committee: number; perspectives: number }
+  const [pipelineStats, setPipelineStats] = useState<{ total: number; unanalyzed: number; missing_perspectives: number; completeness?: CompletenessRow[] } | null>(null)
 
   // Per-bill list
   const [bills,        setBills]        = useState<Bill[]>([])
@@ -476,13 +609,31 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
     return ''
   })()
 
-  const loadBills = useCallback(async (year = '', month = '', dateFrom = '', dateTo = '', pageNum = 0) => {
+  const loadStats = useCallback(async (year = '', month = '', dateFrom = '', dateTo = '') => {
+    try {
+      const data = await api.getPipelineStats({
+        status: statusFilter.join(','),
+        year:      year      || undefined,
+        month:     month     || undefined,
+        date_from: dateFrom  || undefined,
+        date_to:   dateTo    || undefined,
+      })
+      setPipelineStats(data ?? null)
+    } catch { /* ignore */ }
+  }, [statusFilter.join(',')])
+
+  const loadBills = useCallback(async (year = '', month = '', dateFrom = '', dateTo = '', pageNum = 0, aFilter = analyzedFilter, pFilter = perspectivesFilter) => {
     setBillsLoading(true)
     try {
+      const analyzedParam = aFilter === 'analyzed' ? 'true' : aFilter === 'unanalyzed' ? 'false' : ''
+      const hasPerspectives = pFilter === 'complete'
+      const missingPerspectives = pFilter === 'missing'
       const data = await api.searchLegislation(
-        '', PAGE_SIZE, pageNum * PAGE_SIZE, 'local', '', '', '',
+        '', PAGE_SIZE, pageNum * PAGE_SIZE, 'local', analyzedParam, '', '',
         year  ? Number(year)  : 0,
         month ? Number(month) : 0,
+        statusFilter,
+        '', false, hasPerspectives, missingPerspectives,
       )
       let results: Bill[] = data?.results ?? []
       if (dateFrom || dateTo) {
@@ -501,11 +652,14 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
     } finally {
       setBillsLoading(false)
     }
-  }, [PAGE_SIZE])
+  }, [PAGE_SIZE, analyzedFilter, perspectivesFilter])
 
   useEffect(() => {
-    if (authorized) loadBills()
-  }, [authorized, reloadKey, loadBills])
+    if (authorized) {
+      loadBills()
+      loadStats()
+    }
+  }, [authorized, reloadKey, loadBills, loadStats])
 
   const applyFilter = async () => {
     setFilterYear(draftYear); setFilterMonth(draftMonth)
@@ -513,6 +667,7 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
     onFilterChange?.({ year: draftYear, month: draftMonth, date_from: draftDateFrom, date_to: draftDateTo })
     setPage(0)
     loadBills(draftYear, draftMonth, draftDateFrom, draftDateTo, 0)
+    loadStats(draftYear, draftMonth, draftDateFrom, draftDateTo)
     setCounting(true); setFilterCount(null)
     try {
       const data = await api.countLegislation({
@@ -531,29 +686,74 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
     setFilterYear(''); setFilterMonth(''); setFilterDateFrom(''); setFilterDateTo('')
     setFilterCount(null); setPage(0)
     onFilterChange?.({ year: '', month: '', date_from: '', date_to: '' })
-    loadBills()
+    loadBills(); loadStats()
   }
 
   const buildPipelinePath = () => {
     const steps = [
-      stepSponsors      && 'sponsors',
-      stepAnalyze       && 'analyze',
-      stepPerspectives  && 'perspectives',
-      stepNews          && 'news',
+      stepSyncStatuses                  && 'sync_statuses',
+      stepSponsors                      && 'sponsors',
+      stepMetadata                      && 'metadata',
+      stepAnalyze                       && 'analyze',
+      stepHeadlines                     && 'headlines',
+      (!isArchive && stepPerspectives)  && 'perspectives',
+      (!isArchive && stepNews)          && 'news',
+      stepVotes                         && 'votes',
     ].filter(Boolean).join(',')
     return api.pipelinePath({
       steps,
-      force_analyze:    forceAnalyze || undefined,
-      perspective_types: stepPerspectives ? [...selectedPTypes].join(',') : undefined,
+      force_analyze:     forceAnalyze || undefined,
+      perspective_types: (!isArchive && stepPerspectives) ? [...selectedPTypes].join(',') : undefined,
       year:      filterYear     || undefined,
       month:     filterMonth    || undefined,
       date_from: filterDateFrom || undefined,
       date_to:   filterDateTo   || undefined,
+      status:    statusFilter.join(','),
     })
   }
 
   const runPipeline = () => {
     start(buildPipelinePath()).then(() => loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page))
+  }
+
+  const [badgeLoadingId, setBadgeLoadingId] = useState<string | null>(null) // "billId:field"
+
+  const runBadgeAction = async (bill: Bill, field: string) => {
+    const key = `${bill.id}:${field}`
+    setBadgeLoadingId(key)
+    setAnalyzeResults(prev => ({ ...prev, [bill.id]: undefined as any }))
+    try {
+      let msg = ''
+      if (field === 'text') {
+        await api.fetchBillDetails(bill.id)
+        msg = 'Full text fetched.'
+      } else if (field === 'sponsor') {
+        await api.fetchBillDetails(bill.id)
+        msg = 'Sponsor fetched.'
+      } else if (field === 'ai') {
+        const data = await api.analyzeLegislation(bill.id)
+        msg = `Analyzed — impact: ${data?.impact_level ?? '?'}, type: ${data?.bill_type ?? '?'}.`
+      } else if (field === 'headline') {
+        await api.generateBillHeadline(bill.id)
+        msg = 'Headline & lede generated.'
+      } else if (field === 'committee') {
+        await api.fetchBillMetadata(bill.id)
+        msg = 'Committee & metadata fetched.'
+      } else if (field === 'perspectives') {
+        await api.generateBillPerspectives(bill.id)
+        msg = 'Perspectives generated.'
+      } else if (field === 'news') {
+        const data = await api.fetchBillNews(bill.id)
+        msg = `Found ${data?.articles_found ?? 0} news articles.`
+      }
+      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: true, message: msg } }))
+      // Reload the bill list to reflect updated fields
+      loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page)
+    } catch (err: any) {
+      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: err.message } }))
+    } finally {
+      setBadgeLoadingId(null)
+    }
   }
 
   const analyzeBill = async (bill: Bill) => {
@@ -565,6 +765,7 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
         ...prev,
         [bill.id]: { ok: true, message: `Done — impact: ${data?.impact_level ?? '?'} (${data?.impact_score ?? '?'}/10), type: ${data?.bill_type ?? '?'}.` },
       }))
+      loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page)
     } catch (err: any) {
       setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: err.message } }))
     } finally {
@@ -590,7 +791,7 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
 
   const goToPage = (p: number) => {
     setPage(p)
-    loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, p)
+    loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, p, analyzedFilter, perspectivesFilter)
   }
 
   const allPTypesSelected = selectedPTypes.size === ALL_PERSPECTIVE_TYPES.length
@@ -608,14 +809,31 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
 
       {/* ── Header ── */}
       <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
-        <div>
-          <h3 className="font-semibold">Pipeline</h3>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold flex items-center gap-2">
+            Pipeline
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${isArchive ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'}`}>
+              {isArchive ? 'Archive' : 'Active'}
+            </span>
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {billsTotal.toLocaleString()} bills in DB · runs steps in order, skipping already-done work
+            {billsTotal.toLocaleString()} {isArchive ? 'archive' : 'active'} bills · runs steps in order, skipping already-done work
           </p>
+          {pipelineStats && (
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5">
+              <span className={`text-xs font-medium ${pipelineStats.unanalyzed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                {pipelineStats.unanalyzed.toLocaleString()} unanalyzed
+              </span>
+              {!isArchive && (
+                <span className={`text-xs font-medium ${pipelineStats.missing_perspectives > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {pipelineStats.missing_perspectives.toLocaleString()} missing perspectives
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <Button variant="ghost" size="sm"
-          onClick={() => loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page)}
+          onClick={() => { loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page); loadStats(filterYear, filterMonth, filterDateFrom, filterDateTo) }}
           disabled={billsLoading || running}>
           {billsLoading ? 'Loading…' : 'Refresh'}
         </Button>
@@ -674,7 +892,31 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
 
         {/* ── Step selection ── */}
         <div className="rounded-lg border divide-y">
-          {/* Step 0: Sponsors */}
+          {/* Step: Sync Statuses — active only */}
+          {!isArchive ? (
+            <div className="px-4 py-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={stepSyncStatuses} onChange={e => setStepSyncStatuses(e.target.checked)}
+                  className="rounded border-input w-4 h-4" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Sync Bill Statuses</p>
+                  <p className="text-xs text-muted-foreground">
+                    Re-check Legistar for status changes on all introduced/in-committee bills. Detects bills that passed, failed, or were vetoed. Runs once (not per-bill). Off by default.
+                  </p>
+                </div>
+              </label>
+            </div>
+          ) : (
+            <div className="px-4 py-3 flex items-center gap-3 opacity-40 select-none">
+              <div className="w-4 h-4 rounded border border-input bg-muted shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Sync Bill Statuses</p>
+                <p className="text-xs text-muted-foreground">Active only — archive bills are already in a terminal state</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Sponsors */}
           <div className="px-4 py-3">
             <label className="flex items-center gap-3 cursor-pointer">
               <input type="checkbox" checked={stepSponsors} onChange={e => setStepSponsors(e.target.checked)}
@@ -683,6 +925,20 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
                 <p className="text-sm font-medium">Backfill Sponsors</p>
                 <p className="text-xs text-muted-foreground">
                   Scrapes Legistar once to build a matter→GUID map, then fetches the sponsor for each bill in scope that has none. Unchecked by default — takes ~30–60 min for a full run.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Step: Metadata */}
+          <div className="px-4 py-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input type="checkbox" checked={stepMetadata} onChange={e => setStepMetadata(e.target.checked)}
+                className="rounded border-input w-4 h-4" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Backfill Metadata</p>
+                <p className="text-xs text-muted-foreground">
+                  Fetches committee assignment, final date, and co-sponsors from Legistar for bills missing them. No AI cost. Recommended before first full analysis run.
                 </p>
               </div>
             </label>
@@ -709,63 +965,121 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
             )}
           </div>
 
-          {/* Step 2: Perspectives */}
-          <div className="px-4 py-3 space-y-2">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" checked={stepPerspectives} onChange={e => setStepPerspectives(e.target.checked)}
-                className="rounded border-input w-4 h-4" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Perspectives</p>
-                <p className="text-xs text-muted-foreground">
-                  Generate AI perspectives for analyzed bills. Uses summary, full text, and city context. Skips cached.
-                </p>
-              </div>
-            </label>
-            {stepPerspectives && (
-              <div className="ml-7 relative">
-                <button
-                  onClick={() => setShowPTypeDropdown(v => !v)}
-                  className="text-xs border rounded px-2 py-1 bg-background hover:bg-muted flex items-center gap-1.5"
-                >
-                  {allPTypesSelected ? 'All 17 perspectives' : `${selectedPTypes.size} of 17 selected`}
-                  <span>{showPTypeDropdown ? '▲' : '▼'}</span>
-                </button>
-                {showPTypeDropdown && (
-                  <div className="absolute z-10 top-full mt-1 left-0 bg-background border rounded-lg shadow-lg p-2 w-56 space-y-1 max-h-64 overflow-y-auto">
-                    <button
-                      onClick={() => setSelectedPTypes(allPTypesSelected
-                        ? new Set()
-                        : new Set(ALL_PERSPECTIVE_TYPES.map(p => p.key))
-                      )}
-                      className="w-full text-left text-xs px-2 py-1 rounded hover:bg-muted font-medium"
-                    >
-                      {allPTypesSelected ? 'Deselect all' : 'Select all'}
-                    </button>
-                    {ALL_PERSPECTIVE_TYPES.map(p => (
-                      <label key={p.key} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-muted cursor-pointer">
-                        <input type="checkbox" checked={selectedPTypes.has(p.key)} onChange={() => togglePType(p.key)} className="rounded" />
-                        <span className="text-xs">{p.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Step 3: News */}
+          {/* Step: Headlines & Ledes */}
           <div className="px-4 py-3">
             <label className="flex items-center gap-3 cursor-pointer">
-              <input type="checkbox" checked={stepNews} onChange={e => setStepNews(e.target.checked)}
+              <input type="checkbox" checked={stepHeadlines} onChange={e => setStepHeadlines(e.target.checked)}
                 className="rounded border-input w-4 h-4" />
               <div className="flex-1">
-                <p className="text-sm font-medium">Fetch News</p>
+                <p className="text-sm font-medium">Headlines &amp; Ledes</p>
                 <p className="text-xs text-muted-foreground">
-                  Search Google News for related articles. Always re-fetches — unchecked by default.
+                  Generate or regenerate news-style headlines and ledes for analyzed bills. Always overwrites existing.
                 </p>
               </div>
             </label>
           </div>
+
+          {/* Step 2: Perspectives — active pipeline only */}
+          {!isArchive ? (
+            <div className="px-4 py-3 space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={stepPerspectives} onChange={e => setStepPerspectives(e.target.checked)}
+                  className="rounded border-input w-4 h-4" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Perspectives</p>
+                  <p className="text-xs text-muted-foreground">
+                    Generate AI perspectives for analyzed bills. Uses summary, full text, and city context. Skips cached.
+                  </p>
+                </div>
+              </label>
+              {stepPerspectives && (
+                <div className="ml-7 relative">
+                  <button
+                    onClick={() => setShowPTypeDropdown(v => !v)}
+                    className="text-xs border rounded px-2 py-1 bg-background hover:bg-muted flex items-center gap-1.5"
+                  >
+                    {allPTypesSelected ? 'All 17 perspectives' : `${selectedPTypes.size} of 17 selected`}
+                    <span>{showPTypeDropdown ? '▲' : '▼'}</span>
+                  </button>
+                  {showPTypeDropdown && (
+                    <div className="absolute z-10 top-full mt-1 left-0 bg-background border rounded-lg shadow-lg p-2 w-56 space-y-1 max-h-64 overflow-y-auto">
+                      <button
+                        onClick={() => setSelectedPTypes(allPTypesSelected
+                          ? new Set()
+                          : new Set(ALL_PERSPECTIVE_TYPES.map(p => p.key))
+                        )}
+                        className="w-full text-left text-xs px-2 py-1 rounded hover:bg-muted font-medium"
+                      >
+                        {allPTypesSelected ? 'Deselect all' : 'Select all'}
+                      </button>
+                      {ALL_PERSPECTIVE_TYPES.map(p => (
+                        <label key={p.key} className="flex items-center gap-2 px-2 py-0.5 rounded hover:bg-muted cursor-pointer">
+                          <input type="checkbox" checked={selectedPTypes.has(p.key)} onChange={() => togglePType(p.key)} className="rounded" />
+                          <span className="text-xs">{p.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-4 py-3 flex items-center gap-3 opacity-40 select-none">
+              <div className="w-4 h-4 rounded border border-input bg-muted shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Perspectives</p>
+                <p className="text-xs text-muted-foreground">Not available for archive bills</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: News — active pipeline only */}
+          {!isArchive ? (
+            <div className="px-4 py-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={stepNews} onChange={e => setStepNews(e.target.checked)}
+                  className="rounded border-input w-4 h-4" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Fetch News</p>
+                  <p className="text-xs text-muted-foreground">
+                    Search Google News for related articles. Always re-fetches — unchecked by default.
+                  </p>
+                </div>
+              </label>
+            </div>
+          ) : (
+            <div className="px-4 py-3 flex items-center gap-3 opacity-40 select-none">
+              <div className="w-4 h-4 rounded border border-input bg-muted shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Fetch News</p>
+                <p className="text-xs text-muted-foreground">Not available for archive bills</p>
+              </div>
+            </div>
+          )}
+
+          {/* Step: Sync Vote Records — archive only */}
+          {isArchive ? (
+            <div className="px-4 py-3">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={stepVotes} onChange={e => setStepVotes(e.target.checked)}
+                  className="rounded border-input w-4 h-4" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Sync Vote Records</p>
+                  <p className="text-xs text-muted-foreground">
+                    Fetch official roll call votes from Legistar for bills in scope. Only meaningful for bills that have had a council floor vote. Skips already-cached. Off by default.
+                  </p>
+                </div>
+              </label>
+            </div>
+          ) : (
+            <div className="px-4 py-3 flex items-center gap-3 opacity-40 select-none">
+              <div className="w-4 h-4 rounded border border-input bg-muted shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Sync Vote Records</p>
+                <p className="text-xs text-muted-foreground">Archive only — active bills haven't had a council floor vote yet</p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Run button ── */}
@@ -773,7 +1087,7 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
           <Button
             size="lg"
             onClick={runPipeline}
-            disabled={running || (!stepSponsors && !stepAnalyze && !stepPerspectives && !stepNews)}
+            disabled={running || (!stepSyncStatuses && !stepSponsors && !stepMetadata && !stepAnalyze && !stepHeadlines && !stepPerspectives && !stepNews && !stepVotes) }
             className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6"
           >
             {running ? 'Running Pipeline…' : `Run Pipeline${filterLabel ? ` · ${filterLabel}` : ''}`}
@@ -787,8 +1101,8 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
         <ProgressBar progress={progress} running={running} onStop={stop} />
 
         {/* ── Per-bill queue ── */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Per-bill actions
               {billsTotal > 0 && (
@@ -805,6 +1119,44 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
             </button>
           </div>
 
+          {/* ── Bill list filters ── */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <div className="flex items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground shrink-0">Analysis:</span>
+              {(['all', 'unanalyzed', 'analyzed'] as const).map(v => (
+                <button
+                  key={v}
+                  onClick={() => { setAnalyzedFilter(v); loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, 0, v, perspectivesFilter); setPage(0) }}
+                  className={`px-2 py-0.5 rounded border transition-colors capitalize ${
+                    analyzedFilter === v
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-input hover:bg-muted text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+            {!isArchive && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-muted-foreground shrink-0">Perspectives:</span>
+                {(['all', 'missing', 'complete'] as const).map(v => (
+                  <button
+                    key={v}
+                    onClick={() => { setPerspectivesFilter(v); loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, 0, analyzedFilter, v); setPage(0) }}
+                    className={`px-2 py-0.5 rounded border transition-colors capitalize ${
+                      perspectivesFilter === v
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-input hover:bg-muted text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {bills.length === 0 && !billsLoading ? (
             <p className="text-sm text-muted-foreground py-2">No bills yet — ingest some above.</p>
           ) : (
@@ -818,28 +1170,54 @@ function BillPipelineSection({ authorized, reloadKey, onReload, onFilterChange }
                   return (
                     <div key={bill.id} className="flex items-center gap-3 px-3 py-2 bg-background hover:bg-muted/20 transition-colors">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-mono text-muted-foreground shrink-0">{bill.bill_number}</span>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ${
-                            bill.analyzed_at ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                          }`}>
-                            {bill.analyzed_at ? 'Analyzed' : 'Pending'}
-                          </span>
+                          {([
+                            { label: 'Text',     field: 'text',         ok: !!bill.full_text,                          skipped: false,                                               rerunnable: false },
+                            { label: 'Sponsor',  field: 'sponsor',      ok: !!bill.sponsor,                            skipped: false,                                               rerunnable: false },
+                            { label: 'Analyze',  field: 'ai',           ok: !!bill.analyzed_at,                        skipped: false,                                               rerunnable: true  },
+                            { label: 'Headline', field: 'headline',     ok: !!bill.headline,                           skipped: false,                                               rerunnable: true  },
+                            { label: 'Cmte',     field: 'committee',    ok: !!bill.committee,                          skipped: !bill.committee && !!bill.metadata_fetched_at,        rerunnable: false },
+                            { label: `Persp ${bill.perspective_count ?? 0}/17`, field: 'perspectives', ok: (bill.perspective_count ?? 0) >= 17, skipped: false,                      rerunnable: false },
+                            { label: 'News',     field: 'news',         ok: false,                                     skipped: !!bill.news_fetched_at,                              rerunnable: true  },
+                          ] as {label:string;field:string;ok:boolean;skipped:boolean;rerunnable:boolean}[]).map(({ label, field, ok, skipped, rerunnable }) => {
+                            const loadingThis = badgeLoadingId === `${bill.id}:${field}`
+                            const clickable = (!ok && !skipped) || rerunnable || (skipped && rerunnable)
+                            return (
+                              <button
+                                key={field}
+                                onClick={() => clickable && !badgeLoadingId && runBadgeAction(bill, field)}
+                                disabled={(!clickable) || !!badgeLoadingId}
+                                title={
+                                  loadingThis ? 'Running…'
+                                  : ok ? (rerunnable ? `Click to re-run ${label.toLowerCase()}` : `${label}: complete`)
+                                  : skipped && rerunnable ? `Fetched — no articles found. Click to retry.`
+                                  : skipped ? `Fetched — no ${label.toLowerCase()} assigned on Legistar`
+                                  : `Click to fetch ${label.toLowerCase()}`
+                                }
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 transition-all ${
+                                  loadingThis
+                                    ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400 cursor-wait'
+                                    : ok && !rerunnable
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 cursor-default'
+                                    : ok && rerunnable
+                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 dark:hover:text-blue-400 cursor-pointer'
+                                    : skipped && rerunnable
+                                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/60 cursor-pointer'
+                                    : skipped
+                                    ? 'bg-muted text-muted-foreground cursor-default'
+                                    : 'bg-red-100 text-red-500 dark:bg-red-900/30 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 cursor-pointer'
+                                }`}
+                              >
+                                {loadingThis ? '…' : label}
+                              </button>
+                            )
+                          })}
                         </div>
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{bill.plain_title || bill.title}</p>
                         {result && (
                           <p className={`text-[11px] mt-0.5 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>{result.message}</p>
                         )}
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Button size="sm" variant="outline" onClick={() => fetchNews(bill)}
-                          disabled={fetchingNewsId === bill.id || analyzingId !== null || fetchingNewsId !== null}>
-                          {fetchingNewsId === bill.id ? '…' : 'News'}
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={() => analyzeBill(bill)}
-                          disabled={isAnalyzing || analyzingId !== null || fetchingNewsId !== null || running}>
-                          {isAnalyzing ? '…' : bill.analyzed_at ? 'Re-analyze' : 'Analyze'}
-                        </Button>
                       </div>
                     </div>
                   )
@@ -940,6 +1318,90 @@ function DigestSection() {
         } finally { setRunning(false) }
       }}>
         {running ? 'Sending…' : 'Send Digest Now'}
+      </Button>
+    </div>
+  )
+}
+
+function GenerateLedesSection() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ generated: number; total: number } | null>(null)
+  const [force, setForce] = useState(false)
+
+  const run = async () => {
+    setRunning(true)
+    setResult(null)
+    try {
+      const data = await api.generateLedes(force)
+      setResult(data)
+    } catch {
+      setResult({ generated: 0, total: 0 })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Generate News Ledes</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Generate punchy 1-2 sentence news ledes for analyzed bills. Replaces the dry "This bill allows…" summary on cards.
+        </p>
+      </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
+        <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} className="rounded border-input" />
+        Force regenerate (overwrite existing ledes)
+      </label>
+      {result && (
+        <p className="text-sm text-green-600 dark:text-green-400">
+          Generated {result.generated} of {result.total} ledes.
+        </p>
+      )}
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={run}>
+        {running ? 'Generating Ledes…' : 'Generate Ledes'}
+      </Button>
+    </div>
+  )
+}
+
+function GenerateHeadlinesSection() {
+  const [running, setRunning] = useState(false)
+  const [result, setResult] = useState<{ generated: number; total: number } | null>(null)
+  const [force, setForce] = useState(false)
+
+  const run = async () => {
+    setRunning(true)
+    setResult(null)
+    try {
+      const data = await api.generateHeadlines(force)
+      setResult(data)
+    } catch (e: any) {
+      setResult({ generated: 0, total: 0 })
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Generate News Headlines</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Generate verb-driven newspaper-style headlines for all analyzed bills. Fast — one short AI call per bill.
+        </p>
+      </div>
+      <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
+        <input type="checkbox" checked={force} onChange={e => setForce(e.target.checked)} className="rounded border-input" />
+        Force regenerate (overwrite existing headlines)
+      </label>
+      {result && (
+        <p className="text-sm text-green-600 dark:text-green-400">
+          Generated {result.generated} of {result.total} headlines.
+        </p>
+      )}
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={run}>
+        {running ? 'Generating Headlines…' : 'Generate Headlines'}
       </Button>
     </div>
   )
@@ -1188,21 +1650,86 @@ function SyncStatusesSection() {
   )
 }
 
+function BackfillHeadlinesSection() {
+  const { progress, running, start, stop } = useStreamProgress()
+  const [year, setYear] = useState('')
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Backfill Headlines &amp; Ledes</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Generate AI headline and lede for analyzed bills that are missing them. Safe to run multiple times — only touches bills with null headline.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          placeholder="Year (optional)"
+          value={year}
+          onChange={e => setYear(e.target.value)}
+          className="w-32 rounded border px-2 py-1 text-sm"
+        />
+      </div>
+      <ProgressBar progress={progress} running={running} onStop={stop} />
+      <Button
+        disabled={running}
+        className="bg-blue-600 hover:bg-blue-700 text-white"
+        onClick={() => {
+          const params = year ? `?year=${year}` : ''
+          start(`/api/legislation/stream/backfill-headlines${params}`)
+        }}
+      >
+        {running ? 'Generating…' : 'Backfill Headlines & Ledes'}
+      </Button>
+    </div>
+  )
+}
+
+function TagUntaggedSection() {
+  const { progress, running, start, stop } = useStreamProgress()
+  return (
+    <div className="border rounded-lg p-4 space-y-3">
+      <div>
+        <h3 className="font-semibold">Tag Untagged Bills</h3>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Run AI auto-tagging on all bills that have no category tags. New bills get tagged automatically during the Analyze pipeline step — this is a one-time backfill for bulk-imported bills.
+        </p>
+      </div>
+      <ProgressBar progress={progress} running={running} onStop={stop} />
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start('/api/legislation/stream/tag-all')}>
+        {running ? 'Tagging…' : 'Tag Untagged Bills'}
+      </Button>
+    </div>
+  )
+}
+
 function BackfillVoteRecordsSection() {
   const { progress, running, start, stop } = useStreamProgress()
-  const [limit, setLimit] = useState(100)
+  const [limit, setLimit] = useState(500)
   const [force, setForce] = useState(false)
+  const [year, setYear] = useState('')
   return (
     <div className="border rounded-lg p-4 space-y-3">
       <div>
         <h3 className="font-semibold">Backfill Vote Records</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Fetch official roll call votes from Legistar for all local bills and cache them in the database.
+          Fetch official roll call votes from Legistar for signed, failed, and vetoed bills. Skips bills already cached unless force re-fetch is enabled.
         </p>
       </div>
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <label className="text-sm text-muted-foreground shrink-0">Bill limit:</label>
+          <label className="text-sm text-muted-foreground shrink-0">Year:</label>
+          <input
+            type="number"
+            placeholder="All"
+            value={year}
+            disabled={running}
+            onChange={e => setYear(e.target.value)}
+            className="w-24 border rounded px-2 py-1 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground shrink-0">Limit:</label>
           <input
             type="number"
             min={1}
@@ -1212,7 +1739,6 @@ function BackfillVoteRecordsSection() {
             onChange={e => setLimit(Math.max(1, Math.min(8500, Number(e.target.value))))}
             className="w-24 border rounded px-2 py-1 text-sm"
           />
-          <span className="text-xs text-muted-foreground">(max 8500)</span>
         </div>
         <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer">
           <input
@@ -1225,7 +1751,11 @@ function BackfillVoteRecordsSection() {
         </label>
       </div>
       <ProgressBar progress={progress} running={running} onStop={stop} />
-      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => start(`/api/legislation/stream/backfill-vote-records?limit=${limit}&force=${force}`)}>
+      <Button disabled={running} className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => {
+        const params = new URLSearchParams({ limit: String(limit), force: String(force) })
+        if (year) params.set('year', year)
+        start(`/api/legislation/stream/backfill-vote-records?${params}`)
+      }}>
         {running ? 'Fetching votes…' : 'Backfill Vote Records'}
       </Button>
     </div>

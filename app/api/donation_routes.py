@@ -72,6 +72,25 @@ async def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
 
+@router.get("/session/{session_id}")
+async def get_session(session_id: str):
+    """Return amount and email for a completed Stripe checkout session."""
+    settings = get_settings()
+    if not settings.stripe_secret_key:
+        return {"amount_usd": None, "email": None}
+    try:
+        import stripe
+        stripe.api_key = settings.stripe_secret_key
+        session = stripe.checkout.Session.retrieve(session_id)
+        return {
+            "amount_usd": (session.amount_total or 0) // 100,
+            "email": (session.customer_details or {}).get("email"),
+        }
+    except Exception as e:
+        logger.warning(f"Failed to retrieve Stripe session {session_id}: {e}")
+        return {"amount_usd": None, "email": None}
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     """Handle Stripe webhook events (payment confirmation)."""

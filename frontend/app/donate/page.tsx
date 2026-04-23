@@ -52,7 +52,7 @@ export default function DonatePage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto py-12 px-4">
+    <div className="max-w-lg mx-auto py-12 px-4 relative">
       <div className="text-center mb-10">
         <h1 className="text-3xl font-bold tracking-tight mb-3">Support Common Ground</h1>
         <p className="text-muted-foreground text-base leading-relaxed">
@@ -129,7 +129,7 @@ export default function DonatePage() {
             <p className={`text-xs mt-1 ${customInvalid ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
               {customInvalid
                 ? `Enter a whole number between $${MIN} and $${MAX.toLocaleString()}.`
-                : `Minimum $${MIN} · Maximum $${MAX.toLocaleString()}`
+                : `$${MIN} min · $${MAX.toLocaleString()} max`
               }
             </p>
           </div>

@@ -48,6 +48,8 @@ class Legislation(Base):
 
     # AI analysis fields (populated when "Analyze" is clicked)
     plain_title = Column(String)          # short human-friendly name, AI-generated
+    headline = Column(String)             # newspaper-style headline, AI-generated
+    lede = Column(Text)                   # punchy 1-2 sentence news lede, AI-generated
     summary = Column(Text)
     impact_score = Column(Integer)        # 1-10
     impact_level = Column(String)         # low / medium / high
@@ -59,6 +61,13 @@ class Legislation(Base):
 
     # City this legislation belongs to (used for multi-city support)
     city = Column(String, default='philadelphia')
+
+    # Legislative metadata (populated by detail scrape)
+    committee             = Column(String, nullable=True)   # referred-to committee body
+    final_date            = Column(DateTime, nullable=True)  # date passed/failed/signed
+    co_sponsors           = Column(String, nullable=True)   # JSON array of co-sponsor names
+    metadata_fetched_at   = Column(DateTime, nullable=True)  # last time fetch-metadata ran (even if empty)
+    news_fetched_at       = Column(DateTime, nullable=True)  # last time news fetch ran (even if no articles found)
 
     # Upcoming hearing fields (populated by hearings scraper)
     next_hearing_date     = Column(DateTime, nullable=True)

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -580,6 +580,7 @@ const TABS: { key: TabKey; label: string }[] = [
 
 export default function BillDetailClient() {
   const { id } = useParams<{ id: string }>()
+  const searchParams = useSearchParams()
   const [leg, setLeg] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -592,7 +593,10 @@ export default function BillDetailClient() {
   const [perspectivesCount, setPerspectivesCount] = useState(0)
   const [rollCallCount, setRollCallCount] = useState(0)
   const [stickyVisible, setStickyVisible] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabKey>('summary')
+  const [activeTab, setActiveTab] = useState<TabKey>(() => {
+    const t = searchParams?.get('tab')
+    return (t === 'perspectives' || t === 'votes' || t === 'news') ? t : 'summary'
+  })
   const titleRef = useRef<HTMLHeadingElement>(null)
   const posthog = usePostHog()
 
@@ -838,6 +842,16 @@ export default function BillDetailClient() {
             Introduced: {new Date(leg.introduced_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
           </p>
         )}
+        {leg.final_date && (
+          <p className="text-sm text-muted-foreground">
+            {leg.status === 'signed_into_law' ? 'Signed' : leg.status === 'vetoed' ? 'Vetoed' : leg.status === 'failed' ? 'Failed' : 'Voted'}: {new Date(leg.final_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
+        )}
+        {leg.committee && (
+          <p className="text-sm text-muted-foreground">
+            Committee: {leg.committee}
+          </p>
+        )}
 
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
@@ -851,9 +865,28 @@ export default function BillDetailClient() {
       {/* Status timeline */}
       {leg.status && <StatusTimeline status={leg.status} />}
 
+      {/* Plain-language summary — always visible regardless of active tab */}
+      {leg.summary ? (
+        <div className="border rounded-lg p-5 space-y-1">
+          <h2 className="text-sm font-semibold">Plain-Language Summary</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">{leg.summary}</p>
+        </div>
+      ) : !leg.analyzed_at && (
+        <div className="border border-dashed rounded-lg p-5 text-center space-y-1">
+          <p className="text-sm font-medium text-muted-foreground">This bill hasn&apos;t been analyzed yet.</p>
+          <p className="text-xs text-muted-foreground">A plain-English summary, impact score, and AI perspectives will appear here once it&apos;s processed.</p>
+        </div>
+      )}
+
       {/* Tab bar — shifts down when sticky header is showing (navbar 56px + sticky header ~48px = 104px) */}
       <div className={`flex border-b gap-0 sticky ${stickyVisible ? 'top-[6.5rem]' : 'top-14'} bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-[top] duration-150`}>
-        {TABS.filter((tab) => tab.key !== 'text' || !!(leg.full_text && leg.full_text !== leg.description)).map((tab) => {
+        {TABS.filter((tab) => {
+          if (tab.key === 'text') return !!(leg.full_text && leg.full_text !== leg.description)
+          const isActive = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase())
+          if (tab.key === 'perspectives') return isActive || perspectivesCount > 0
+          if (tab.key === 'news') return isActive || newsLinks.length > 0
+          return true
+        }).map((tab) => {
           const badge =
             tab.key === 'perspectives' && perspectivesCount > 0 ? perspectivesCount :
             tab.key === 'news'         && newsLinks.length > 0   ? newsLinks.length :
@@ -898,19 +931,6 @@ export default function BillDetailClient() {
               billTitle={leg.plain_title || leg.title}
               billNumber={leg.bill_number}
             />
-          )}
-
-          {/* Summary */}
-          {leg.summary ? (
-            <div className="border rounded-lg p-5 space-y-1">
-              <h2 className="text-sm font-semibold">Plain-Language Summary</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">{leg.summary}</p>
-            </div>
-          ) : !leg.analyzed_at && (
-            <div className="border border-dashed rounded-lg p-5 text-center space-y-1">
-              <p className="text-sm font-medium text-muted-foreground">This bill hasn&apos;t been analyzed yet.</p>
-              <p className="text-xs text-muted-foreground">A plain-English summary, impact score, and AI perspectives will appear here once it&apos;s processed.</p>
-            </div>
           )}
 
           {/* Vote CTA — prominent, right after the summary */}
@@ -1064,6 +1084,8 @@ type AdminAction = {
   runningLabel: string
   fn: () => Promise<any>
   disabled?: boolean
+  disabledReason?: string
+  warn?: boolean
 }
 
 function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: any; onRefresh: () => void }) {
@@ -1092,7 +1114,9 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
 
   const isBusy = running !== null
 
-  const actions: { key: string; label: string; runningLabel: string; fn: () => Promise<any>; warn?: boolean }[] = [
+  const isActiveBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase())
+
+  const actions: { key: string; label: string; runningLabel: string; fn: () => Promise<any>; warn?: boolean; disabled?: boolean; disabledReason?: string }[] = [
     {
       key: 'details',
       label: 'Fetch Full Text & Sponsors',
@@ -1110,12 +1134,16 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
       label: 'Generate All Perspectives',
       runningLabel: 'Generating…',
       fn: () => api.generateAllPerspectives(billId),
+      disabled: !isActiveBill,
+      disabledReason: 'Active bills only',
     },
     {
       key: 'news',
       label: 'Fetch News Articles',
       runningLabel: 'Fetching…',
       fn: () => api.fetchBillNews(billId),
+      disabled: !isActiveBill,
+      disabledReason: 'Active bills only',
     },
   ]
 
@@ -1153,16 +1181,23 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
 
           {/* Actions */}
           <div className="p-3 space-y-1.5">
-            {actions.map(({ key, label, runningLabel, fn }) => {
+            {actions.map(({ key, label, runningLabel, fn, disabled, disabledReason }) => {
               const result = results[key]
+              const isDisabled = isBusy || disabled
               return (
                 <div key={key}>
                   <button
-                    onClick={() => run(key, fn)}
-                    disabled={isBusy}
+                    onClick={() => !disabled && run(key, fn)}
+                    disabled={isDisabled}
+                    title={disabled ? disabledReason : undefined}
                     className="w-full text-left text-xs px-3 py-2 rounded-lg border font-medium transition-colors hover:bg-muted/40 disabled:opacity-50"
                   >
-                    {running === key ? runningLabel : label}
+                    <span className="flex items-center justify-between">
+                      <span>{running === key ? runningLabel : label}</span>
+                      {disabled && disabledReason && (
+                        <span className="text-[10px] text-muted-foreground font-normal">{disabledReason}</span>
+                      )}
+                    </span>
                   </button>
                   {result && (
                     <p className={`text-[10px] px-1 mt-0.5 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>

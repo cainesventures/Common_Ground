@@ -108,7 +108,7 @@ function PerspectivesTally({
   billId: string
   isAdmin?: boolean
   generating?: string | null
-  generate?: (ptype: string) => void
+  generate?: (ptype: string, force?: boolean) => void
   isBusy?: boolean
 }) {
   const [expanded, setExpanded] = useState<string | null>(null)
@@ -215,11 +215,22 @@ function PerspectivesTally({
                       ) : (
                         <p className="text-sm text-muted-foreground italic">No analysis available.</p>
                       )}
-                      {p.generated_at && (
-                        <p className="text-[11px] text-muted-foreground/40 text-right mt-3">
-                          Generated {timeAgo(p.generated_at)}
-                        </p>
-                      )}
+                      <div className="flex items-center justify-between mt-3">
+                        {p.generated_at && (
+                          <p className="text-[11px] text-muted-foreground/40">
+                            Generated {timeAgo(p.generated_at)}
+                          </p>
+                        )}
+                        {isAdmin && generate && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); generate(p.perspective_type, true) }}
+                            disabled={isBusy}
+                            className="text-[11px] px-2 py-0.5 rounded border text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                          >
+                            Regenerate
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -351,11 +362,11 @@ export function PerspectivesPanel({
     }
   }
 
-  const generate = async (perspType: string) => {
+  const generate = async (perspType: string, force = false) => {
     setGenerating(perspType)
     setGenerateError(null)
     try {
-      const data = await api.generatePerspective(billId, perspType)
+      const data = await api.generatePerspective(billId, perspType, force)
       if (data?.perspective_type) {
         setPerspectives((prev) => {
           const filtered = prev.filter((p) => p.perspective_type !== data.perspective_type)

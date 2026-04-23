@@ -102,10 +102,23 @@ export const api = {
     return apiFetch(`/api/legislation/month-counts?${p}`)
   },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false) => {
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false) => {
     const tagStr = Array.isArray(tag) ? tag.join(',') : tag
     const statusStr = Array.isArray(status) ? status.join(',') : status
-    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}`)
+    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}`)
+  },
+
+  getSpotlight: (limit = 8) =>
+    apiFetch(`/api/legislation/spotlight?limit=${limit}`),
+
+  getPipelineStats: (params: { status?: string; year?: string; month?: string; date_from?: string; date_to?: string }) => {
+    const p = new URLSearchParams()
+    if (params.status)    p.set('status',    params.status)
+    if (params.year)      p.set('year',      params.year)
+    if (params.month)     p.set('month',     params.month)
+    if (params.date_from) p.set('date_from', params.date_from)
+    if (params.date_to)   p.set('date_to',   params.date_to)
+    return apiFetch(`/api/legislation/pipeline-stats?${p}`)
   },
 
   tagAllBills: () =>
@@ -288,6 +301,8 @@ export const api = {
   getDonationConfig: () => apiFetch('/api/donations/config'),
   createCheckout: (amount_usd: number) =>
     apiFetch('/api/donations/checkout', { method: 'POST', body: JSON.stringify({ amount_usd }) }),
+  getDonationSession: (session_id: string) =>
+    apiFetch(`/api/donations/session/${session_id}`),
 
   // ── Ingestion (developer) ─────────────────────────────────────────────────
   ingestFederal: (congress = 118, limit = 20) =>
@@ -359,11 +374,29 @@ export const api = {
   analyzeLegislation: (id: string) =>
     apiFetch(`/api/legislation/${id}/analyze`, { method: 'POST' }),
 
+  fetchBillDetails: (id: string) =>
+    apiFetch(`/api/legislation/${id}/fetch-details`, { method: 'POST' }),
+
+  generateBillHeadline: (id: string) =>
+    apiFetch(`/api/legislation/${id}/generate-headline`, { method: 'POST' }),
+
+  fetchBillMetadata: (id: string) =>
+    apiFetch(`/api/legislation/${id}/fetch-metadata`, { method: 'POST' }),
+
+  generateBillPerspectives: (id: string) =>
+    apiFetch(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),
+
   fetchBillNews: (id: string) =>
     apiFetch(`/api/legislation/${id}/fetch-news`, { method: 'POST' }),
 
   fetchNewsAll: () =>
     apiFetch('/api/legislation/fetch-news-all', { method: 'POST' }),
+
+  generateHeadlines: (force = false) =>
+    apiFetch(`/api/legislation/generate-headlines?force=${force}`, { method: 'POST' }),
+
+  generateLedes: (force = false) =>
+    apiFetch(`/api/legislation/generate-ledes?force=${force}`, { method: 'POST' }),
 
   analyzeAll: (force = false, forcePerspectives = false) =>
     apiFetch(`/api/legislation/analyze-all?force=${force}&force_perspectives=${forcePerspectives}`, { method: 'POST' }),
@@ -375,7 +408,7 @@ export const api = {
     apiFetch('/api/legislation/generate-all-perspectives', { method: 'POST' }),
 
   // Pipeline SSE path (used directly via fetch in admin, not apiFetch)
-  pipelinePath: (params: { steps: string; force_analyze?: boolean; perspective_types?: string; year?: string; month?: string; date_from?: string; date_to?: string }) => {
+  pipelinePath: (params: { steps: string; force_analyze?: boolean; perspective_types?: string; year?: string; month?: string; date_from?: string; date_to?: string; status?: string }) => {
     const p = new URLSearchParams()
     p.set('steps', params.steps)
     if (params.force_analyze) p.set('force_analyze', 'true')
@@ -384,6 +417,7 @@ export const api = {
     if (params.month) p.set('month', params.month)
     if (params.date_from) p.set('date_from', params.date_from)
     if (params.date_to) p.set('date_to', params.date_to)
+    if (params.status) p.set('status', params.status)
     return `/api/legislation/stream/pipeline?${p}`
   },
 
@@ -393,8 +427,8 @@ export const api = {
   getPerspectives: (id: string) =>
     apiFetch(`/api/legislation/${id}/perspectives`),
 
-  generatePerspective: (id: string, perspectiveType: string) =>
-    apiFetch(`/api/legislation/${id}/perspectives/${perspectiveType}`, { method: 'POST' }),
+  generatePerspective: (id: string, perspectiveType: string, force = false) =>
+    apiFetch(`/api/legislation/${id}/perspectives/${perspectiveType}${force ? '?force=true' : ''}`, { method: 'POST' }),
 
   generateAllPerspectives: (id: string) =>
     apiFetch(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),

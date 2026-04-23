@@ -21,6 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
+        <img src="/libertybell.svg" alt="" aria-hidden="true" className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[340px] max-w-none opacity-[0.07] dark:opacity-[0.12] dark:invert pointer-events-none select-none -z-10" />
         <PostHogProvider>
           <NextTopLoader color="hsl(var(--primary))" height={2} showSpinner={false} />
           <Suspense fallback={null}>

@@ -10,6 +10,7 @@ import { usePostHog } from 'posthog-js/react'
 import { STATUS_COLORS as STATUS_BADGE, STATUS_COLORS_FALLBACK, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
 import { isWithin7Days, fmtStatus } from '@/lib/utils'
 import { BillCard } from '@/components/BillCard'
+import { BILL_CATEGORIES, CATEGORY_TAGS } from '@/lib/bill-categories'
 
 const PAGE_SIZE = 20
 
@@ -21,9 +22,12 @@ interface Bill {
   bill_number: string
   title: string
   plain_title?: string
+  headline?: string
+  lede?: string
   status: string
   level?: string
   introduced_date?: string
+  final_date?: string
   impact_level?: string
   bill_type?: string
   analyzed_at?: string
@@ -86,7 +90,7 @@ function YearPicker({
   const max   = Math.max(...yearCounts.map(y => y.count), 1)
 
   return (
-    <div className="rounded-xl border bg-card p-4">
+    <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <span className="text-sm font-semibold">Bill Activity</span>
@@ -102,15 +106,15 @@ function YearPicker({
               key={y.year}
               onClick={() => onYearSelect(y.year)}
               title={`${y.year}: ${y.count.toLocaleString()} bill${y.count !== 1 ? 's' : ''}`}
-              className="group relative flex flex-col items-center justify-center rounded-lg border border-border hover:border-primary overflow-hidden transition-colors min-w-[72px] px-4 py-3"
+              className="group relative flex flex-col items-center justify-center rounded-lg border border-border hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 overflow-hidden transition-colors min-w-[72px] px-4 py-3 cursor-pointer"
             >
               {/* Volume fill — subtle background bar rising from the bottom */}
               <div
-                className="absolute inset-x-0 bottom-0 bg-primary/8 dark:bg-primary/15 transition-all duration-200 group-hover:bg-primary/15 dark:group-hover:bg-primary/25"
+                className="absolute inset-x-0 bottom-0 bg-primary/8 dark:bg-primary/15 transition-all duration-200 group-hover:bg-emerald-500/15"
                 style={{ height: `${pct}%` }}
               />
-              <span className="relative text-sm font-bold tabular-nums group-hover:text-primary transition-colors">{y.year}</span>
-              <span className="relative text-[11px] text-muted-foreground tabular-nums group-hover:text-primary/70 transition-colors mt-0.5">
+              <span className="relative text-sm font-bold tabular-nums group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{y.year}</span>
+              <span className="relative text-[11px] text-muted-foreground tabular-nums group-hover:text-emerald-500 transition-colors mt-0.5">
                 {y.count.toLocaleString()}
               </span>
             </button>
@@ -154,7 +158,7 @@ function MonthBarChart({
           const isActive  = selectedMonth === m.month
           const isHovered = hoveredMonth  === m.month
           const barH = Math.max((m.count / max) * 72, 3)
-          const barColor = isActive ? '#3b82f6' : isHovered ? '#1d4ed8' : '#3b82f630'
+          const barColor = isActive ? '#10b981' : isHovered ? '#059669' : '#10b98130'
 
           return (
             <button
@@ -178,7 +182,7 @@ function MonthBarChart({
                   className="w-full rounded-t-sm"
                   style={{
                     height: barH, backgroundColor: barColor,
-                    outline: isActive ? '2px solid #3b82f6' : 'none',
+                    outline: isActive ? '2px solid #10b981' : 'none',
                     outlineOffset: '1px',
                     transition: 'background-color 150ms ease',
                   }}
@@ -187,7 +191,7 @@ function MonthBarChart({
               <span style={{
                 fontSize: 10, lineHeight: 1, textAlign: 'center',
                 width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                color: isActive ? '#2563eb' : '#6b7280',
+                color: isActive ? '#059669' : isHovered ? '#10b981' : '#6b7280',
                 fontWeight: isActive ? 600 : 400,
                 transition: 'color 150ms ease',
               }}>
@@ -308,7 +312,10 @@ function LegislationPageInner() {
   const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
   const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') !== '0')
   const [hasVotesOnly,    setHasVotesOnly]    = useState(() => sp.get('has_votes') === '1')
+  const [hasPerspectivesOnly, setHasPerspectivesOnly] = useState(() => sp.get('has_perspectives') === '1')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => sp.get('category') ? sp.get('category')!.split(',').filter(Boolean) : [])
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
   const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
 
@@ -325,25 +332,29 @@ function LegislationPageInner() {
     if (selectedSponsor)      p.set('sponsor', selectedSponsor)
     if (!analyzedOnly)        p.set('analyzed', '0')
     if (hasVotesOnly)         p.set('has_votes', '1')
+    if (hasPerspectivesOnly)  p.set('has_perspectives', '1')
+    if (selectedCategories.length) p.set('category', selectedCategories.join(','))
     if (page > 1)             p.set('page',    String(page))
     const qs = p.toString()
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', url)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, page])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, hasPerspectivesOnly, selectedCategories, page])
 
   const fetchBills = useCallback(async (
     q: string, year: number | null, month: number | null, tags: string[],
-    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean
+    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean, hasPerspectives: boolean, categories: string[]
   ) => {
     setLoading(true)
     setError('')
     try {
       const offset = (pageNum - 1) * PAGE_SIZE
+      const categoryTags = categories.flatMap(cat => CATEGORY_TAGS[cat] ?? [])
+      const allTags = categoryTags.length > 0 ? [...new Set([...tags, ...categoryTags])] : tags
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        tags, impact, year ?? 0, month ?? 0, statuses, sponsor, hasVotes
+        allTags, impact, year ?? 0, month ?? 0, statuses, sponsor, hasVotes, hasPerspectives
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -370,8 +381,8 @@ function LegislationPageInner() {
   }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatuses, selectedSponsor, selectedYear, selectedMonth])
 
   useEffect(() => {
-    fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly)
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, fetchBills])
+    fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
 
   useEffect(() => {
     api.getCouncilmembers().then((d) => setCouncilMembers(d?.members ?? [])).catch(() => {})
@@ -379,19 +390,21 @@ function LegislationPageInner() {
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tags: string[]; level: string;
-    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean
+    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean; hasPerspectives: boolean; categories: string[]
   }> = {}) => {
     setPage(1)
-    if ('year'     in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
-    if ('month'    in overrides) setSelectedMonth(overrides.month!)
-    if ('tags'     in overrides) setSelectedTags(overrides.tags!)
-    if ('level'    in overrides) setSelectedLevel(overrides.level!)
-    if ('statuses' in overrides) setSelectedStatuses(overrides.statuses!)
-    if ('impact'   in overrides) setSelectedImpact(overrides.impact!)
-    if ('analyzed' in overrides) setAnalyzedOnly(overrides.analyzed!)
-    if ('sponsor'  in overrides) setSelectedSponsor(overrides.sponsor!)
-    if ('hasVotes' in overrides) setHasVotesOnly(overrides.hasVotes!)
-    if ('q'        in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
+    if ('year'            in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
+    if ('month'           in overrides) setSelectedMonth(overrides.month!)
+    if ('tags'            in overrides) setSelectedTags(overrides.tags!)
+    if ('level'           in overrides) setSelectedLevel(overrides.level!)
+    if ('statuses'        in overrides) setSelectedStatuses(overrides.statuses!)
+    if ('impact'          in overrides) setSelectedImpact(overrides.impact!)
+    if ('analyzed'        in overrides) setAnalyzedOnly(overrides.analyzed!)
+    if ('sponsor'         in overrides) setSelectedSponsor(overrides.sponsor!)
+    if ('hasVotes'        in overrides) setHasVotesOnly(overrides.hasVotes!)
+    if ('hasPerspectives' in overrides) setHasPerspectivesOnly(overrides.hasPerspectives!)
+    if ('categories'      in overrides) setSelectedCategories(overrides.categories!)
+    if ('q'               in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
   }
 
   const clearAll = () => {
@@ -400,6 +413,8 @@ function LegislationPageInner() {
     setSelectedTags([]); setSelectedLevel('local')
     setSelectedStatuses([]); setSelectedImpact('')
     setSelectedSponsor(''); setHasVotesOnly(false)
+    setHasPerspectivesOnly(false)
+    setSelectedCategories([])
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
 
@@ -419,6 +434,8 @@ function LegislationPageInner() {
     selectedTags.length > 0,
     !analyzedOnly,
     hasVotesOnly,
+    hasPerspectivesOnly,
+    selectedCategories.length > 0,
     selectedYear !== null,
   ].filter(Boolean).length
 
@@ -433,7 +450,9 @@ function LegislationPageInner() {
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
   if (selectedSponsor) filterParts.push(selectedSponsor)
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
-  if (hasVotesOnly)   filterParts.push('has roll call')
+  if (hasVotesOnly)         filterParts.push('has roll call')
+  if (hasPerspectivesOnly)  filterParts.push('has perspectives')
+  if (selectedCategories.length) selectedCategories.forEach(c => filterParts.push(BILL_CATEGORIES[c]?.label ?? c))
   if (query)          filterParts.push(`"${query}"`)
 
   return (
@@ -461,24 +480,50 @@ function LegislationPageInner() {
         />
       </div>
 
-      {/* Drill-down bar chart */}
-      <DrilldownChart
-        selectedYear={selectedYear}
-        selectedMonth={selectedMonth}
-        onYearSelect={(y) => reset({ year: y })}
-        onMonthSelect={(m) => { setSelectedMonth(m); setPage(1) }}
-        filters={{
-          q: query || undefined,
-          analyzed: analyzedOnly ? 'true' : undefined,
-          tag: selectedTags.join(',') || undefined,
-          impact: selectedImpact || undefined,
-          status: selectedStatuses.join(',') || undefined,
-          sponsor: selectedSponsor || undefined,
-        }}
-      />
-
       {/* ── Filter row ── */}
-      <div className="sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4 space-y-3">
+      <div className="sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4 space-y-2">
+
+        {/* Collapsed one-liner — desktop only, shown when filtersExpanded=false */}
+        {!filtersExpanded && (
+          <div className="hidden sm:flex flex-col gap-2">
+            {/* Search row */}
+            <div className="flex items-center gap-2">
+              <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1 min-w-0">
+                <input
+                  type="text"
+                  value={queryInput}
+                  onChange={(e) => setQueryInput(e.target.value)}
+                  placeholder="Search bills…"
+                  aria-label="Search bills"
+                  className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <button type="submit" disabled={loading} className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 h-8 text-sm font-semibold bg-primary text-primary-foreground hover:bg-emerald-600 hover:border-emerald-500 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" /></svg>
+                  Search
+                </button>
+              </form>
+              {drawerFilterCount > 0 && (
+                <span className="text-xs text-muted-foreground shrink-0 truncate max-w-xs">{filterParts.join(' · ')}</span>
+              )}
+              {drawerFilterCount > 0 && (
+                <button onClick={clearAll} className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 transition-colors dark:bg-red-900/20 dark:text-red-400 dark:border-red-800">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                  Clear
+                </button>
+              )}
+              <button
+                onClick={() => setFiltersExpanded(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-input text-xs font-medium text-muted-foreground hover:bg-amber-50 hover:border-amber-400 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M10 12h4" /></svg>
+                Filters
+                {drawerFilterCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{drawerFilterCount}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Mobile: search always visible + toggle button */}
         <div className="flex gap-2 sm:hidden">
@@ -512,90 +557,10 @@ function LegislationPageInner() {
         </div>
 
         {/* Desktop filter controls — hidden on mobile (mobile uses the bottom drawer) */}
-        <div className="hidden sm:block space-y-3">
+        {filtersExpanded && <div className="hidden sm:block space-y-2">
 
-        {/* Status, Impact, Analyzed row */}
-        <div className="flex flex-wrap gap-2 items-center">
-          {/* Status multi-select */}
-          <MultiSelect
-            options={STATUSES}
-            selected={selectedStatuses}
-            onChange={(v) => { reset({ statuses: v }) }}
-            placeholder="All Statuses"
-            className="h-8 min-w-[140px]"
-          />
-
-          {/* Sponsor dropdown */}
-          {councilMembers.length > 0 && (
-            <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
-              <SelectTrigger className="h-8 text-sm w-[160px]" aria-label="Filter by sponsor">
-                <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all__">All sponsors</SelectItem>
-                {councilMembers.map(m => (
-                  <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-
-          {/* Impact chips */}
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground mr-1">Impact:</span>
-            <button
-              onClick={() => reset({ impact: '' })}
-              className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                !selectedImpact
-                  ? 'bg-foreground text-background border-foreground'
-                  : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
-              }`}
-            >All</button>
-            {IMPACTS.map(imp => (
-              <button
-                key={imp}
-                onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize border transition-colors ${
-                  selectedImpact === imp
-                    ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
-                    : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
-                    :                   'bg-green-500 text-white border-green-500'
-                    : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400'
-                    : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400'
-                    :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400'
-                }`}
-              >
-                {imp}
-              </button>
-            ))}
-          </div>
-
-          {/* Analyzed toggle */}
-          <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-            <input
-              type="checkbox"
-              checked={analyzedOnly}
-              onChange={(e) => reset({ analyzed: e.target.checked })}
-              className="rounded border-input"
-            />
-            Analyzed only
-          </label>
-
-          {/* Has Roll Call toggle */}
-          <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-            <input
-              type="checkbox"
-              checked={hasVotesOnly}
-              onChange={(e) => reset({ hasVotes: e.target.checked })}
-              className="rounded border-input"
-            />
-            Has roll call
-          </label>
-        </div>
-
-        {/* Search + tag — desktop only (mobile has its own search above) */}
-        <div className="hidden sm:flex flex-wrap gap-2">
-          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1 min-w-64">
+          {/* Row 1: Search */}
+          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2">
             <input
               type="text"
               value={queryInput}
@@ -607,22 +572,186 @@ function LegislationPageInner() {
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md px-5 h-9 text-sm font-semibold bg-primary text-primary-foreground hover:bg-emerald-600 hover:border-emerald-500 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors"
             >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
+              </svg>
               Search
             </button>
+            <button
+              onClick={() => setFiltersExpanded(false)}
+              title="Collapse filters"
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-md border border-input text-muted-foreground hover:bg-amber-50 hover:border-amber-400 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
+            </button>
           </form>
-          {tagCounts.length > 0 && (
+
+          {/* Row 2: Status · Sponsor · Category · Tags */}
+          <div className="flex flex-wrap gap-2 items-center">
             <MultiSelect
-              options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
-              selected={selectedTags}
-              onChange={(v) => reset({ tags: v })}
-              placeholder="All Tags"
-              className="h-9 min-w-[150px]"
+              options={STATUSES}
+              selected={selectedStatuses}
+              onChange={(v) => reset({ statuses: v })}
+              placeholder="All Statuses"
+              className="h-8 min-w-[140px]"
             />
+            {councilMembers.length > 0 && (
+              <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
+                <SelectTrigger className="h-8 text-sm w-[160px]" aria-label="Filter by sponsor">
+                  <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All sponsors</SelectItem>
+                  {councilMembers.map(m => (
+                    <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <MultiSelect
+              options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => ({ value: key, label: cat.label }))}
+              selected={selectedCategories}
+              onChange={(v) => reset({ categories: v })}
+              placeholder="All Categories"
+              searchPlaceholder="Search categories…"
+              className="h-8 min-w-[150px]"
+            />
+            {tagCounts.length > 0 && (
+              <MultiSelect
+                options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
+                selected={selectedTags}
+                onChange={(v) => reset({ tags: v })}
+                placeholder="All Tags"
+                className="h-8 min-w-[130px]"
+              />
+            )}
+          </div>
+
+          {/* Row 3: Impact chips · toggles */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1 items-center">
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-muted-foreground mr-1">Impact:</span>
+              <button
+                onClick={() => reset({ impact: '' })}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                  !selectedImpact
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
+                }`}
+              >All</button>
+              {IMPACTS.map(imp => (
+                <button
+                  key={imp}
+                  onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize border transition-colors ${
+                    selectedImpact === imp
+                      ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
+                      : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
+                      :                   'bg-green-500 text-white border-green-500'
+                      : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400'
+                      : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400'
+                      :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400'
+                  }`}
+                >
+                  {imp}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-4">
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                <input type="checkbox" checked={analyzedOnly} onChange={(e) => reset({ analyzed: e.target.checked })} className="rounded border-input" />
+                Analyzed only
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                <input type="checkbox" checked={hasVotesOnly} onChange={(e) => reset({ hasVotes: e.target.checked })} className="rounded border-input" />
+                Has roll call
+              </label>
+              <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
+                <input type="checkbox" checked={hasPerspectivesOnly} onChange={(e) => reset({ hasPerspectives: e.target.checked })} className="rounded border-input" />
+                Has perspectives
+              </label>
+            </div>
+          </div>
+
+          {/* Row 4: Active filters + clear all — only when filters are active */}
+          {filterParts.length > 0 && (
+            <div className="flex items-center gap-2 flex-wrap border-t pt-2">
+              <button
+                onClick={clearAll}
+                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-300 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/30 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+                Clear all
+              </button>
+              <span className="text-xs text-muted-foreground shrink-0">·</span>
+              <span className="text-xs text-foreground">{filterParts.join(' · ')}</span>
+            </div>
           )}
-        </div>
-        </div>{/* end desktop panel */}
+
+        </div>}{/* end desktop panel */}
+
+        {/* Sticky pagination — shown once there are multiple pages */}
+        {!loading && !error && total > 0 && totalPages > 1 && (
+          <div className="hidden sm:flex items-center justify-between gap-3 border-t pt-2 text-sm">
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+            >
+              ← Previous
+            </button>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const val = parseInt((e.currentTarget.elements.namedItem('pageInputTop') as HTMLInputElement).value)
+                if (!isNaN(val) && val >= 1 && val <= totalPages) setPage(val)
+              }}
+              className="flex items-center gap-1.5 text-sm text-muted-foreground"
+            >
+              <span>Page</span>
+              <input
+                name="pageInputTop"
+                key={page}
+                defaultValue={page}
+                type="number"
+                min={1}
+                max={totalPages}
+                className="w-12 text-center rounded-md border border-input bg-background px-1 py-0.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <span>of {totalPages} <span className="text-xs">({total.toLocaleString()} bills)</span></span>
+            </form>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+            >
+              Next →
+            </button>
+          </div>
+        )}
+
+        {/* Bill Activity drill-down */}
+        {filtersExpanded && <div className="hidden sm:block">
+          <DrilldownChart
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            onYearSelect={(y) => reset({ year: y })}
+            onMonthSelect={(m) => { setSelectedMonth(m); setPage(1) }}
+            filters={{
+              q: query || undefined,
+              analyzed: analyzedOnly ? 'true' : undefined,
+              tag: selectedTags.join(',') || undefined,
+              impact: selectedImpact || undefined,
+              status: selectedStatuses.join(',') || undefined,
+              sponsor: selectedSponsor || undefined,
+            }}
+          />
+        </div>}
+
       </div>
 
       {/* ── Mobile Filter Drawer ── */}
@@ -738,6 +867,19 @@ function LegislationPageInner() {
                 </div>
               )}
 
+              {/* Category */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</p>
+                <MultiSelect
+                  options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => ({ value: key, label: cat.label }))}
+                  selected={selectedCategories}
+                  onChange={(v) => reset({ categories: v })}
+                  placeholder="All Categories"
+                  searchPlaceholder="Search categories…"
+                  className="h-10 w-full"
+                />
+              </div>
+
               {/* Options */}
               <div className="space-y-1">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-3">Options</p>
@@ -759,6 +901,15 @@ function LegislationPageInner() {
                     className="rounded border-input w-4 h-4"
                   />
                 </label>
+                <label className="flex items-center justify-between py-2">
+                  <span className="text-sm">Has perspectives</span>
+                  <input
+                    type="checkbox"
+                    checked={hasPerspectivesOnly}
+                    onChange={(e) => reset({ hasPerspectives: e.target.checked })}
+                    className="rounded border-input w-4 h-4"
+                  />
+                </label>
               </div>
 
             </div>
@@ -766,31 +917,9 @@ function LegislationPageInner() {
         </div>
       )}
 
-      {/* Active filter breadcrumb */}
-      {filterParts.length > 0 && (
-        <div className="flex items-center gap-2 text-sm flex-wrap">
-          <span className="text-muted-foreground shrink-0">Filters:</span>
-          <span className="font-medium text-foreground">{filterParts.join(' · ')}</span>
-          <button
-            onClick={clearAll}
-            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 hover:border-red-300 dark:bg-red-900/20 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/30 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="w-3 h-3" viewBox="0 0 20 20" fill="currentColor">
-              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-            </svg>
-            Clear all
-          </button>
-        </div>
-      )}
 
       {error && <p className="text-sm text-destructive">Error: {error}</p>}
 
-      {/* Pagination position indicator */}
-      {!loading && !error && total > 0 && totalPages > 1 && (
-        <div className="flex items-center justify-end text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
-        </div>
-      )}
 
       {/* Loading skeletons */}
       {loading && (
@@ -805,7 +934,7 @@ function LegislationPageInner() {
       {!loading && !error && bills.length > 0 && (
         <div className="space-y-2">
           {bills.map((bill) => (
-            <BillCard key={bill.id} bill={bill} query={query} />
+            <BillCard key={bill.id} bill={bill} query={query} tab={hasPerspectivesOnly ? 'perspectives' : undefined} />
           ))}
         </div>
       )}

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { ChevronDownIcon, CheckIcon } from 'lucide-react'
+import { ChevronDownIcon, CheckIcon, SearchIcon } from 'lucide-react'
 
 interface Option {
   value: string
@@ -15,17 +15,21 @@ interface MultiSelectProps {
   onChange: (values: string[]) => void
   placeholder?: string
   className?: string
+  searchable?: boolean
+  searchPlaceholder?: string
 }
 
-export function MultiSelect({ options, selected, onChange, placeholder = 'All', className }: MultiSelectProps) {
+export function MultiSelect({ options, selected, onChange, placeholder = 'All', className, searchable = true, searchPlaceholder = 'Search…' }: MultiSelectProps) {
   const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
 
   // Close on outside click
   useEffect(() => {
     if (!open) return
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setSearch('') }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -34,10 +38,15 @@ export function MultiSelect({ options, selected, onChange, placeholder = 'All', 
   // Close on Escape
   useEffect(() => {
     if (!open) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setSearch('') } }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [open])
+
+  // Focus search input when dropdown opens
+  useEffect(() => {
+    if (open && searchable) setTimeout(() => searchRef.current?.focus(), 0)
+  }, [open, searchable])
 
   const toggle = (value: string) => {
     onChange(selected.includes(value) ? selected.filter(v => v !== value) : [...selected, value])
@@ -77,8 +86,26 @@ export function MultiSelect({ options, selected, onChange, placeholder = 'All', 
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-full w-max max-h-64 overflow-y-auto rounded-lg bg-background border border-foreground/10 shadow-md p-1">
-          {options.map(opt => {
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-full w-max max-h-72 flex flex-col rounded-lg bg-background border border-foreground/10 shadow-md">
+          {searchable && (
+            <div className="flex items-center gap-2 border-b px-2.5 py-1.5 shrink-0">
+              <SearchIcon className="size-3.5 text-muted-foreground shrink-0" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60 min-w-0"
+                onClick={(e) => e.stopPropagation()}
+              />
+              {search && (
+                <button type="button" onClick={() => setSearch('')} className="text-muted-foreground hover:text-foreground text-xs">✕</button>
+              )}
+            </div>
+          )}
+          <div className="overflow-y-auto flex-1 p-1">
+          {options.filter(opt => !search || opt.label.toLowerCase().includes(search.toLowerCase())).map(opt => {
             const isSelected = selected.includes(opt.value)
             return (
               <button
@@ -99,6 +126,7 @@ export function MultiSelect({ options, selected, onChange, placeholder = 'All', 
               </button>
             )
           })}
+          </div>
         </div>
       )}
     </div>

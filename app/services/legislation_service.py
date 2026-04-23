@@ -13,11 +13,92 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Canonical tag vocabulary. AI must pick from this list only.
+# Mirrors the categories in frontend/lib/bill-categories.ts.
+# Rules: lowercase, words separated by single spaces, no hyphens/underscores.
 CATEGORY_TAGS = [
-    "housing", "zoning", "transportation", "public safety", "budget",
-    "education", "environment", "health", "parks", "business",
-    "infrastructure", "labor", "technology", "social services",
+    # Zoning & Development
+    "zoning", "land use", "housing", "development", "construction", "residential",
+    "neighborhood development", "real estate",
+    # Budget & Finance
+    "budget", "finance", "taxation", "fees", "funding", "revenue", "procurement",
+    "trade", "inheritance",
+    # Transportation
+    "transportation", "public transportation", "infrastructure", "traffic",
+    "parking", "parking regulations", "towing", "street improvements",
+    "street management", "right-of-way", "encroachments",
+    # Public Safety
+    "public safety", "law enforcement", "criminal justice", "civil enforcement",
+    # Civil Rights & Government
+    "civil rights", "discrimination", "elections", "personal data protection",
+    "transparency", "fair practices ordinance", "referendum",
+    "home rule charter amendment", "government", "city government", "office",
+    # Immigration
+    "immigration",
+    # Environment & Utilities
+    "environment", "energy", "utilities", "air management", "asbestos",
+    "cell towers",
+    # Health & Social Services
+    "health", "public health", "social services", "children and youth", "alcohol",
+    # Education
+    "education", "school district",
+    # Business & Licensing
+    "business", "licensing", "permits", "regulation", "commerce", "retail",
+    "hotels", "sidewalk cafes", "outdoor entertainment", "economic development",
+    # Community & Public Space
+    "community", "community spaces", "public space", "arts", "culture",
+    "street renaming", "renaming", "naming", "celebration", "decorations",
+    # Other
+    "planning", "property", "property rights",
 ]
+
+# Fast lookup set used for validation
+_CATEGORY_TAGS_SET = set(CATEGORY_TAGS)
+
+
+def _ai_headline(bill, provider) -> str:
+    """Generate a verb-driven newspaper headline for a bill (10-15 words)."""
+    text = bill.plain_title or bill.title or ""
+    if bill.summary:
+        text += "\n" + bill.summary[:600]
+    elif bill.description:
+        text += "\n" + bill.description[:600]
+
+    system = (
+        "You write newspaper headlines for Philadelphia city council bills. "
+        "Write ONE headline: active voice, present tense, 10-15 words, no jargon, no bill numbers. "
+        "Make it feel like a real local news headline — specific and informative. "
+        "Respond with ONLY the headline, no quotes, no punctuation at the end."
+    )
+    try:
+        result = provider.complete(system_prompt=system, user_prompt=text)
+        return result.strip().strip('"\'').strip()[:200]
+    except Exception as e:
+        logger.warning(f"Headline failed for bill {bill.id}: {e}")
+    return ""
+
+
+def _ai_lede(bill, provider) -> str:
+    """Generate a punchy 1-2 sentence news lede for a bill."""
+    text = bill.headline or bill.plain_title or bill.title or ""
+    if bill.summary:
+        text += "\n" + bill.summary[:600]
+    elif bill.description:
+        text += "\n" + bill.description[:600]
+
+    system = (
+        "You write opening sentences for local news articles about Philadelphia city council bills. "
+        "Write 1-2 punchy sentences (max 40 words total) that hook the reader. "
+        "Use plain language, active voice, be specific about what changes and who it affects. "
+        "Do NOT start with 'This bill' or 'The bill'. No jargon, no bill numbers. "
+        "Respond with ONLY the lede text, nothing else."
+    )
+    try:
+        result = provider.complete(system_prompt=system, user_prompt=text)
+        return result.strip().strip('"\'').strip()[:400]
+    except Exception as e:
+        logger.warning(f"Lede failed for bill {bill.id}: {e}")
+    return ""
 
 
 def _ai_plain_title(bill, provider) -> str:
@@ -48,10 +129,13 @@ def _ai_tag_bill(bill, provider) -> list:
     if bill.description:
         text += "\n" + bill.description[:600]
 
+    tag_list = ", ".join(f'"{t}"' for t in CATEGORY_TAGS)
     system = (
-        "You categorize city council bills. "
-        f"Pick 1-3 tags from this exact list only: {', '.join(CATEGORY_TAGS)}. "
-        'Respond with ONLY a JSON array like ["housing"] or ["budget", "infrastructure"]. '
+        "You categorize Philadelphia city council bills. "
+        f"Pick 1-3 tags from this exact list only: {tag_list}. "
+        "Rules: use ONLY tags from the list above, copy them exactly as written "
+        "(lowercase, spaces not hyphens or underscores). "
+        'Respond with ONLY a JSON array, e.g. ["zoning"] or ["budget", "taxation"]. '
         "No explanation, no other text."
     )
     try:
@@ -59,7 +143,7 @@ def _ai_tag_bill(bill, provider) -> list:
         match = re.search(r"\[.*?\]", response, re.DOTALL)
         if match:
             tags = json.loads(match.group())
-            return [t for t in tags if t in CATEGORY_TAGS][:3]
+            return [t for t in tags if t in _CATEGORY_TAGS_SET][:3]
     except Exception as e:
         logger.warning(f"Auto-tag failed for bill {bill.id}: {e}")
     return []
@@ -265,6 +349,19 @@ class LegislationIngestionService:
                     Legislation.id == parsed["id"]
                 ).first()
 
+                if not existing and parsed.get("bill_number"):
+                    # Check for a stub created by bulk Excel import using file_number as ID.
+                    # Excel stubs have id = legistar_phila_<file_number> (6-digit),
+                    # while detail scrapes use the real matter_id (7-digit).
+                    stub_id = f"legistar_phila_{parsed['bill_number']}"
+                    if stub_id != parsed["id"]:
+                        existing = self.db.query(Legislation).filter(
+                            Legislation.id == stub_id
+                        ).first()
+                        if existing:
+                            # Re-key: update the stub's id to the real matter_id
+                            existing.id = parsed["id"]
+
                 if existing:
                     for key, value in parsed.items():
                         if value is not None:
@@ -298,6 +395,8 @@ class LegislationIngestionService:
         status: Optional[str] = None,
         sponsor: Optional[str] = None,
         has_votes: Optional[bool] = None,
+        has_perspectives: Optional[bool] = None,
+        missing_perspectives: Optional[bool] = None,
         city: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
@@ -313,7 +412,15 @@ class LegislationIngestionService:
         if city:
             base_query = base_query.filter(Legislation.city == city)
         if analyzed is True:
-            base_query = base_query.filter(Legislation.analyzed_at.isnot(None))
+            # Completeness gate: only surface bills that have full_text + analysis + headline.
+            # Bills analyzed on title alone (no full_text) are excluded from public results.
+            base_query = base_query.filter(
+                Legislation.analyzed_at.isnot(None),
+                Legislation.full_text.isnot(None),
+                Legislation.full_text != "",
+                Legislation.headline.isnot(None),
+                Legislation.headline != "",
+            )
         elif analyzed is False:
             base_query = base_query.filter(Legislation.analyzed_at.is_(None))
         if tag:
@@ -340,6 +447,18 @@ class LegislationIngestionService:
             base_query = base_query.filter(
                 exists().where(BillVoteRecord.legislation_id == Legislation.id)
             )
+        if has_perspectives:
+            from sqlalchemy import exists as _exists
+            from app.models import BillPerspective
+            base_query = base_query.filter(
+                _exists().where(BillPerspective.bill_id == Legislation.id)
+            )
+        if missing_perspectives:
+            from sqlalchemy import exists as _exists
+            from app.models import BillPerspective
+            base_query = base_query.filter(
+                ~_exists().where(BillPerspective.bill_id == Legislation.id)
+            )
         total = base_query.count()
         results = (
             base_query
@@ -349,6 +468,58 @@ class LegislationIngestionService:
             .all()
         )
         return results, total
+
+    def generate_ledes(self, force: bool = False) -> dict:
+        """Generate punchy news ledes for analyzed bills."""
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+
+        query = self.db.query(Legislation).filter(Legislation.analyzed_at.isnot(None))
+        if not force:
+            query = query.filter(
+                (Legislation.lede.is_(None)) | (Legislation.lede == "")
+            )
+        bills = query.all()
+
+        if not bills:
+            return {"generated": 0, "total": 0}
+
+        generated = 0
+        for bill in bills:
+            lede = _ai_lede(bill, provider)
+            if lede:
+                bill.lede = lede
+                generated += 1
+
+        self.db.commit()
+        logger.info(f"Generated ledes for {generated}/{len(bills)} bills")
+        return {"generated": generated, "total": len(bills)}
+
+    def generate_headlines(self, force: bool = False) -> dict:
+        """Generate news-style headlines for analyzed bills."""
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+
+        query = self.db.query(Legislation).filter(Legislation.analyzed_at.isnot(None))
+        if not force:
+            query = query.filter(
+                (Legislation.headline.is_(None)) | (Legislation.headline == "")
+            )
+        bills = query.all()
+
+        if not bills:
+            return {"generated": 0, "total": 0}
+
+        generated = 0
+        for bill in bills:
+            headline = _ai_headline(bill, provider)
+            if headline:
+                bill.headline = headline
+                generated += 1
+
+        self.db.commit()
+        logger.info(f"Generated headlines for {generated}/{len(bills)} bills")
+        return {"generated": generated, "total": len(bills)}
 
     def tag_untagged_bills(self) -> dict:
         """Use AI to assign category tags to all bills that have none."""

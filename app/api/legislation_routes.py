@@ -163,8 +163,10 @@ async def list_legislation(
             "offset": offset,
             "results": [
                 {"id": leg.id, "bill_number": leg.bill_number, "title": leg.title,
-                 "plain_title": leg.plain_title, "source": leg.source, "status": leg.status,
+                 "plain_title": leg.plain_title, "headline": leg.headline,
+                 "summary": leg.summary, "source": leg.source, "status": leg.status,
                  "level": leg.level, "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
+                 "final_date": leg.final_date.isoformat() if leg.final_date else None,
                  "impact_level": leg.impact_level, "bill_type": leg.bill_type, "tags": leg.tags,
                  "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None,
                  "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None}
@@ -509,6 +511,8 @@ async def search_legislation(
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     has_votes: bool = Query(False, description="Only return bills with cached roll call votes"),
+    has_perspectives: bool = Query(False, description="Only return bills with at least one generated perspective"),
+    missing_perspectives: bool = Query(False, description="Only return bills with no generated perspectives"),
     city: str = Query("", max_length=50, description="City slug filter (e.g. 'philadelphia', 'chicago'). Defaults to 'philadelphia' for local searches."),
     db: Session = Depends(get_db)
 ):
@@ -527,7 +531,8 @@ async def search_legislation(
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
             year=year or None, month=month or None, status=status or None, sponsor=sponsor or None,
-            has_votes=has_votes or None, city=effective_city or None,
+            has_votes=has_votes or None, has_perspectives=has_perspectives or None,
+            missing_perspectives=missing_perspectives or None, city=effective_city or None,
         )
         return {
             "success": True,
@@ -540,6 +545,8 @@ async def search_legislation(
                     "bill_number": leg.bill_number,
                     "title": leg.title,
                     "plain_title": leg.plain_title,
+                    "headline": leg.headline,
+                    "lede": leg.lede,
                     "source": leg.source,
                     "status": leg.status,
                     "level": leg.level,
@@ -551,7 +558,15 @@ async def search_legislation(
                     "bill_type": leg.bill_type,
                     "analyzed_at": leg.analyzed_at.isoformat() if leg.analyzed_at else None,
                     "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
+                    "final_date": leg.final_date.isoformat() if leg.final_date else None,
                     "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
+                    # Completeness fields for admin pipeline view
+                    "full_text": bool(leg.full_text) if leg.full_text else False,
+                    "sponsor": leg.sponsor or None,
+                    "committee": leg.committee or None,
+                    "metadata_fetched_at": leg.metadata_fetched_at.isoformat() if leg.metadata_fetched_at else None,
+                    "news_fetched_at": leg.news_fetched_at.isoformat() if leg.news_fetched_at else None,
+                    "perspective_count": len(leg.perspectives),
                 }
                 for leg in results
             ]
@@ -559,6 +574,125 @@ async def search_legislation(
     except Exception as e:
         logger.error(f"Error searching legislation (q={q!r}): {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/spotlight")
+async def spotlight_bills(
+    limit: int = Query(6, ge=1, le=20),
+    db: Session = Depends(get_db),
+):
+    """Return random analyzed bills with perspectives for the homepage slideshow."""
+    import random
+    from app.models import BillPerspective
+
+    bills = (
+        db.query(Legislation)
+        .filter(
+            Legislation.level == "local",
+            Legislation.analyzed_at.isnot(None),
+            Legislation.headline.isnot(None),
+            Legislation.headline != "",
+        )
+        .order_by(Legislation.introduced_date.desc())
+        .limit(80)
+        .all()
+    )
+
+    random.shuffle(bills)
+    results = []
+    for bill in bills:
+        perspectives_raw = (
+            db.query(BillPerspective)
+            .filter(BillPerspective.bill_id == bill.id)
+            .all()
+        )
+        perspectives = []
+        for p in perspectives_raw:
+            text = p.assessment or p.concerns or ""
+            snippet = text[:200].rsplit(" ", 1)[0] + "…" if len(text) > 200 else text
+            if snippet:
+                perspectives.append({
+                    "type": p.perspective_type,
+                    "position": p.position or "neutral",
+                    "snippet": snippet,
+                })
+        if not perspectives:
+            continue
+        results.append({
+            "id": bill.id,
+            "headline": bill.headline,
+            "lede": bill.lede or "",
+            "bill_number": bill.bill_number,
+            "perspectives": perspectives,
+        })
+        if len(results) >= limit:
+            break
+
+    return {"results": results}
+
+
+@router.get("/pipeline-stats")
+async def pipeline_stats(
+    status: str = Query("", description="Comma-separated status values to scope"),
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Return tallies for the pipeline: total, unanalyzed, missing perspectives."""
+    from app.models import BillPerspective
+    from sqlalchemy import exists as _exists
+
+    base = db.query(Legislation).filter(Legislation.level == "local")
+    if status:
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        base = base.filter(Legislation.status.in_(status_list))
+    base = _apply_date_filters(base, year, month, date_from, date_to)
+
+    total = base.count()
+    unanalyzed = base.filter(Legislation.analyzed_at.is_(None)).count()
+    missing_persp = base.filter(
+        ~_exists().where(BillPerspective.bill_id == Legislation.id)
+    ).count()
+
+    # Per-year completeness breakdown (always returned, not filtered by year param)
+    from sqlalchemy import func, extract, case
+    year_rows = (
+        db.query(
+            extract("year", Legislation.introduced_date).label("year"),
+            func.count().label("total"),
+            func.sum(case((Legislation.full_text.isnot(None), 1), else_=0)).label("has_full_text"),
+            func.sum(case((Legislation.sponsor.isnot(None), 1), else_=0)).label("has_sponsor"),
+            func.sum(case((Legislation.analyzed_at.isnot(None), 1), else_=0)).label("analyzed"),
+            func.sum(case((Legislation.headline.isnot(None), 1), else_=0)).label("has_headline"),
+            func.sum(case(((Legislation.committee.isnot(None)) | (Legislation.metadata_fetched_at.isnot(None)), 1), else_=0)).label("has_committee"),
+            func.sum(case((
+                _exists().where(BillPerspective.bill_id == Legislation.id), 1), else_=0
+            )).label("has_perspectives"),
+        )
+        .filter(Legislation.level == "local", Legislation.introduced_date.isnot(None))
+        .group_by(extract("year", Legislation.introduced_date))
+        .order_by(extract("year", Legislation.introduced_date).desc())
+        .limit(8)
+        .all()
+    )
+    completeness = [
+        {
+            "year": int(r.year),
+            "total": r.total,
+            "full_text": int(r.has_full_text),
+            "sponsor": int(r.has_sponsor),
+            "analyzed": int(r.analyzed),
+            "headline": int(r.has_headline),
+            "committee": int(r.has_committee),
+            "perspectives": int(r.has_perspectives),
+        }
+        for r in year_rows
+    ]
+
+    return {"total": total, "unanalyzed": unanalyzed, "missing_perspectives": missing_persp, "completeness": completeness}
 
 
 @router.post("/plain-titles")
@@ -606,14 +740,50 @@ async def tag_all_bills(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/generate-ledes")
+async def generate_ledes(
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Generate punchy news ledes for analyzed bills."""
+    try:
+        service = LegislationIngestionService(db)
+        result = service.generate_ledes(force=force)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Error generating ledes: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/generate-headlines")
+async def generate_headlines(
+    force: bool = Query(False),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Generate news-style headlines for analyzed bills."""
+    try:
+        service = LegislationIngestionService(db)
+        result = service.generate_headlines(force=force)
+        return {"success": True, **result}
+    except Exception as e:
+        logger.error(f"Error generating headlines: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/fetch-news-all")
 async def fetch_news_all_bills(
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
-    """Fetch and store news articles for all bills."""
+    """Fetch and store news articles for active bills only."""
     from app.services.news_service import fetch_and_store_news
-    bills = db.query(Legislation).filter(Legislation.level == "local").all()
+    from app.services.perspectives_service import ACTIVE_STATUSES
+    bills = db.query(Legislation).filter(
+        Legislation.level == "local",
+        Legislation.status.in_(ACTIVE_STATUSES),
+    ).all()
     fetched = 0
     total_articles = 0
     for bill in bills:
@@ -757,6 +927,19 @@ async def backfill_city_context(
 
 # ── Streaming (SSE) endpoints ─────────────────────────────────────────────────
 
+def _completeness_filter(q):
+    """Restrict to bills that have the minimum required fields to be useful to users.
+    A bill must have: full_text, an AI analysis (analyzed_at), and a headline.
+    Bills analyzed on title alone (no full_text) are excluded."""
+    return q.filter(
+        Legislation.analyzed_at.isnot(None),
+        Legislation.full_text.isnot(None),
+        Legislation.full_text != "",
+        Legislation.headline.isnot(None),
+        Legislation.headline != "",
+    )
+
+
 def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
     """Apply year/month/date_from/date_to filters to a Legislation query."""
     from sqlalchemy import extract
@@ -795,6 +978,10 @@ async def stream_analyze_all_bills(
     from app.services.perspectives_service import generate_base_perspectives
 
     async def gen():
+        from app.services.legislation_service import _ai_headline, _ai_lede
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+
         q = db.query(Legislation).filter(Legislation.level == "local")
         if not force:
             q = q.filter(Legislation.analyzed_at.is_(None))
@@ -808,7 +995,15 @@ async def stream_analyze_all_bills(
             yield _sse({"current": i, "total": total, "message": f"Analyzing {bill.bill_number}…", "done": False})
             await asyncio.sleep(0)
             try:
-                await asyncio.get_event_loop().run_in_executor(None, lambda b=bill: (analyze_bill(b, db), generate_base_perspectives(b, db, force=force_perspectives)))
+                def _run(b=bill):
+                    analyze_bill(b, db)
+                    generate_base_perspectives(b, db, force=force_perspectives)
+                    if not b.headline:
+                        b.headline = _ai_headline(b, provider)
+                    if not b.lede:
+                        b.lede = _ai_lede(b, provider)
+                    db.commit()
+                await asyncio.get_event_loop().run_in_executor(None, _run)
                 analyzed += 1
             except Exception as e:
                 logger.warning(f"stream analyze failed for {bill.bill_number}: {e}")
@@ -832,8 +1027,11 @@ async def stream_analyze_all_full(
     """Stream analyze + all 17 perspectives per bill as Server-Sent Events."""
     from app.services.bill_research_service import analyze_bill
     from app.services.perspectives_service import generate_perspective as _gen
+    from app.services.legislation_service import _ai_headline, _ai_lede
+    from app.services.ai_provider import get_ai_provider
 
     async def gen():
+        provider = get_ai_provider()
         q = db.query(Legislation).filter(Legislation.level == "local")
         if not force:
             q = q.filter(Legislation.analyzed_at.is_(None))
@@ -850,7 +1048,14 @@ async def stream_analyze_all_full(
             yield _sse({"current": current, "total": total_ops, "message": f"Analyzing {bill.bill_number}…", "done": False})
             await asyncio.sleep(0)
             try:
-                await asyncio.get_event_loop().run_in_executor(None, lambda b=bill: analyze_bill(b, db))
+                def _run_analyze(b=bill):
+                    analyze_bill(b, db)
+                    if not b.headline:
+                        b.headline = _ai_headline(b, provider)
+                    if not b.lede:
+                        b.lede = _ai_lede(b, provider)
+                    db.commit()
+                await asyncio.get_event_loop().run_in_executor(None, _run_analyze)
                 analyzed += 1
             except Exception as e:
                 logger.warning(f"full-analyze failed for {bill.bill_number}: {e}")
@@ -940,6 +1145,50 @@ async def stream_tag_all(
                 failed += 1
         db.commit()
         yield _sse({"current": total, "total": total, "message": f"Done — {tagged} tagged, {failed} failed", "done": True})
+        await asyncio.sleep(0)
+
+    return _sse_stream(gen)
+
+
+@router.get("/stream/backfill-headlines")
+async def stream_backfill_headlines(
+    year: int = Query(0),
+    month: int = Query(0),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Backfill headline + lede for analyzed bills that are missing them."""
+    from app.services.legislation_service import _ai_headline, _ai_lede
+    from app.services.ai_provider import get_ai_provider
+
+    async def gen():
+        provider = get_ai_provider()
+        q = db.query(Legislation).filter(
+            Legislation.analyzed_at.isnot(None),
+            (Legislation.headline.is_(None)) | (Legislation.headline == ""),
+        )
+        q = _apply_date_filters(q, year, month, date_from, date_to)
+        bills = q.all()
+        total = len(bills)
+        yield _sse({"current": 0, "total": total, "message": f"Found {total} bills missing headline/lede", "done": False})
+        await asyncio.sleep(0)
+        done = failed = 0
+        for i, bill in enumerate(bills, 1):
+            yield _sse({"current": i, "total": total, "message": f"Generating headline for {bill.bill_number}…", "done": False})
+            await asyncio.sleep(0)
+            try:
+                def _run(b=bill):
+                    b.headline = _ai_headline(b, provider)
+                    b.lede = _ai_lede(b, provider)
+                    db.commit()
+                await asyncio.get_event_loop().run_in_executor(None, _run)
+                done += 1
+            except Exception as e:
+                logger.warning(f"backfill-headlines failed for {bill.bill_number}: {e}")
+                failed += 1
+        yield _sse({"current": total, "total": total, "message": f"Done — {done} updated, {failed} failed", "done": True})
         await asyncio.sleep(0)
 
     return _sse_stream(gen)
@@ -1340,14 +1589,23 @@ async def fetch_bill_details(
         raise HTTPException(status_code=404, detail="Legislation not found")
 
     try:
-        from app.integrations.legistar_scraper import PhilaLegistarScraper
+        from app.integrations.legistar_scraper import PhilaLegistarScraper, _parse_date
         import asyncio
 
         scraper = PhilaLegistarScraper(headless=True)
         loop = asyncio.get_event_loop()
-        parsed = await loop.run_in_executor(
-            None, lambda: scraper.fetch_details_for_bill(leg.bill_number)
-        )
+
+        # Fast path: if we already have the GUID in external_url, skip the list-page search
+        matter_id = leg.id.split("legistar_phila_", 1)[-1] if "legistar_phila_" in leg.id else None
+        guid = _extract_guid_from_url(leg.external_url or "")
+        if matter_id and guid:
+            detail = await loop.run_in_executor(None, lambda: scraper.scrape_detail(matter_id, guid))
+            full_text = await loop.run_in_executor(None, lambda: scraper.fetch_full_text(matter_id, guid))
+            parsed = scraper._parse_detail(detail, matter_id, guid, full_text) if detail else None
+        else:
+            parsed = await loop.run_in_executor(
+                None, lambda: scraper.fetch_details_for_bill(leg.bill_number)
+            )
         if not parsed:
             raise HTTPException(status_code=422, detail="Could not find bill on Legistar")
 
@@ -1373,10 +1631,13 @@ async def fetch_bill_details(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-PIPELINE_STEP_ORDER = ["sponsors", "analyze", "perspectives", "news", "votes"]
+PIPELINE_STEP_ORDER = ["sync_statuses", "sponsors", "metadata", "analyze", "headlines", "perspectives", "news", "votes"]
 PIPELINE_STEP_LABELS = {
+    "sync_statuses": "Sync Bill Statuses",
     "sponsors": "Backfill Sponsors",
+    "metadata": "Backfill Metadata",
     "analyze": "Analyze",
+    "headlines": "Generate Headlines & Ledes",
     "perspectives": "Generate Perspectives",
     "news": "Fetch News",
     "votes": "Sync Vote Records",
@@ -1392,6 +1653,7 @@ async def stream_pipeline(
     month: int = Query(0),
     date_from: str = Query(""),
     date_to: str = Query(""),
+    status: str = Query("", description="Comma-separated status filter, e.g. 'introduced,in_committee'"),
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
@@ -1423,6 +1685,10 @@ async def stream_pipeline(
         # Get scoped bill set (used across steps; each step applies its own skip filter)
         base_q = db.query(Legislation).filter(Legislation.level == "local")
         base_q = _apply_date_filters(base_q, year, month, date_from, date_to)
+        if status:
+            status_list = [s.strip() for s in status.split(",") if s.strip()]
+            if status_list:
+                base_q = base_q.filter(Legislation.status.in_(status_list))
         scoped_bills = base_q.order_by(Legislation.introduced_date.desc()).all()
         total_bills = len(scoped_bills)
 
@@ -1435,7 +1701,21 @@ async def stream_pipeline(
             label = PIPELINE_STEP_LABELS[step]
             step_num = f"Step {step_idx + 1}/{total_steps}"
 
-            if step == "sponsors":
+            if step == "sync_statuses":
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: checking in-flight bills…", "done": False})
+                await asyncio.sleep(0)
+                try:
+                    service = LegislationIngestionService(db)
+                    result = await service.sync_bill_statuses()
+                    updated = result.get("updated", 0)
+                    checked = result.get("checked", 0)
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: checked {checked}, updated {updated}", "done": False})
+                except Exception as e:
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: failed — {e}", "done": False})
+                overall += total_bills
+                await asyncio.sleep(0)
+
+            elif step == "sponsors":
                 from app.integrations.legistar_scraper import PhilaLegistarScraper as _Scraper
                 bills_no_sponsor = [b for b in scoped_bills if not b.sponsor]
                 step_total = len(bills_no_sponsor)
@@ -1478,15 +1758,73 @@ async def stream_pipeline(
                 yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {s_updated} sponsors backfilled", "done": False})
                 await asyncio.sleep(0)
 
+            elif step == "metadata":
+                from app.integrations.legistar_scraper import PhilaLegistarScraper as _Scraper
+                import json as _json
+                local_bills = [b for b in scoped_bills if "legistar_phila_" in b.id]
+                step_total = len(local_bills)
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: building GUID map…", "done": False})
+                await asyncio.sleep(0)
+                _scraper = _Scraper(headless=True)
+                try:
+                    guid_map = await asyncio.get_event_loop().run_in_executor(None, _scraper.scrape_matter_guid_map)
+                except Exception as e:
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: GUID map failed: {e}", "done": False})
+                    guid_map = {}
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {len(guid_map)} GUIDs found, fetching metadata for {step_total} bills…", "done": False})
+                await asyncio.sleep(0)
+                m_updated = 0
+                for i, bill in enumerate(local_bills, 1):
+                    overall += 1
+                    if i % 50 == 1:
+                        yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: [{i}/{step_total}] {bill.bill_number}", "done": False})
+                        await asyncio.sleep(0)
+                    matter_id = bill.id.split("legistar_phila_", 1)[-1]
+                    if not matter_id.isdigit():
+                        continue
+                    guid = guid_map.get(matter_id)
+                    if not guid:
+                        continue
+                    try:
+                        def _fetch_meta(mid=matter_id, gid=guid):
+                            return _scraper.scrape_detail(mid, gid)
+                        detail = await asyncio.get_event_loop().run_in_executor(None, _fetch_meta)
+                        if detail:
+                            sponsors_raw = detail.get("sponsors", "") or ""
+                            sponsor_list = [s.strip() for s in sponsors_raw.split(",") if s.strip()]
+                            if sponsor_list and not bill.sponsor:
+                                bill.sponsor = sponsor_list[0]
+                            if len(sponsor_list) > 1:
+                                bill.co_sponsors = _json.dumps(sponsor_list[1:])
+                            if detail.get("committee"):
+                                bill.committee = detail["committee"]
+                            final_raw = detail.get("final_date", "")
+                            if final_raw:
+                                from app.integrations.legistar_scraper import _parse_date
+                                bill.final_date = _parse_date(final_raw)
+                            m_updated += 1
+                        bill.metadata_fetched_at = datetime.utcnow()
+                    except Exception as e:
+                        logger.warning(f"metadata fetch failed for {bill.bill_number}: {e}")
+                    if i % 100 == 0:
+                        db.commit()
+                db.commit()
+                overall += total_bills - len(local_bills)
+                yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {m_updated} bills updated", "done": False})
+                await asyncio.sleep(0)
+
             elif step == "analyze":
+                from app.services.legislation_service import _ai_headline, _ai_lede
                 provider = get_ai_provider()
                 scraper = PhilaLegistarScraper(headless=True)
+                skipped_no_text = 0
                 for i, bill in enumerate(scoped_bills, 1):
                     overall += 1
                     yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} ({i}/{total_bills})", "done": False})
                     await asyncio.sleep(0)
                     try:
-                        def _run_analyze(b=bill):
+                        skipped_ref = [False]
+                        def _run_analyze(b=bill, _ref=skipped_ref):
                             # 1. Fetch full text if missing
                             if not b.full_text:
                                 try:
@@ -1497,6 +1835,11 @@ async def stream_pipeline(
                                                 setattr(b, k, v)
                                 except Exception as e:
                                     logger.warning(f"fetch_details failed for {b.bill_number}: {e}")
+                            # Gate: refuse to AI-analyze if full_text is still missing
+                            if not b.full_text:
+                                logger.warning(f"SKIPPED {b.bill_number} — no full_text after fetch attempt")
+                                _ref[0] = True
+                                return
                             # 2. Generate plain title if missing
                             if not b.plain_title:
                                 try:
@@ -1516,17 +1859,75 @@ async def stream_pipeline(
                             # 4. Full analysis if not done (or force)
                             if not b.analyzed_at or force_analyze:
                                 analyze_bill(b, db)
+                            # 5. Headline + lede if missing or force re-analyze
+                            if not b.headline or force_analyze:
+                                try:
+                                    b.headline = _ai_headline(b, provider)
+                                except Exception as e:
+                                    logger.warning(f"headline failed for {b.bill_number}: {e}")
+                            if not b.lede or force_analyze:
+                                try:
+                                    b.lede = _ai_lede(b, provider)
+                                except Exception as e:
+                                    logger.warning(f"lede failed for {b.bill_number}: {e}")
+                            # 6. Metadata (committee, final_date, co_sponsors) if missing
+                            if not b.committee and "legistar_phila_" in b.id:
+                                try:
+                                    import json as _json2
+                                    mid = b.id.split("legistar_phila_", 1)[-1]
+                                    guid = scraper.scrape_matter_guid_map().get(mid, "")
+                                    if guid:
+                                        detail = scraper.scrape_detail(mid, guid)
+                                        if detail:
+                                            if detail.get("committee"):
+                                                b.committee = detail["committee"]
+                                            final_raw = detail.get("final_date", "")
+                                            if final_raw and not b.final_date:
+                                                from app.integrations.legistar_scraper import _parse_date
+                                                b.final_date = _parse_date(final_raw)
+                                            sponsors_raw = detail.get("sponsors", "") or ""
+                                            slist = [s.strip() for s in sponsors_raw.split(",") if s.strip()]
+                                            if len(slist) > 1 and not b.co_sponsors:
+                                                b.co_sponsors = _json2.dumps(slist[1:])
+                                except Exception as e:
+                                    logger.warning(f"metadata fetch in analyze failed for {b.bill_number}: {e}")
                             db.commit()
                         await asyncio.get_event_loop().run_in_executor(None, _run_analyze)
+                        if skipped_ref[0]:
+                            skipped_no_text += 1
                     except Exception as e:
                         logger.warning(f"pipeline analyze failed for {bill.bill_number}: {e}")
+                if skipped_no_text:
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"WARNING: {skipped_no_text} bills skipped - no full text available. Run 'Fetch Details' first.", "done": False})
+                    await asyncio.sleep(0)
+
+            elif step == "headlines":
+                from app.services.legislation_service import _ai_headline, _ai_lede
+                from app.services.ai_provider import get_ai_provider
+                provider = get_ai_provider()
+                analyzed_bills = [b for b in scoped_bills if b.analyzed_at]
+                for i, bill in enumerate(analyzed_bills, 1):
+                    overall += 1
+                    yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} ({i}/{len(analyzed_bills)})", "done": False})
+                    await asyncio.sleep(0)
+                    try:
+                        def _run_hl(b=bill):
+                            b.headline = _ai_headline(b, provider)
+                            b.lede = _ai_lede(b, provider)
+                            db.commit()
+                        await asyncio.get_event_loop().run_in_executor(None, _run_hl)
+                    except Exception as e:
+                        logger.warning(f"pipeline headlines failed for {bill.bill_number}: {e}")
+                overall += total_bills - len(analyzed_bills)
 
             elif step == "perspectives":
+                from app.services.perspectives_service import get_relevant_perspectives
                 analyzed_bills = [b for b in scoped_bills if b.analyzed_at]
-                total_ops = len(analyzed_bills) * len(ptypes)
                 op = 0
+                total_ops = sum(len([p for p in get_relevant_perspectives(b) if p in ptypes]) for b in analyzed_bills)
                 for bill in analyzed_bills:
-                    for ptype in ptypes:
+                    bill_ptypes = [p for p in get_relevant_perspectives(bill) if p in ptypes]
+                    for ptype in bill_ptypes:
                         op += 1
                         overall += 1
                         yield _sse({"current": overall, "total": total_bills * total_steps, "message": f"{step_num} — {label}: {bill.bill_number} / {ptype} ({op}/{total_ops})", "done": False})
@@ -1535,8 +1936,7 @@ async def stream_pipeline(
                             await asyncio.get_event_loop().run_in_executor(None, lambda b=bill, p=ptype: _gen(b, p, db))
                         except Exception as e:
                             logger.warning(f"pipeline perspective {ptype} failed for {bill.bill_number}: {e}")
-                # Pad overall counter if analyzed_bills < scoped_bills
-                overall += (total_bills - len(analyzed_bills)) * len(ptypes)
+                overall += (total_bills - len(analyzed_bills))
 
             elif step == "news":
                 for i, bill in enumerate(scoped_bills, 1):
@@ -1608,6 +2008,91 @@ async def stream_fetch_details_all(
     return _sse_stream(gen)
 
 
+@router.post("/{legislation_id}/generate-headline")
+async def generate_bill_headline(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Generate (or regenerate) headline and lede for a single bill."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+    try:
+        from app.services.legislation_service import _ai_headline, _ai_lede
+        from app.services.ai_provider import get_ai_provider
+        provider = get_ai_provider()
+        leg.headline = _ai_headline(leg, provider)
+        leg.lede = _ai_lede(leg, provider)
+        db.commit()
+        return {"success": True, "headline": leg.headline, "lede": leg.lede}
+    except Exception as e:
+        logger.error(f"generate-headline failed for {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _extract_guid_from_url(external_url: str) -> str:
+    """Parse GUID from a Legistar LegislationDetail URL."""
+    m = re.search(r"GUID=([A-F0-9\-]{36})", external_url or "", re.IGNORECASE)
+    return m.group(1) if m else ""
+
+
+async def _resolve_matter_guid(leg, scraper, loop) -> tuple[str, str]:
+    """Return (matter_id, guid) for a Legistar bill.
+    Uses external_url if available to avoid a full list-page scrape."""
+    matter_id = leg.id.split("legistar_phila_", 1)[-1]
+    guid = _extract_guid_from_url(leg.external_url or "")
+    if not guid:
+        guid_map = await loop.run_in_executor(None, scraper.scrape_matter_guid_map)
+        guid = guid_map.get(matter_id, "")
+    return matter_id, guid
+
+
+@router.post("/{legislation_id}/fetch-metadata")
+async def fetch_bill_metadata(
+    legislation_id: str,
+    db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
+):
+    """Fetch committee, final_date, and co_sponsors from Legistar for a single bill."""
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+    if "legistar_phila_" not in leg.id:
+        raise HTTPException(status_code=422, detail="Metadata fetch only supported for Legistar bills")
+    try:
+        import json as _json
+        from app.integrations.legistar_scraper import PhilaLegistarScraper, _parse_date
+        from datetime import datetime
+        import asyncio
+        scraper = PhilaLegistarScraper(headless=True)
+        loop = asyncio.get_event_loop()
+        matter_id, guid = await _resolve_matter_guid(leg, scraper, loop)
+        if not guid:
+            raise HTTPException(status_code=422, detail="Could not find bill GUID on Legistar")
+        detail = await loop.run_in_executor(None, lambda: scraper.scrape_detail(matter_id, guid))
+        if not detail:
+            raise HTTPException(status_code=422, detail="Could not scrape bill detail page")
+        if detail.get("committee"):
+            leg.committee = detail["committee"]
+        if detail.get("final_date"):
+            leg.final_date = _parse_date(detail["final_date"])
+        sponsors_raw = detail.get("sponsors", "") or ""
+        slist = [s.strip() for s in sponsors_raw.split(",") if s.strip()]
+        if slist and not leg.sponsor:
+            leg.sponsor = slist[0]
+        if len(slist) > 1:
+            leg.co_sponsors = _json.dumps(slist[1:])
+        leg.metadata_fetched_at = datetime.utcnow()
+        db.commit()
+        return {"success": True, "committee": leg.committee, "metadata_fetched_at": leg.metadata_fetched_at.isoformat(), "final_date": leg.final_date.isoformat() if leg.final_date else None, "sponsor": leg.sponsor}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"fetch-metadata failed for {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/{legislation_id}/analyze")
 async def analyze_legislation(
     legislation_id: str,
@@ -1658,10 +2143,16 @@ async def generate_all_perspectives(
     if not leg.analyzed_at:
         raise HTTPException(status_code=400, detail="Bill must be analyzed first.")
 
-    from app.services.perspectives_service import generate_perspective as _gen
+    from app.services.perspectives_service import generate_perspective as _gen, is_active_bill, get_relevant_perspectives
+    if not is_active_bill(leg):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Perspectives are only generated for active bills. This bill status is '{leg.status}'.",
+        )
+    relevant = get_relevant_perspectives(leg)
     generated = []
     failed = []
-    for ptype in ALL_PERSPECTIVES:
+    for ptype in relevant:
         try:
             persp = _gen(leg, ptype, db)
             if persp:
@@ -1679,6 +2170,7 @@ async def generate_all_perspectives(
 async def generate_perspective(
     legislation_id: str,
     perspective_type: str,
+    force: bool = Query(False, description="Force regeneration even if cached"),
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
@@ -1699,12 +2191,18 @@ async def generate_perspective(
             detail="Bill must be analyzed first. Use POST /analyze.",
         )
 
+    from app.services.perspectives_service import generate_perspective as _gen, is_active_bill
+    if not is_active_bill(leg):
+        raise HTTPException(
+            status_code=422,
+            detail=f"Perspectives are only generated for active bills (introduced, in_committee). This bill status is '{leg.status}'.",
+        )
+
     try:
-        from app.services.perspectives_service import generate_perspective as _gen
         loop = asyncio.get_event_loop()
         try:
             persp = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: _gen(leg, perspective_type, db)),
+                loop.run_in_executor(None, lambda: _gen(leg, perspective_type, db, force=force)),
                 timeout=90.0,
             )
         except asyncio.TimeoutError:
@@ -1762,13 +2260,16 @@ async def get_perspectives(
         .all()
     )
 
+    from app.services.perspectives_service import get_relevant_perspectives
+    relevant = get_relevant_perspectives(leg)
     generated = {p.perspective_type for p in perspectives}
-    pending = [t for t in ALL_PERSPECTIVES if t not in generated]
+    pending = [t for t in relevant if t not in generated]
 
     return {
         "success": True,
         "bill_id": legislation_id,
         "analyzed": leg.analyzed_at is not None,
+        "relevant_types": relevant,
         "perspectives": [
             {
                 "perspective_type": p.perspective_type,
@@ -1795,9 +2296,19 @@ async def fetch_legislation_news(
     if not leg:
         raise HTTPException(status_code=404, detail="Legislation not found")
 
+    from app.services.perspectives_service import is_active_bill
+    if not is_active_bill(leg):
+        raise HTTPException(
+            status_code=422,
+            detail=f"News is only fetched for active bills. This bill status is '{leg.status}'.",
+        )
+
     try:
         from app.services.news_service import fetch_and_store_news
+        from datetime import datetime
         articles = fetch_and_store_news(leg, db)
+        leg.news_fetched_at = datetime.utcnow()
+        db.commit()
         return {"success": True, "articles_found": len(articles), "articles": articles}
     except Exception as e:
         logger.error(f"Error fetching news for {legislation_id}: {e}")

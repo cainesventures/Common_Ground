@@ -22,6 +22,119 @@ from app.services.ai_provider import get_ai_provider
 
 logger = logging.getLogger(__name__)
 
+# Statuses where a bill can still be acted on — perspectives and news are only
+# generated for active bills; historical bills get summaries and tags only.
+ACTIVE_STATUSES = {"introduced", "in_committee"}
+
+
+def is_active_bill(bill: "Legislation") -> bool:
+    """Return True if the bill is still in play and warrants perspectives/news."""
+    return (bill.status or "").lower() in ACTIVE_STATUSES
+
+
+# The 5 core political perspectives — always generated regardless of bill topic
+CORE_PERSPECTIVES = [
+    "progressive",
+    "conservative",
+    "libertarian",
+    "socialist",
+    "centrist",
+]
+
+# Domain perspectives fire only when the bill's tags match at least one trigger.
+# Tags are lowercased before matching.
+_DOMAIN_TRIGGERS: dict[str, set[str]] = {
+    "economic": {
+        "budget", "finance", "taxation", "taxes", "revenue", "procurement",
+        "fees", "funding", "capital", "economic development", "commerce",
+        "fiscal_policy", "capital_budget", "capital spending", "city finances",
+        "inheritance", "trade",
+    },
+    "civil_liberties": {
+        "law enforcement", "public safety", "discrimination", "civil rights",
+        "transparency", "immigration", "elections", "personal data protection",
+        "civil enforcement", "fair practices ordinance", "government regulation",
+        "referendum", "home rule charter amendment",
+    },
+    "environmental": {
+        "energy", "utilities", "air management", "infrastructure", "construction",
+        "asbestos", "cell_towers",
+    },
+    "public_health": {
+        "public health", "health", "social services", "children and youth",
+        "alcohol", "asbestos",
+    },
+    "urban_planning": {
+        "zoning", "land use", "land-use", "land_use", "land use planning",
+        "planning", "neighborhood development", "development", "construction",
+        "infrastructure", "transportation", "public transportation", "parking",
+        "parking regulations", "housing", "affordable_housing", "traffic",
+        "physical development", "street improvements", "street management",
+        "right-of-way", "encroachments", "residential", "urban-planning",
+    },
+    "working_class": {
+        "housing", "affordable_housing", "transportation", "public transportation",
+        "social services", "taxation", "taxes", "fees", "towing", "budget",
+    },
+    "business": {
+        "business", "zoning", "licensing", "permits", "regulation", "regulations",
+        "commerce", "retail", "alcohol", "hotels", "procurement", "fees",
+        "economic development", "economic-development", "sidewalk_cafes",
+        "outdoor_entertainment", "trade",
+    },
+    "youth": {
+        "education", "children and youth", "social services", "community",
+        "community spaces", "arts", "culture",
+    },
+    "elderly": {
+        "health", "public health", "social services", "transportation",
+        "public transportation", "housing",
+    },
+    "neighborhood": {
+        "zoning", "land use", "land-use", "land_use", "neighborhood development",
+        "public space", "public_space", "community", "community spaces",
+        "street renaming", "renaming", "naming", "parking", "traffic",
+        "west_philly", "Center City", "construction", "development",
+    },
+    "christian_ethicist": {
+        "discrimination", "civil rights", "immigration", "social services",
+        "children and youth", "education", "health", "elections", "alcohol",
+        "fair practices ordinance",
+    },
+    "conspiracy_theorist": {
+        "government", "city government", "city-government", "city_government",
+        "procurement", "elections", "taxation", "taxes", "transparency",
+        "personal data protection", "regulation", "regulations", "government regulation",
+        "procurement contracts", "government policy", "government structure",
+        "referendum", "home rule charter amendment", "capital spending",
+    },
+}
+
+
+def get_relevant_perspectives(bill: "Legislation") -> list[str]:
+    """Return the list of perspective types relevant to this bill.
+
+    Always includes the 5 core political perspectives. Domain perspectives are
+    added when the bill's tags overlap with their trigger set.
+    """
+    import json as _json
+
+    bill_tags: set[str] = set()
+    if bill.tags:
+        try:
+            raw = _json.loads(bill.tags)
+            bill_tags = {t.lower().strip() for t in raw if isinstance(t, str)}
+        except Exception:
+            pass
+
+    relevant = list(CORE_PERSPECTIVES)
+    for perspective, triggers in _DOMAIN_TRIGGERS.items():
+        if bill_tags & triggers:  # any overlap
+            relevant.append(perspective)
+
+    return relevant
+
+
 # Perspectives generated automatically on Analyze
 BASE_PERSPECTIVES = ["centrist"]
 
@@ -382,9 +495,17 @@ def generate_perspective(
 
 
 def generate_base_perspectives(bill: Legislation, db: Session, force: bool = False) -> list[BillPerspective]:
-    """Generate the base perspective(s). Pass force=True to regenerate even if cached."""
+    """Generate the core perspectives for active bills only.
+
+    Skips generation for historical bills (signed, failed, vetoed) — those
+    bills get summaries and tags but not perspectives or news.
+    Pass force=True to regenerate even if cached.
+    """
+    if not is_active_bill(bill):
+        logger.info(f"Skipping base perspectives for inactive bill {bill.bill_number} (status: {bill.status})")
+        return []
     results = []
-    for ptype in BASE_PERSPECTIVES:
+    for ptype in CORE_PERSPECTIVES:
         persp = generate_perspective(bill, ptype, db, force=force)
         if persp:
             results.append(persp)

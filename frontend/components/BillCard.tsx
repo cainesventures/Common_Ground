@@ -1,28 +1,40 @@
 import Link from 'next/link'
-import { STATUS_COLORS, STATUS_COLORS_FALLBACK, IMPACT_COLORS, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
+import {
+  Building2, DollarSign, Train, Shield, Scale, Leaf, Heart,
+  BookOpen, Briefcase, Landmark, Home, Globe, FileText,
+  type LucideIcon,
+} from 'lucide-react'
+import { STATUS_COLORS, STATUS_COLORS_FALLBACK, HEARING_BADGE } from '@/lib/badge-colors'
 import { isWithin7Days, fmtStatus } from '@/lib/utils'
+import { getBillCategory } from '@/lib/bill-categories'
+
+const ICONS: Record<string, LucideIcon> = {
+  Building2, DollarSign, Train, Shield, Scale, Leaf, Heart,
+  BookOpen, Briefcase, Landmark, Home, Globe, FileText,
+}
 
 export interface BillCardBill {
   id: string
   bill_number: string
   title: string
   plain_title?: string
+  headline?: string
+  lede?: string
   status: string
   impact_level?: string
   summary?: string
   tags?: string
   introduced_date?: string
+  final_date?: string
   next_hearing_date?: string
 }
 
 interface BillCardProps {
   bill: BillCardBill
-  /** Highlight this query text in the title and summary */
   query?: string
-  /** Show the colored left accent bar (default: true) */
   accentBar?: boolean
-  /** Show introduced date (default: false) */
   showDate?: boolean
+  tab?: string
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -40,64 +52,87 @@ function Highlight({ text, query }: { text: string; query: string }) {
   )
 }
 
-export function BillCard({ bill, query = '', accentBar = true, showDate = false }: BillCardProps) {
-  const accent = IMPACT_ACCENT[bill.impact_level ?? ''] ?? '#e5e7eb'
+export function BillCard({ bill, query = '', showDate = false, tab }: BillCardProps) {
   const statusClass = STATUS_COLORS[bill.status] ?? STATUS_COLORS_FALLBACK
-  const impactClass = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
 
   let tags: string[] = []
   try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
 
+  const category = getBillCategory(tags)
+  const Icon = ICONS[category.icon] ?? FileText
+
+  const lede = bill.lede || (bill.summary
+    ? bill.summary.split(/(?<=[.!?])\s+/)[0] ?? bill.summary
+    : null)
+
+  const hearingSoon = bill.next_hearing_date && isWithin7Days(bill.next_hearing_date)
+
+  const TERMINAL_STATUSES = ['signed_into_law', 'failed', 'vetoed', 'passed_both', 'passed_chamber']
+  const isTerminal = TERMINAL_STATUSES.includes(bill.status)
+  const dateLabel = isTerminal && bill.final_date
+    ? { label: bill.status === 'signed_into_law' ? 'Signed' : bill.status === 'vetoed' ? 'Vetoed' : bill.status === 'failed' ? 'Failed' : 'Voted', date: bill.final_date }
+    : bill.next_hearing_date && !isTerminal
+    ? { label: 'Hearing', date: bill.next_hearing_date }
+    : bill.introduced_date
+    ? { label: 'Introduced', date: bill.introduced_date }
+    : null
+
   return (
     <Link
-      href={`/legislation/${bill.id}`}
+      href={tab ? `/legislation/${bill.id}?tab=${tab}` : `/legislation/${bill.id}`}
       className="flex rounded-lg border bg-background hover:shadow-md transition-all group overflow-hidden"
     >
-      {accentBar && <div className="w-1 shrink-0" style={{ backgroundColor: accent }} />}
-      <div className="flex-1 min-w-0 p-3">
-        <div className="flex items-center gap-2 flex-wrap mb-1.5">
-          {bill.bill_number && (
-            <span className="text-xs font-mono text-muted-foreground shrink-0">{bill.bill_number}</span>
-          )}
-          {bill.status && (
-            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full capitalize shrink-0 ${statusClass}`}>
-              {fmtStatus(bill.status)}
+      {/* Category strip */}
+      <div className={`w-1.5 shrink-0 bg-gradient-to-b ${category.gradient}`} />
+
+      {/* Icon column */}
+      <div className="flex items-start pt-3.5 pl-3 pr-1 shrink-0">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${category.iconBg}`}>
+          <Icon className={`w-4 h-4 ${category.iconColor}`} strokeWidth={2} />
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 py-3 pr-3 pl-2">
+        {/* Category label + meta row */}
+        <div className="flex items-center gap-2 flex-wrap mb-1">
+          <span className={`text-[10px] font-semibold uppercase tracking-wide ${category.iconColor}`}>
+            {category.label}
+          </span>
+          <span className="text-muted-foreground/30 text-[10px]">·</span>
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize ${statusClass}`}>
+            {fmtStatus(bill.status)}
+          </span>
+          {hearingSoon && !isTerminal && (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${HEARING_BADGE}`}>
+              Hearing {new Date(bill.next_hearing_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           )}
-          {impactClass && (
-            <span className={`text-[11px] font-medium capitalize shrink-0 ${impactClass} px-1.5 py-0.5 rounded-full`}>
-              {bill.impact_level} impact
-            </span>
-          )}
-          {bill.next_hearing_date && isWithin7Days(bill.next_hearing_date) && (
-            <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${HEARING_BADGE}`}>
-              Hearing {new Date(bill.next_hearing_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-            </span>
-          )}
-          {showDate && bill.introduced_date && (
-            <span className="text-[11px] text-muted-foreground/60 shrink-0 ml-auto">
-              {new Date(bill.introduced_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          {showDate && dateLabel && (
+            <span className="text-[10px] text-muted-foreground/50 ml-auto shrink-0">
+              {dateLabel.label} {new Date(dateLabel.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </span>
           )}
         </div>
-        <p className="text-sm font-medium line-clamp-2 group-hover:text-primary transition-colors leading-snug">
-          <Highlight text={bill.plain_title || bill.title} query={query} />
+
+        {/* Headline */}
+        <p className="text-sm font-semibold leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          <Highlight text={bill.headline || bill.plain_title || bill.title} query={query} />
         </p>
-        {bill.summary && (
-          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-            <Highlight text={bill.summary} query={query} />
+
+        {/* Lede */}
+        {lede && (
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+            <Highlight text={lede} query={query} />
           </p>
         )}
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
-            {tags.slice(0, 3).map((t) => (
-              <span key={t} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded-full font-medium capitalize">{t}</span>
-            ))}
-          </div>
-        )}
+
+        {/* Bill number footer */}
+        <p className="text-[10px] font-mono text-muted-foreground/40 mt-1.5">{bill.bill_number}</p>
       </div>
+
       <div className="flex items-center pr-3 shrink-0">
-        <span className="text-muted-foreground text-xs opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+        <span className="text-muted-foreground text-xs opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all duration-150">→</span>
       </div>
     </Link>
   )

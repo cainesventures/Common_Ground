@@ -85,7 +85,6 @@ export function Navbar() {
     { href: '/legislation', label: 'Legislation' },
     { href: '/councilmembers', label: 'Council' },
     ...(user ? [{ href: '/my-bills', label: 'My Bills' }] : []),
-    ...(user ? [{ href: '/profile', label: 'Profile' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
@@ -123,12 +122,12 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {loading ? null : user ? (
               <>
-                <Link href="/profile" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                <Link href="/profile" className={`flex items-center gap-2 hover:opacity-80 transition-opacity ${pathname === '/profile' ? 'opacity-100' : ''}`}>
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
                     <AvatarFallback>{user.display_name?.[0] ?? 'U'}</AvatarFallback>
                   </Avatar>
-                  <span className="text-sm max-w-[100px] truncate">{user.display_name}</span>
+                  <span className={`text-sm max-w-[100px] truncate ${pathname === '/profile' ? 'font-semibold' : ''}`}>{user.display_name}</span>
                 </Link>
                 <Button variant="ghost" size="sm" onClick={handleSignOut}>Sign out</Button>
               </>

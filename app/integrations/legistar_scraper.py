@@ -339,6 +339,7 @@ class PhilaLegistarScraper:
                     "title": _get("Title"),
                     "sponsors": _get("Sponsors"),
                     "description": _get("Name"),  # "Name" field = short description
+                    "committee": _get("ReferredTo"),  # referred-to committee body
                 }
             except Exception as e:
                 logger.error(f"Error scraping detail for matter {matter_id}: {e}")
@@ -442,7 +443,14 @@ class PhilaLegistarScraper:
         guid: str = "",
         full_text: Optional[str] = None,
     ) -> Dict[str, Any]:
+        import json as _json
         intro_date = _parse_date(detail.get("intro_date", ""))
+        final_date = _parse_date(detail.get("final_date", ""))
+        # Sponsors field is comma-separated; first is primary, rest are co-sponsors
+        sponsors_raw = detail.get("sponsors", "") or ""
+        sponsor_list = [s.strip() for s in sponsors_raw.split(",") if s.strip()]
+        primary_sponsor = sponsor_list[0] if sponsor_list else None
+        co_sponsors = _json.dumps(sponsor_list[1:]) if len(sponsor_list) > 1 else None
         return {
             "id": f"legistar_phila_{matter_id}",
             "source": "legistar",
@@ -451,7 +459,10 @@ class PhilaLegistarScraper:
             "title": detail.get("title") or detail.get("title_short") or "(no title)",
             "description": detail.get("description") or detail.get("bill_type"),
             "full_text": full_text,
-            "sponsor": detail.get("sponsors"),
+            "sponsor": primary_sponsor,
+            "co_sponsors": co_sponsors,
+            "committee": detail.get("committee") or None,
+            "final_date": final_date,
             "status": _normalize_status(detail.get("status", "")),
             "introduced_date": intro_date,
             "external_url": (
