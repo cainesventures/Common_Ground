@@ -75,7 +75,7 @@ function Register-Worker {
 # Fast worker — starts immediately (text, analyze, headline, metadata, news)
 Register-Worker `
     -TaskName "CommonGroundWorkerFast" `
-    -ScriptArgs "scripts\worker_fast.py --batch 1000 --parallel 10" `
+    -ScriptArgs "scripts\worker_fast.py --batch 1000 --parallel 25" `
     -DelaySeconds 0
 
 # Perspectives worker — starts 2 minutes later to stagger Ollama load
@@ -86,7 +86,7 @@ Register-Worker `
 
 Write-Host ""
 Write-Host "Both tasks registered. Interval: every $IntervalMinutes minutes."
-Write-Host "  Fast worker  : batch=1000 parallel=10 (text/analyze/headline/metadata/news)"
+Write-Host "  Fast worker  : batch=1000 parallel=25 (text/analyze/headline/metadata/news)"
 Write-Host "  Persp worker : batch=28  parallel=10 (perspectives, GPU-bound)"
 Write-Host ""
 Write-Host "Commands:"
