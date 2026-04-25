@@ -308,7 +308,8 @@ def _step_headline(bill, db, label: str) -> str:
 
 def _run_headline(bill, db, label: str):
     from app.services.legislation_service import _ai_headline, _ai_lede
-    provider = _get_provider()
+    from app.services.ai_provider import get_ai_provider
+    provider = get_ai_provider()
     bill.headline = _ai_headline(bill, provider)
     bill.lede = _ai_lede(bill, provider)
     log.info(f"{label} headline generated")
@@ -412,13 +413,6 @@ def _relevant_perspective_count(bill) -> int:
         return PERSPECTIVES_TARGET
 
 
-def _get_provider():
-    """Return the AI provider name based on available API keys."""
-    if os.getenv("ANTHROPIC_API_KEY"):
-        return "anthropic"
-    if os.getenv("GEMINI_API_KEY"):
-        return "gemini"
-    raise RuntimeError("No AI provider API key found in environment")
 
 
 def _retry_or_skip(bill, db, label: str, reason: str) -> str:
