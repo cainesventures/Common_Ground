@@ -19,7 +19,7 @@ $ProjectRoot = "C:\Projects\Common_Ground"
 $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) { $PythonExe = "C:\Users\acain\AppData\Local\Microsoft\WindowsApps\python.exe" }
 Write-Host "Using Python: $PythonExe"
-$BatchSize   = 150
+$BatchSize   = 30
 $LogDir      = "$ProjectRoot\logs"
 
 # Ensure logs directory exists
@@ -47,7 +47,7 @@ $Trigger = New-ScheduledTaskTrigger `
 $Settings = New-ScheduledTaskSettingsSet `
     -RunOnlyIfNetworkAvailable:$false `
     -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 28) `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 29) `
     -MultipleInstances IgnoreNew `
     -Hidden
 

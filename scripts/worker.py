@@ -54,7 +54,7 @@ for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
     logging.getLogger(_noisy).propagate = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEFAULT_BATCH_SIZE = 150
+DEFAULT_BATCH_SIZE = 30
 DEFAULT_PARALLELISM = 10  # GPU-accelerated Ollama (RTX 5060, 8B model) handles 10 concurrent well
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
