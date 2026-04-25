@@ -69,6 +69,10 @@ class Legislation(Base):
     metadata_fetched_at   = Column(DateTime, nullable=True)  # last time fetch-metadata ran (even if empty)
     news_fetched_at       = Column(DateTime, nullable=True)  # last time news fetch ran (even if no articles found)
 
+    # Background worker tracking
+    skip_reason           = Column(String, nullable=True)    # set when bill is permanently unfetchable
+    worker_retries        = Column(Integer, default=0)       # failed fetch attempts before giving up
+
     # Upcoming hearing fields (populated by hearings scraper)
     next_hearing_date     = Column(DateTime, nullable=True)
     next_hearing_time     = Column(String, nullable=True)
