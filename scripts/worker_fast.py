@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-FAST_STEPS = ["text", "analyze", "headline", "metadata", "news"]
+FAST_STEPS = ["text", "analyze", "headline", "metadata", "news", "votes"]
 DEFAULT_BATCH = 150
 DEFAULT_PARALLEL = 10
 

@@ -68,6 +68,7 @@ class Legislation(Base):
     co_sponsors           = Column(String, nullable=True)   # JSON array of co-sponsor names
     metadata_fetched_at   = Column(DateTime, nullable=True)  # last time fetch-metadata ran (even if empty)
     news_fetched_at       = Column(DateTime, nullable=True)  # last time news fetch ran (even if no articles found)
+    votes_fetched_at      = Column(DateTime, nullable=True)  # last time vote record scrape ran
 
     # Background worker tracking
     skip_reason           = Column(String, nullable=True)    # set when bill is permanently unfetchable

@@ -22,7 +22,7 @@ PERSPECTIVES_TARGET = 17
 ACTIVE_STATUSES = {"introduced", "in_committee"}
 LEGISTAR_PREFIX = "legistar_phila_"
 
-ALL_STEPS = ["text", "analyze", "headline", "metadata", "perspectives", "news"]
+ALL_STEPS = ["text", "analyze", "headline", "metadata", "perspectives", "news", "votes"]
 
 
 def setup_logging(log_name: str) -> logging.Logger:
@@ -152,6 +152,7 @@ def process_bill(
             and not bill.news_fetched_at
             and bill.status in ACTIVE_STATUSES
         )
+        needs_votes = is_legistar and not bill.votes_fetched_at and bool(bill.external_url)
 
         step_flags = {
             "text": needs_text,
@@ -160,6 +161,7 @@ def process_bill(
             "metadata": needs_metadata,
             "perspectives": needs_perspectives,
             "news": needs_news,
+            "votes": needs_votes,
         }
         return [s for s in ALL_STEPS if s in allowed_steps and step_flags.get(s)]
 
@@ -191,6 +193,8 @@ def process_bill(
                 result = _step_perspectives(bill, db, label, log)
             elif step == "news":
                 result = _step_news(bill, db, label, log)
+            elif step == "votes":
+                result = _step_votes(bill, db, label, log)
             else:
                 break
 
@@ -360,6 +364,72 @@ def _step_news(bill, db, label: str, log) -> str:
     bill.news_fetched_at = datetime.utcnow()
     db.commit()
     log.info(f"{label} news fetched — {len(articles)} articles")
+    return "processed"
+
+
+def _step_votes(bill, db, label: str, log) -> str:
+    from app.integrations.legistar_scraper import PhilaLegistarScraper
+    from app.models import BillVoteRecord, Councilmember
+    import uuid as _uuid
+
+    scraper = PhilaLegistarScraper(headless=True)
+    raw_votes = scraper.scrape_vote_history(bill.external_url)
+
+    bill.votes_fetched_at = datetime.utcnow()
+
+    if not raw_votes:
+        db.commit()
+        log.info(f"{label} votes — no vote records found")
+        return "processed"
+
+    councilmembers = db.query(Councilmember).all()
+    name_map = {cm.name.split()[-1].lower(): cm for cm in councilmembers}
+
+    VOTE_NORMALIZE = {
+        "ayes": "Yea", "aye": "Yea", "yes": "Yea", "yea": "Yea",
+        "noes": "Nay", "nay": "Nay", "no": "Nay",
+        "abstain": "Abstain", "abstained": "Abstain",
+        "absent": "Absent",
+    }
+
+    upserted = 0
+    for v in raw_votes:
+        voter_name = v["voter_name"]
+        last_name = voter_name.split()[-1].strip().lower() if voter_name else ""
+        cm = name_map.get(last_name)
+        normalized_vote = VOTE_NORMALIZE.get((v.get("vote") or "").lower(), v.get("vote", ""))
+
+        action_date = None
+        if v.get("action_date"):
+            try:
+                action_date = datetime.fromisoformat(v["action_date"].rstrip("Z"))
+            except (ValueError, AttributeError):
+                pass
+
+        existing = db.query(BillVoteRecord).filter(
+            BillVoteRecord.legislation_id == bill.id,
+            BillVoteRecord.voter_name == voter_name,
+        ).first()
+
+        if existing:
+            existing.vote = normalized_vote
+            existing.councilmember_id = cm.id if cm else None
+            existing.action_date = action_date
+            existing.result = v.get("result")
+        else:
+            db.add(BillVoteRecord(
+                id=f"bvr_{_uuid.uuid4().hex[:12]}",
+                legislation_id=bill.id,
+                councilmember_id=cm.id if cm else None,
+                voter_name=voter_name,
+                vote=normalized_vote,
+                action_date=action_date,
+                result=v.get("result"),
+            ))
+        upserted += 1
+
+    db.commit()
+    log.info(f"{label} votes upserted={upserted}")
     return "processed"
 
 
