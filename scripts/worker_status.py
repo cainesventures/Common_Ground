@@ -139,19 +139,20 @@ def main():
             print(f"    {yr_row['yr']}: {yr_row['analyzed']}/{yr_row['total']} analyzed, {yr_row['skipped']} skipped")
 
     # Worker run stats
-    progress_file = ROOT / "logs" / "worker_progress.json"
-    if progress_file.exists():
-        try:
-            p = json.loads(progress_file.read_text(encoding="utf-8"))
-            print()
-            print("  Worker run stats:")
-            print(f"    Last run         : {p.get('last_run', 'never')}")
-            print(f"    Total runs       : {p.get('runs', 0)}")
-            print(f"    Bills processed  : {p.get('total_processed', 0)}")
-            print(f"    Bills skipped    : {p.get('total_skipped', 0)}")
-            print(f"    Errors           : {p.get('total_errors', 0)}")
-        except Exception:
-            pass
+    for key, label in [("worker_fast", "Fast worker"), ("worker_perspectives", "Persp worker"), ("worker", "Worker (legacy)")]:
+        progress_file = ROOT / "logs" / f"{key}_progress.json"
+        if progress_file.exists():
+            try:
+                p = json.loads(progress_file.read_text(encoding="utf-8"))
+                print()
+                print(f"  {label} stats:")
+                print(f"    Last run         : {p.get('last_run', 'never')}")
+                print(f"    Total runs       : {p.get('runs', 0)}")
+                print(f"    Bills processed  : {p.get('total_processed', 0)}")
+                print(f"    Bills skipped    : {p.get('total_skipped', 0)}")
+                print(f"    Errors           : {p.get('total_errors', 0)}")
+            except Exception:
+                pass
 
     conn.close()
     print()
