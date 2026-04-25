@@ -94,6 +94,19 @@ def run_worker(
 
     log.info(f"Candidate pool: {len(bill_ids)} bill IDs")
 
+    # Hearings refresh is a one-shot global operation — runs once per worker invocation
+    if "hearings" in allowed_steps and not dry_run:
+        try:
+            from app.services.hearing_service import refresh_upcoming_hearings
+            db_h = SessionLocal()
+            try:
+                result = refresh_upcoming_hearings(db_h)
+                log.info(f"Hearings refreshed — meetings={result['meetings_scraped']} bills_matched={result['bills_matched']}")
+            finally:
+                db_h.close()
+        except Exception as e:
+            log.error(f"Hearings refresh failed: {e}", exc_info=True)
+
     processed = skipped = errors = 0
 
     def process_one(bill_id: str) -> str:
@@ -324,10 +337,15 @@ def _step_metadata(bill, db, label: str, log) -> str:
             bill.sponsor = slist[0]
         if len(slist) > 1 and not bill.co_sponsors:
             bill.co_sponsors = _json.dumps(slist[1:])
+        # Sync status from Legistar — keeps signed/failed/vetoed bills current
+        new_status = detail.get("status")
+        if new_status and new_status != bill.status:
+            log.info(f"{label} status updated {bill.status!r} -> {new_status!r}")
+            bill.status = new_status
 
     bill.metadata_fetched_at = datetime.utcnow()
     db.commit()
-    log.info(f"{label} metadata fetched — committee={bill.committee or 'none'}")
+    log.info(f"{label} metadata fetched — committee={bill.committee or 'none'} status={bill.status}")
     return "processed"
 
 
