@@ -19,7 +19,7 @@ $ProjectRoot = "C:\Projects\Common_Ground"
 $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) { $PythonExe = "C:\Users\acain\AppData\Local\Microsoft\WindowsApps\python.exe" }
 Write-Host "Using Python: $PythonExe"
-$BatchSize   = 60
+$BatchSize   = 150
 $LogDir      = "$ProjectRoot\logs"
 
 # Ensure logs directory exists
@@ -34,7 +34,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 # Action: run python scripts/worker.py from the project root
 $Action = New-ScheduledTaskAction `
     -Execute $PythonExe `
-    -Argument "scripts\worker.py --batch $BatchSize --parallel 5" `
+    -Argument "scripts\worker.py --batch $BatchSize --parallel 10" `
     -WorkingDirectory $ProjectRoot
 
 # Trigger: every N minutes, starting now
@@ -47,7 +47,7 @@ $Trigger = New-ScheduledTaskTrigger `
 $Settings = New-ScheduledTaskSettingsSet `
     -RunOnlyIfNetworkAvailable:$false `
     -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 25) `
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 28) `
     -MultipleInstances IgnoreNew `
     -Hidden
 
