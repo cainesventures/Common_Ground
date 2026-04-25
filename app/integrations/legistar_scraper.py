@@ -608,10 +608,11 @@ class PhilaLegistarScraper:
                     if len(cells) < 4:
                         continue
 
-                    date_text     = cells[0].inner_text().strip()
-                    time_text     = cells[1].inner_text().strip() if len(cells) > 1 else ""
-                    body_text     = cells[2].inner_text().strip() if len(cells) > 2 else ""
-                    location_text = cells[3].inner_text().strip() if len(cells) > 3 else ""
+                    body_text     = cells[0].inner_text().strip()
+                    date_text     = cells[1].inner_text().strip() if len(cells) > 1 else ""
+                    # cells[2] is empty in current Legistar layout
+                    time_text     = cells[3].inner_text().strip() if len(cells) > 3 else ""
+                    location_text = cells[4].inner_text().strip() if len(cells) > 4 else ""
 
                     meeting_date = _parse_date(date_text)
                     if not meeting_date or meeting_date < now:
