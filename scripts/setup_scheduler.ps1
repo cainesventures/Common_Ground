@@ -1,88 +1,99 @@
 # setup_scheduler.ps1
-# Registers the Common Ground background worker as a Windows Task Scheduler job.
+# Registers two Common Ground workers as Windows Task Scheduler jobs.
 # Run once as Administrator. Re-run to update settings.
 #
-# The task:
-#   - Runs every 30 minutes
-#   - Runs missed executions when the computer wakes from sleep
-#   - Does NOT run on battery power (configurable below)
-#   - Runs in the background (hidden window)
+# CommonGroundWorkerFast  — text, analyze, headline, metadata, news (batch=150, parallel=10)
+# CommonGroundWorkerPersp — perspectives only (batch=28, parallel=10)
+# Both run every 30 minutes, staggered by 2 minutes.
 
 param(
     [int]$IntervalMinutes = 30,
     [switch]$AllowOnBattery = $false
 )
 
-$TaskName    = "CommonGroundWorker"
 $ProjectRoot = "C:\Projects\Common_Ground"
-# Resolve full Python path so Task Scheduler can find it (it runs with a minimal PATH)
 $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) { $PythonExe = "C:\Users\acain\AppData\Local\Microsoft\WindowsApps\python.exe" }
 Write-Host "Using Python: $PythonExe"
-$BatchSize   = 30
-$LogDir      = "$ProjectRoot\logs"
 
-# Ensure logs directory exists
+$LogDir = "$ProjectRoot\logs"
 if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir | Out-Null }
 
-# Remove existing task if present
-if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-    Write-Host "Removed existing task '$TaskName'"
+function Register-Worker {
+    param(
+        [string]$TaskName,
+        [string]$ScriptArgs,
+        [int]$DelaySeconds = 0
+    )
+
+    if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+        Write-Host "Removed existing task '$TaskName'"
+    }
+
+    $StartAt = (Get-Date).AddSeconds($DelaySeconds)
+
+    $Action = New-ScheduledTaskAction `
+        -Execute $PythonExe `
+        -Argument $ScriptArgs `
+        -WorkingDirectory $ProjectRoot
+
+    $Trigger = New-ScheduledTaskTrigger `
+        -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
+        -Once `
+        -At $StartAt
+
+    $Settings = New-ScheduledTaskSettingsSet `
+        -RunOnlyIfNetworkAvailable:$false `
+        -StartWhenAvailable `
+        -ExecutionTimeLimit (New-TimeSpan -Minutes 29) `
+        -MultipleInstances IgnoreNew `
+        -Hidden
+
+    if (-not $AllowOnBattery) {
+        $Settings.DisallowStartIfOnBatteries = $true
+        $Settings.StopIfGoingOnBatteries = $false
+    }
+
+    $Principal = New-ScheduledTaskPrincipal `
+        -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
+        -LogonType Interactive `
+        -RunLevel Limited
+
+    Register-ScheduledTask `
+        -TaskName $TaskName `
+        -Action $Action `
+        -Trigger $Trigger `
+        -Settings $Settings `
+        -Principal $Principal `
+        -Description "Common Ground background worker: $ScriptArgs" `
+        | Out-Null
+
+    Write-Host "  Registered: $TaskName"
 }
 
-# Action: run python scripts/worker.py from the project root
-$Action = New-ScheduledTaskAction `
-    -Execute $PythonExe `
-    -Argument "scripts\worker.py --batch $BatchSize --parallel 10" `
-    -WorkingDirectory $ProjectRoot
+# Fast worker — starts immediately (text, analyze, headline, metadata, news)
+Register-Worker `
+    -TaskName "CommonGroundWorkerFast" `
+    -ScriptArgs "scripts\worker_fast.py --batch 150 --parallel 10" `
+    -DelaySeconds 0
 
-# Trigger: every N minutes, starting now
-$Trigger = New-ScheduledTaskTrigger `
-    -RepetitionInterval (New-TimeSpan -Minutes $IntervalMinutes) `
-    -Once `
-    -At (Get-Date)
-
-# Settings: run on wake, don't run on battery (unless overridden), hidden
-$Settings = New-ScheduledTaskSettingsSet `
-    -RunOnlyIfNetworkAvailable:$false `
-    -StartWhenAvailable `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 29) `
-    -MultipleInstances IgnoreNew `
-    -Hidden
-
-if (-not $AllowOnBattery) {
-    $Settings.DisallowStartIfOnBatteries = $true
-    $Settings.StopIfGoingOnBatteries = $false
-}
-
-# Principal: run as current user
-$Principal = New-ScheduledTaskPrincipal `
-    -UserId ([System.Security.Principal.WindowsIdentity]::GetCurrent().Name) `
-    -LogonType Interactive `
-    -RunLevel Limited
-
-# Register
-Register-ScheduledTask `
-    -TaskName $TaskName `
-    -Action $Action `
-    -Trigger $Trigger `
-    -Settings $Settings `
-    -Principal $Principal `
-    -Description "Common Ground background data enrichment worker. Processes bills through full pipeline (text, analyze, headline, metadata, perspectives, news)." `
-    | Out-Null
+# Perspectives worker — starts 2 minutes later to stagger Ollama load
+Register-Worker `
+    -TaskName "CommonGroundWorkerPersp" `
+    -ScriptArgs "scripts\worker_perspectives.py --batch 28 --parallel 10" `
+    -DelaySeconds 120
 
 Write-Host ""
-Write-Host "Task '$TaskName' registered successfully."
-Write-Host "  Interval  : every $IntervalMinutes minutes"
-Write-Host "  On battery: $AllowOnBattery"
-Write-Host "  Log file  : $LogDir\worker.log"
+Write-Host "Both tasks registered. Interval: every $IntervalMinutes minutes."
+Write-Host "  Fast worker  : batch=150 parallel=10 (text/analyze/headline/metadata/news)"
+Write-Host "  Persp worker : batch=28  parallel=10 (perspectives, GPU-bound)"
 Write-Host ""
 Write-Host "Commands:"
-Write-Host "  View task   : Get-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Run now     : Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Pause       : Disable-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Resume      : Enable-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Remove      : Unregister-ScheduledTask -TaskName '$TaskName' -Confirm:`$false"
-Write-Host "  Status      : python scripts\worker_status.py"
+Write-Host "  Status       : python scripts\worker_status.py"
+Write-Host "  Run fast now : Start-ScheduledTask -TaskName 'CommonGroundWorkerFast'"
+Write-Host "  Run persp now: Start-ScheduledTask -TaskName 'CommonGroundWorkerPersp'"
+Write-Host "  Pause fast   : Disable-ScheduledTask -TaskName 'CommonGroundWorkerFast'"
+Write-Host "  Pause persp  : Disable-ScheduledTask -TaskName 'CommonGroundWorkerPersp'"
+Write-Host "  Remove all   : Unregister-ScheduledTask -TaskName 'CommonGroundWorkerFast' -Confirm:`$false; Unregister-ScheduledTask -TaskName 'CommonGroundWorkerPersp' -Confirm:`$false"
 Write-Host ""
