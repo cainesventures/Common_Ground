@@ -54,7 +54,7 @@ for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
     logging.getLogger(_noisy).propagate = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEFAULT_BATCH_SIZE = 20
+DEFAULT_BATCH_SIZE = 60
 DEFAULT_PARALLELISM = 3  # concurrent bills — safe for SQLite + Ollama
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
@@ -103,7 +103,7 @@ def main():
             row[0] for row in q.order_by(
                 extract("year", Legislation.introduced_date).desc().nullslast(),
                 Legislation.introduced_date.desc().nullslast(),
-            ).limit(args.batch * 4).all()  # fetch extra so threads have candidates after "complete" bills
+            ).limit(args.batch * 2).all()  # fetch extra so threads have candidates after "complete" bills
         ]
     finally:
         db.close()

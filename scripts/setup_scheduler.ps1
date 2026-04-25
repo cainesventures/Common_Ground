@@ -19,7 +19,7 @@ $ProjectRoot = "C:\Projects\Common_Ground"
 $PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $PythonExe) { $PythonExe = "C:\Users\acain\AppData\Local\Microsoft\WindowsApps\python.exe" }
 Write-Host "Using Python: $PythonExe"
-$BatchSize   = 20
+$BatchSize   = 60
 $LogDir      = "$ProjectRoot\logs"
 
 # Ensure logs directory exists
