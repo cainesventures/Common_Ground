@@ -137,68 +137,81 @@ def main():
 
 def process_bill(bill, db, dry_run: bool, only_step: str | None) -> str:
     """
-    Run the next needed step for a bill.
+    Run ALL needed steps for a bill until it is fully complete.
+    Each call to process_bill completes one bill entirely.
     Returns: "processed" | "skipped" | "complete" | "error"
     """
     label = f"[{bill.bill_number or bill.id}]"
     is_legistar = bill.id.startswith(LEGISTAR_PREFIX)
 
-    # ── Determine what's needed ────────────────────────────────────────────
-    needs_text        = not bill.full_text
-    needs_analyze     = bool(bill.full_text) and not bill.analyzed_at
-    needs_headline    = bool(bill.analyzed_at) and (not bill.headline or not bill.lede)
-    needs_metadata    = is_legistar and not bill.metadata_fetched_at
-    needs_perspectives = (
-        bool(bill.analyzed_at) and
-        _perspective_count(bill, db) < _relevant_perspective_count(bill)
-    )
-    needs_news        = bool(bill.analyzed_at) and not bill.news_fetched_at and bill.status in ACTIVE_STATUSES
+    def steps_needed():
+        needs_text         = not bill.full_text
+        needs_analyze      = bool(bill.full_text) and not bill.analyzed_at
+        needs_headline     = bool(bill.analyzed_at) and (not bill.headline or not bill.lede)
+        needs_metadata     = is_legistar and not bill.metadata_fetched_at
+        needs_perspectives = (
+            bool(bill.analyzed_at) and
+            _perspective_count(bill, db) < _relevant_perspective_count(bill)
+        )
+        needs_news = bool(bill.analyzed_at) and not bill.news_fetched_at and bill.status in ACTIVE_STATUSES
 
-    steps_needed = []
-    if not only_step or only_step == "text":
-        if needs_text:        steps_needed.append("text")
-    if not only_step or only_step == "analyze":
-        if needs_analyze:     steps_needed.append("analyze")
-    if not only_step or only_step == "headline":
-        if needs_headline:    steps_needed.append("headline")
-    if not only_step or only_step == "metadata":
-        if needs_metadata:    steps_needed.append("metadata")
-    if not only_step or only_step == "perspectives":
-        if needs_perspectives: steps_needed.append("perspectives")
-    if not only_step or only_step == "news":
-        if needs_news:        steps_needed.append("news")
+        steps = []
+        if not only_step or only_step == "text":
+            if needs_text:          steps.append("text")
+        if not only_step or only_step == "analyze":
+            if needs_analyze:       steps.append("analyze")
+        if not only_step or only_step == "headline":
+            if needs_headline:      steps.append("headline")
+        if not only_step or only_step == "metadata":
+            if needs_metadata:      steps.append("metadata")
+        if not only_step or only_step == "perspectives":
+            if needs_perspectives:  steps.append("perspectives")
+        if not only_step or only_step == "news":
+            if needs_news:          steps.append("news")
+        return steps
 
-    if not steps_needed:
+    initial = steps_needed()
+    if not initial:
         return "complete"
 
-    # Run only the first needed step this pass (keeps batches predictable)
-    step = steps_needed[0]
-
     if dry_run:
-        log.info(f"DRY-RUN {label} would run step={step}")
+        log.info(f"DRY-RUN {label} would run steps={initial}")
         return "processed"
 
-    log.info(f"{label} step={step} retries={bill.worker_retries or 0}")
+    any_done = False
+    while True:
+        remaining = steps_needed()
+        if not remaining:
+            break
+        step = remaining[0]
+        log.info(f"{label} step={step}")
+        try:
+            if step == "text":
+                result = _step_text(bill, db, label)
+            elif step == "analyze":
+                result = _step_analyze(bill, db, label)
+            elif step == "headline":
+                result = _step_headline(bill, db, label)
+            elif step == "metadata":
+                result = _step_metadata(bill, db, label)
+            elif step == "perspectives":
+                result = _step_perspectives(bill, db, label)
+            elif step == "news":
+                result = _step_news(bill, db, label)
+            else:
+                break
 
-    try:
-        if step == "text":
-            return _step_text(bill, db, label)
-        elif step == "analyze":
-            return _step_analyze(bill, db, label)
-        elif step == "headline":
-            return _step_headline(bill, db, label)
-        elif step == "metadata":
-            return _step_metadata(bill, db, label)
-        elif step == "perspectives":
-            return _step_perspectives(bill, db, label)
-        elif step == "news":
-            return _step_news(bill, db, label)
-    except Exception as e:
-        log.error(f"{label} step={step} unhandled error: {e}", exc_info=True)
-        _increment_retries(bill, db, step, str(e))
-        return "error"
+            if result in ("processed", "complete"):
+                any_done = True
+            elif result in ("skipped", "error"):
+                # Can't proceed further on this bill this run
+                break
+        except Exception as e:
+            log.error(f"{label} step={step} unhandled error: {e}", exc_info=True)
+            _increment_retries(bill, db, step, str(e))
+            return "error"
 
-    return "skipped"
+    return "processed" if any_done else "skipped"
 
 
 # ── Steps ─────────────────────────────────────────────────────────────────────
@@ -328,7 +341,7 @@ def _step_metadata(bill, db, label: str) -> str:
 
 
 def _step_perspectives(bill, db, label: str) -> str:
-    from app.services.perspectives_service import generate_base_perspectives, get_relevant_perspectives
+    from app.services.perspectives_service import generate_perspective, get_relevant_perspectives
     relevant = get_relevant_perspectives(bill)
     existing = {p.perspective_type for p in bill.perspectives}
     missing_types = [p for p in relevant if p not in existing]
@@ -338,10 +351,13 @@ def _step_perspectives(bill, db, label: str) -> str:
         return "complete"
 
     generated = 0
-    for ptype in missing_types[:3]:  # max 3 per run
+    for ptype in missing_types:
         try:
-            generate_base_perspectives(bill, db, perspective_types=[ptype])
-            generated += 1
+            result = generate_perspective(bill, ptype, db)
+            if result:
+                generated += 1
+            else:
+                log.warning(f"{label} perspective {ptype} returned None")
         except Exception as e:
             log.warning(f"{label} perspective {ptype} failed: {e}")
 
