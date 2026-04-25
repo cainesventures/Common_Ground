@@ -17,6 +17,7 @@ $TaskName    = "CommonGroundWorker"
 $ProjectRoot = "C:\Projects\Common_Ground"
 $PythonExe   = "python"   # uses whatever python is on PATH; change to full path if needed
 $WorkerScript = "$ProjectRoot\scripts\worker.py"
+$BatchSize   = 20
 $LogDir      = "$ProjectRoot\logs"
 
 # Ensure logs directory exists
@@ -31,7 +32,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 # Action: run python scripts/worker.py from the project root
 $Action = New-ScheduledTaskAction `
     -Execute $PythonExe `
-    -Argument "scripts\worker.py" `
+    -Argument "scripts\worker.py --batch $BatchSize" `
     -WorkingDirectory $ProjectRoot
 
 # Trigger: every N minutes, starting now

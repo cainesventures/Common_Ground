@@ -53,9 +53,9 @@ for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
     logging.getLogger(_noisy).propagate = False
 
 # ── Config ────────────────────────────────────────────────────────────────────
-DEFAULT_BATCH_SIZE = 5
+DEFAULT_BATCH_SIZE = 20
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
-PERSPECTIVES_TARGET = 17 # number of perspective types to generate per bill
+PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
 
 ACTIVE_STATUSES = {"introduced", "in_committee"}
 ALL_STATUSES = {"introduced", "in_committee", "signed_into_law", "failed", "vetoed", "passed_chamber", "passed_both"}
@@ -150,7 +150,7 @@ def process_bill(bill, db, dry_run: bool, only_step: str | None) -> str:
     needs_metadata    = is_legistar and not bill.metadata_fetched_at
     needs_perspectives = (
         bool(bill.analyzed_at) and
-        _perspective_count(bill, db) < PERSPECTIVES_TARGET
+        _perspective_count(bill, db) < _relevant_perspective_count(bill)
     )
     needs_news        = bool(bill.analyzed_at) and not bill.news_fetched_at and bill.status in ACTIVE_STATUSES
 
@@ -328,25 +328,26 @@ def _step_metadata(bill, db, label: str) -> str:
 
 
 def _step_perspectives(bill, db, label: str) -> str:
-    from app.services.perspectives_service import generate_base_perspectives, ALL_PERSPECTIVES
+    from app.services.perspectives_service import generate_base_perspectives, get_relevant_perspectives
+    relevant = get_relevant_perspectives(bill)
     existing = {p.perspective_type for p in bill.perspectives}
-    missing_types = [p for p in ALL_PERSPECTIVES if p["key"] not in existing]
+    missing_types = [p for p in relevant if p not in existing]
 
     if not missing_types:
-        log.info(f"{label} perspectives already complete")
+        log.info(f"{label} perspectives complete ({len(existing)}/{len(relevant)})")
         return "complete"
 
     generated = 0
-    for ptype in missing_types[:3]:  # max 3 perspectives per worker run to keep batches manageable
+    for ptype in missing_types[:3]:  # max 3 per run
         try:
-            generate_base_perspectives(bill, db, perspective_types=[ptype["key"]])
+            generate_base_perspectives(bill, db, perspective_types=[ptype])
             generated += 1
         except Exception as e:
-            log.warning(f"{label} perspective {ptype['key']} failed: {e}")
+            log.warning(f"{label} perspective {ptype} failed: {e}")
 
     db.commit()
     total = _perspective_count(bill, db)
-    log.info(f"{label} perspectives +{generated} = {total}/{PERSPECTIVES_TARGET}")
+    log.info(f"{label} perspectives +{generated} = {total}/{len(relevant)}")
     return "processed" if generated > 0 else "error"
 
 
@@ -372,6 +373,14 @@ def _guid_from_url(external_url: str | None) -> str:
 def _perspective_count(bill, db) -> int:
     from app.models import BillPerspective
     return db.query(BillPerspective).filter(BillPerspective.bill_id == bill.id).count()
+
+
+def _relevant_perspective_count(bill) -> int:
+    try:
+        from app.services.perspectives_service import get_relevant_perspectives
+        return len(get_relevant_perspectives(bill))
+    except Exception:
+        return PERSPECTIVES_TARGET
 
 
 def _get_provider():

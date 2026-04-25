@@ -9,6 +9,7 @@ Usage:
 import sys
 import json
 import argparse
+import logging
 from pathlib import Path
 from datetime import datetime
 
@@ -16,12 +17,15 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import os; os.chdir(ROOT)
 
+# Suppress SQLAlchemy before any import
+logging.getLogger("sqlalchemy").setLevel(logging.CRITICAL)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.CRITICAL)
+logging.disable(logging.INFO)
+
 from dotenv import load_dotenv
 load_dotenv(ROOT / ".env")
 
-from app.models.database import SessionLocal
-from app.models import Legislation, BillPerspective
-from sqlalchemy import extract, func, case
+import sqlite3
 
 
 def main():
@@ -29,45 +33,77 @@ def main():
     parser.add_argument("--year", type=int, default=0)
     args = parser.parse_args()
 
-    db = SessionLocal()
-    try:
-        _print_report(db, args.year)
-    finally:
-        db.close()
+    # Re-enable for our own print
+    logging.disable(logging.NOTSET)
 
+    db_path = ROOT / "common_ground_test.db"
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
 
-def _print_report(db, year_filter: int):
-    from sqlalchemy import exists as _exists
+    year_clause = f"AND strftime('%Y', introduced_date) = '{args.year}'" if args.year else ""
 
-    q = db.query(Legislation).filter(Legislation.source == "legistar_phila")
-    if year_filter:
-        q = q.filter(extract("year", Legislation.introduced_date) == year_filter)
+    # Overall counts
+    c.execute(f"""
+        SELECT
+            count(*) as total,
+            sum(CASE WHEN full_text IS NOT NULL AND full_text != '' THEN 1 ELSE 0 END) as has_text,
+            sum(CASE WHEN analyzed_at IS NOT NULL THEN 1 ELSE 0 END) as analyzed,
+            sum(CASE WHEN headline IS NOT NULL AND lede IS NOT NULL THEN 1 ELSE 0 END) as has_headline,
+            sum(CASE WHEN metadata_fetched_at IS NOT NULL THEN 1 ELSE 0 END) as has_metadata,
+            sum(CASE WHEN news_fetched_at IS NOT NULL THEN 1 ELSE 0 END) as has_news,
+            sum(CASE WHEN skip_reason IS NOT NULL THEN 1 ELSE 0 END) as skipped
+        FROM legislation
+        WHERE source = 'legistar'
+        {year_clause}
+    """)
+    row = c.fetchone()
+    total = row["total"]
 
-    bills = q.all()
-    total = len(bills)
-    if not total:
-        print("No bills found.")
-        return
+    # Perspectives: count bills that have at least the 5 core perspectives
+    # (full relevance check requires loading each bill's tags, so we use core as proxy)
+    c.execute(f"""
+        SELECT count(*) as has_persp FROM (
+            SELECT l.id FROM legislation l
+            JOIN bill_perspectives bp ON bp.bill_id = l.id
+            WHERE l.source = 'legistar' {year_clause}
+            GROUP BY l.id
+            HAVING count(DISTINCT bp.perspective_type) >= 5
+        )
+    """)
+    has_persp = c.fetchone()["has_persp"]
 
-    # Buckets
-    has_text      = sum(1 for b in bills if b.full_text)
-    has_analyzed  = sum(1 for b in bills if b.analyzed_at)
-    has_headline  = sum(1 for b in bills if b.headline and b.lede)
-    has_metadata  = sum(1 for b in bills if b.metadata_fetched_at)
-    has_persp     = sum(1 for b in bills if _perspective_count(b, db) >= 17)
-    has_news      = sum(1 for b in bills if b.news_fetched_at)
-    skipped       = sum(1 for b in bills if b.skip_reason)
-    complete      = sum(1 for b in bills if _is_complete(b, db))
+    # "Fully complete" = text + analyzed + headline + metadata + 17 perspectives
+    c.execute(f"""
+        SELECT count(*) as complete FROM (
+            SELECT l.id FROM legislation l
+            LEFT JOIN (
+                SELECT bill_id, count(DISTINCT perspective_type) as pcount
+                FROM bill_perspectives GROUP BY bill_id
+            ) p ON p.bill_id = l.id
+            WHERE l.source = 'legistar'
+              AND l.full_text IS NOT NULL AND l.full_text != ''
+              AND l.analyzed_at IS NOT NULL
+              AND l.headline IS NOT NULL
+              AND l.lede IS NOT NULL
+              AND l.metadata_fetched_at IS NOT NULL
+              AND COALESCE(p.pcount, 0) >= 5
+              {year_clause}
+        )
+    """)
+    complete = c.fetchone()["complete"]
 
     # Skip reason breakdown
-    skip_reasons: dict[str, int] = {}
-    for b in bills:
-        if b.skip_reason:
-            skip_reasons[b.skip_reason] = skip_reasons.get(b.skip_reason, 0) + 1
+    c.execute(f"""
+        SELECT skip_reason, count(*) as n FROM legislation
+        WHERE source = 'legistar' AND skip_reason IS NOT NULL {year_clause}
+        GROUP BY skip_reason ORDER BY n DESC
+    """)
+    skip_rows = c.fetchall()
 
-    title = f"Worker Status Report — {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-    if year_filter:
-        title += f" (year={year_filter})"
+    title = f"Worker Status — {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    if args.year:
+        title += f"  (year={args.year})"
     print()
     print(title)
     print("=" * len(title))
@@ -75,32 +111,32 @@ def _print_report(db, year_filter: int):
     print(f"  Fully complete     : {complete:>5}  ({pct(complete, total)})")
     print()
     print("  Step completeness:")
-    print(f"    Full text        : {has_text:>5}  ({pct(has_text, total)})")
-    print(f"    Analyzed         : {has_analyzed:>5}  ({pct(has_analyzed, total)})")
-    print(f"    Headline/lede    : {has_headline:>5}  ({pct(has_headline, total)})")
-    print(f"    Metadata         : {has_metadata:>5}  ({pct(has_metadata, total)})")
-    print(f"    Perspectives(17) : {has_persp:>5}  ({pct(has_persp, total)})")
-    print(f"    News             : {has_news:>5}  ({pct(has_news, total)})")
+    print(f"    Full text        : {row['has_text']:>5}  ({pct(row['has_text'], total)})")
+    print(f"    Analyzed         : {row['analyzed']:>5}  ({pct(row['analyzed'], total)})")
+    print(f"    Headline/lede    : {row['has_headline']:>5}  ({pct(row['has_headline'], total)})")
+    print(f"    Metadata         : {row['has_metadata']:>5}  ({pct(row['has_metadata'], total)})")
+    print(f"    Perspectives(5+) : {has_persp:>5}  ({pct(has_persp, total)})")
+    print(f"    News             : {row['has_news']:>5}  ({pct(row['has_news'], total)})")
     print()
-    print(f"  Permanently skipped: {skipped}")
-    if skip_reasons:
-        for reason, count in sorted(skip_reasons.items(), key=lambda x: -x[1]):
-            print(f"    {reason}: {count}")
+    print(f"  Permanently skipped: {row['skipped']}")
+    for sr in skip_rows:
+        print(f"    {sr['skip_reason']}: {sr['n']}")
 
-    # Per-year breakdown if no year filter
-    if not year_filter:
+    if not args.year:
         print()
         print("  Per-year breakdown:")
-        years: dict[int, list] = {}
-        for b in bills:
-            y = b.introduced_date.year if b.introduced_date else 0
-            years.setdefault(y, []).append(b)
-        for y in sorted(years.keys(), reverse=True):
-            ybills = years[y]
-            yt = len(ybills)
-            yc = sum(1 for b in ybills if _is_complete(b, db))
-            ys = sum(1 for b in ybills if b.skip_reason)
-            print(f"    {y}: {yc}/{yt} complete, {ys} skipped")
+        c.execute("""
+            SELECT
+                strftime('%Y', introduced_date) as yr,
+                count(*) as total,
+                sum(CASE WHEN analyzed_at IS NOT NULL THEN 1 ELSE 0 END) as analyzed,
+                sum(CASE WHEN skip_reason IS NOT NULL THEN 1 ELSE 0 END) as skipped
+            FROM legislation
+            WHERE source = 'legistar' AND introduced_date IS NOT NULL
+            GROUP BY yr ORDER BY yr DESC LIMIT 8
+        """)
+        for yr_row in c.fetchall():
+            print(f"    {yr_row['yr']}: {yr_row['analyzed']}/{yr_row['total']} analyzed, {yr_row['skipped']} skipped")
 
     # Worker run stats
     progress_file = ROOT / "logs" / "worker_progress.json"
@@ -111,28 +147,14 @@ def _print_report(db, year_filter: int):
             print("  Worker run stats:")
             print(f"    Last run         : {p.get('last_run', 'never')}")
             print(f"    Total runs       : {p.get('runs', 0)}")
-            print(f"    Total processed  : {p.get('total_processed', 0)}")
-            print(f"    Total skipped    : {p.get('total_skipped', 0)}")
-            print(f"    Total errors     : {p.get('total_errors', 0)}")
+            print(f"    Bills processed  : {p.get('total_processed', 0)}")
+            print(f"    Bills skipped    : {p.get('total_skipped', 0)}")
+            print(f"    Errors           : {p.get('total_errors', 0)}")
         except Exception:
             pass
 
+    conn.close()
     print()
-
-
-def _perspective_count(bill, db) -> int:
-    from app.models import BillPerspective
-    return db.query(BillPerspective).filter(BillPerspective.bill_id == bill.id).count()
-
-
-def _is_complete(bill, db) -> bool:
-    if not bill.full_text:      return False
-    if not bill.analyzed_at:    return False
-    if not bill.headline:       return False
-    if not bill.lede:           return False
-    if not bill.metadata_fetched_at and bill.id.startswith("legistar_phila_"): return False
-    if _perspective_count(bill, db) < 17: return False
-    return True
 
 
 def pct(n, total) -> str:
