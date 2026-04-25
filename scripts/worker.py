@@ -55,7 +55,7 @@ for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DEFAULT_BATCH_SIZE = 60
-DEFAULT_PARALLELISM = 3  # concurrent bills — safe for SQLite + Ollama
+DEFAULT_PARALLELISM = 5  # concurrent bills — tested safe on 24-core/108GB system
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
 

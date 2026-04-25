@@ -34,7 +34,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 # Action: run python scripts/worker.py from the project root
 $Action = New-ScheduledTaskAction `
     -Execute $PythonExe `
-    -Argument "scripts\worker.py --batch $BatchSize --parallel 3" `
+    -Argument "scripts\worker.py --batch $BatchSize --parallel 5" `
     -WorkingDirectory $ProjectRoot
 
 # Trigger: every N minutes, starting now
