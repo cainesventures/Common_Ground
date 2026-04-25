@@ -30,6 +30,11 @@ def setup_logging(log_name: str) -> logging.Logger:
     LOG_DIR.mkdir(exist_ok=True)
     log_file = LOG_DIR / f"{log_name}.log"
 
+    # Suppress SQLAlchemy BEFORE basicConfig so propagation never reaches root handler
+    for noisy in ("sqlalchemy", "sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
+        logging.getLogger(noisy).propagate = False
+
     stream_handler = logging.StreamHandler(sys.stdout)
     try:
         stream_handler.stream = open(
@@ -46,9 +51,6 @@ def setup_logging(log_name: str) -> logging.Logger:
             stream_handler,
         ],
     )
-    for noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
-        logging.getLogger(noisy).propagate = False
 
     return logging.getLogger(log_name)
 
@@ -64,9 +66,6 @@ def run_worker(
 ):
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
-
-    import logging as _logging
-    _logging.getLogger("sqlalchemy").setLevel(_logging.WARNING)
 
     from app.models.database import SessionLocal
     from app.models import Legislation
