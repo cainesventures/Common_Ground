@@ -22,6 +22,7 @@ import os
 import json
 import logging
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 
@@ -54,6 +55,7 @@ for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "sqlalchemy.dialects"):
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DEFAULT_BATCH_SIZE = 20
+DEFAULT_PARALLELISM = 3  # concurrent bills — safe for SQLite + Ollama
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
 
@@ -68,12 +70,13 @@ def main():
     parser = argparse.ArgumentParser(description="Common Ground background worker")
     parser.add_argument("--dry-run", action="store_true", help="Show what would run without making changes")
     parser.add_argument("--batch", type=int, default=DEFAULT_BATCH_SIZE, help="Bills to process per run")
+    parser.add_argument("--parallel", type=int, default=DEFAULT_PARALLELISM, help="Number of bills to process concurrently")
     parser.add_argument("--year", type=int, default=0, help="Restrict to a specific year (0 = all)")
     parser.add_argument("--step", choices=["text", "analyze", "headline", "metadata", "perspectives", "news"], help="Run only one step")
     args = parser.parse_args()
 
     log.info("=" * 60)
-    log.info(f"Worker starting — batch={args.batch} dry_run={args.dry_run}" + (f" year={args.year}" if args.year else "") + (f" step={args.step}" if args.step else ""))
+    log.info(f"Worker starting — batch={args.batch} parallel={args.parallel} dry_run={args.dry_run}" + (f" year={args.year}" if args.year else "") + (f" step={args.step}" if args.step else ""))
 
     from dotenv import load_dotenv
     load_dotenv(ROOT / ".env")
@@ -86,50 +89,60 @@ def main():
     from app.models import Legislation, BillPerspective
     from sqlalchemy import extract, or_, and_
 
-    db = SessionLocal()
     processed = 0
     skipped = 0
     errors = 0
 
+    # ── Fetch candidate bill IDs (read-only, single session) ──────────────
+    db = SessionLocal()
     try:
-        # ── Build candidate query ──────────────────────────────────────────
-        # All bills that have work remaining and no permanent skip
-        q = db.query(Legislation).filter(Legislation.skip_reason.is_(None))
-
+        q = db.query(Legislation.id).filter(Legislation.skip_reason.is_(None))
         if args.year:
             q = q.filter(extract("year", Legislation.introduced_date) == args.year)
-
-        # Order: newest year first (2026→2022), then by introduced_date
-        bills = (
-            q.order_by(
+        bill_ids = [
+            row[0] for row in q.order_by(
                 extract("year", Legislation.introduced_date).desc().nullslast(),
                 Legislation.introduced_date.desc().nullslast(),
-            )
-            .all()
-        )
-
-        log.info(f"Candidate pool: {len(bills)} bills (skip_reason=None)")
-
-        for bill in bills:
-            if processed >= args.batch:
-                break
-
-            result = process_bill(bill, db, args.dry_run, args.step)
-            if result == "processed":
-                processed += 1
-            elif result == "skipped":
-                skipped += 1
-            elif result == "error":
-                errors += 1
-            # "complete" means nothing to do — just move on without counting
-
-        db.commit()
-
-    except Exception as e:
-        log.error(f"Worker crashed: {e}", exc_info=True)
-        db.rollback()
+            ).limit(args.batch * 4).all()  # fetch extra so threads have candidates after "complete" bills
+        ]
     finally:
         db.close()
+
+    log.info(f"Candidate pool: {len(bill_ids)} bill IDs fetched")
+
+    def process_one(bill_id: str) -> str:
+        """Each thread gets its own DB session to avoid SQLite write conflicts."""
+        thread_db = SessionLocal()
+        try:
+            bill = thread_db.query(Legislation).filter(Legislation.id == bill_id).first()
+            if not bill or bill.skip_reason:
+                return "complete"
+            return process_bill(bill, thread_db, args.dry_run, args.step)
+        except Exception as e:
+            log.error(f"Thread error for {bill_id}: {e}", exc_info=True)
+            return "error"
+        finally:
+            thread_db.close()
+
+    completed_count = 0
+    with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+        futures = {}
+        for bill_id in bill_ids:
+            if completed_count >= args.batch:
+                break
+            futures[executor.submit(process_one, bill_id)] = bill_id
+
+        for future in as_completed(futures):
+            result = future.result()
+            if result == "processed":
+                processed += 1
+                completed_count += 1
+            elif result == "skipped":
+                skipped += 1
+                completed_count += 1
+            elif result == "error":
+                errors += 1
+                completed_count += 1
 
     log.info(f"Worker done — processed={processed} skipped={skipped} errors={errors}")
     _write_progress(processed, skipped, errors)

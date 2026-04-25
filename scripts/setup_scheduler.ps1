@@ -15,8 +15,10 @@ param(
 
 $TaskName    = "CommonGroundWorker"
 $ProjectRoot = "C:\Projects\Common_Ground"
-$PythonExe   = "python"   # uses whatever python is on PATH; change to full path if needed
-$WorkerScript = "$ProjectRoot\scripts\worker.py"
+# Resolve full Python path so Task Scheduler can find it (it runs with a minimal PATH)
+$PythonExe = (Get-Command python -ErrorAction SilentlyContinue).Source
+if (-not $PythonExe) { $PythonExe = "C:\Users\acain\AppData\Local\Microsoft\WindowsApps\python.exe" }
+Write-Host "Using Python: $PythonExe"
 $BatchSize   = 20
 $LogDir      = "$ProjectRoot\logs"
 
@@ -32,7 +34,7 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
 # Action: run python scripts/worker.py from the project root
 $Action = New-ScheduledTaskAction `
     -Execute $PythonExe `
-    -Argument "scripts\worker.py --batch $BatchSize" `
+    -Argument "scripts\worker.py --batch $BatchSize --parallel 3" `
     -WorkingDirectory $ProjectRoot
 
 # Trigger: every N minutes, starting now
