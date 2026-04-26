@@ -241,6 +241,7 @@ def _step_text(bill, db, label: str, log) -> str:
             log.warning(f"{label} skip — no GUID after {retries} attempts")
             return "skipped"
         log.warning(f"{label} no GUID (attempt {retries}/{MAX_RETRIES})")
+        db.commit()
         return "error"
 
     from app.integrations.legistar_scraper import PhilaLegistarScraper
