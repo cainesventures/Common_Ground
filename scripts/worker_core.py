@@ -20,6 +20,7 @@ os.chdir(ROOT)
 MAX_RETRIES = 3
 PERSPECTIVES_TARGET = 17
 ACTIVE_STATUSES = {"introduced", "in_committee"}
+TERMINAL_STATUSES = {"signed_into_law", "failed", "vetoed", "withdrawn", "tabled"}
 LEGISTAR_PREFIX = "legistar_phila_"
 
 ALL_STEPS = ["text", "analyze", "headline", "metadata", "perspectives", "news", "votes"]
@@ -82,6 +83,24 @@ def run_worker(
         q = db.query(Legislation.id).filter(Legislation.skip_reason.is_(None))
         if year:
             q = q.filter(extract("year", Legislation.introduced_date) == year)
+
+        # If only fetching perspectives, restrict to bills that are analyzed and
+        # have fewer perspectives than needed — avoids burning the whole batch on
+        # unanalyzed bills that silently return "complete".
+        if allowed_steps == ["perspectives"]:
+            q = (
+                q.filter(Legislation.analyzed_at.isnot(None))
+                .filter(~Legislation.status.in_(TERMINAL_STATUSES))
+                .filter(
+                    ~Legislation.supplementary_data.contains('"perspectives_complete": true')
+                )
+            )
+
+        # For general workers, prioritize bills that still need text fetched so
+        # the batch isn't dominated by already-complete bills.
+        if "text" in allowed_steps:
+            q = q.filter(Legislation.full_text.is_(None))
+
         bill_ids = [
             row[0] for row in q.order_by(
                 extract("year", Legislation.introduced_date).desc().nullslast(),
@@ -157,6 +176,7 @@ def process_bill(
         needs_metadata = is_legistar and not bill.metadata_fetched_at
         needs_perspectives = (
             bool(bill.analyzed_at)
+            and bill.status not in TERMINAL_STATUSES
             and _perspective_count(bill, db) < _relevant_perspective_count(bill)
         )
         needs_news = (
@@ -286,6 +306,14 @@ def _step_analyze(bill, db, label: str, log) -> str:
     except Exception as e:
         log.warning(f"{label} headline failed after analyze: {e}")
 
+    try:
+        from scripts.normalize_tags import normalize_tags
+        import json as _json
+        if bill.tags:
+            bill.tags = _json.dumps(normalize_tags(bill.tags))
+    except Exception as e:
+        log.warning(f"{label} tag normalization failed: {e}")
+
     db.commit()
     log.info(f"{label} analyzed — impact={bill.impact_level} type={bill.bill_type}")
     return "processed"
@@ -357,6 +385,7 @@ def _step_perspectives(bill, db, label: str, log) -> str:
 
     if not missing_types:
         log.info(f"{label} perspectives complete ({len(existing)}/{len(relevant)})")
+        _mark_perspectives_complete(bill, db)
         return "complete"
 
     generated = 0
@@ -373,6 +402,11 @@ def _step_perspectives(bill, db, label: str, log) -> str:
     db.commit()
     total = _perspective_count(bill, db)
     log.info(f"{label} perspectives +{generated} = {total}/{len(relevant)}")
+    if generated > 0:
+        # Re-check if now complete and stamp it
+        existing2 = {p.perspective_type for p in bill.perspectives}
+        if not [p for p in get_relevant_perspectives(bill) if p not in existing2]:
+            _mark_perspectives_complete(bill, db)
     return "processed" if generated > 0 else "error"
 
 
@@ -452,6 +486,22 @@ def _step_votes(bill, db, label: str, log) -> str:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _mark_perspectives_complete(bill, db):
+    import json as _json
+    data = {}
+    if bill.supplementary_data:
+        try:
+            parsed = _json.loads(bill.supplementary_data)
+            if isinstance(parsed, dict):
+                data = parsed
+        except Exception:
+            pass
+    if not data.get("perspectives_complete"):
+        data["perspectives_complete"] = True
+        bill.supplementary_data = _json.dumps(data)
+        db.commit()
+
 
 def _guid_from_url(external_url) -> str:
     if not external_url:

@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-DEFAULT_BATCH = 28
+DEFAULT_BATCH = 200
 DEFAULT_PARALLEL = 10
 
 

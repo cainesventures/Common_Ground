@@ -488,15 +488,15 @@ class PhilaLegistarScraper:
                 page.goto(f"{BASE_URL}/Legislation.aspx", wait_until="networkidle", timeout=30000)
                 self._apply_filters_and_search(page)
 
-                # Expand to 10,000 records
+                # Expand to 10,000 records — click triggers a full page reload
                 try:
                     for item in page.query_selector_all(".rmText"):
                         if item.inner_text().strip() == "Show":
                             item.hover()
-                            page.wait_for_timeout(600)
+                            page.wait_for_timeout(800)
                             break
-                    page.locator(".rmText", has_text="Show 10000 records").first.click(timeout=5000)
-                    page.wait_for_timeout(8000)
+                    with page.expect_navigation(wait_until="networkidle", timeout=60000):
+                        page.locator(".rmText", has_text="Show 10000 records").first.click(timeout=5000)
                     page.wait_for_selector("tr.rgRow", timeout=30000)
                 except Exception as e:
                     logger.warning(f"Could not expand to 10000 rows: {e} — using current page")

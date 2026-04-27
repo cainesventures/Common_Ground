@@ -81,6 +81,26 @@ export const api = {
     return apiFetch(`/api/legislation/year-counts${qs ? `?${qs}` : ''}`)
   },
 
+  getInsightsStatusByYear: (params?: { from_year?: number; to_year?: number; tag?: string }) => {
+    const p = new URLSearchParams()
+    if (params?.from_year) p.set('from_year', String(params.from_year))
+    if (params?.to_year)   p.set('to_year',   String(params.to_year))
+    if (params?.tag)       p.set('tag',        params.tag)
+    const qs = p.toString()
+    return apiFetch(`/api/insights/status-by-year${qs ? `?${qs}` : ''}`)
+  },
+
+  getInsightsTagByYear: (params?: { from_year?: number; to_year?: number; top_n?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.from_year) p.set('from_year', String(params.from_year))
+    if (params?.to_year)   p.set('to_year',   String(params.to_year))
+    if (params?.top_n)     p.set('top_n',     String(params.top_n))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/tag-by-year${qs ? `?${qs}` : ''}`)
+  },
+
+  getInsightsSummary: () => apiFetch('/api/insights/summary'),
+
   countLegislation: (params: { year?: number; month?: number; date_from?: string; date_to?: string; analyzed?: string }) => {
     const p = new URLSearchParams()
     if (params.year)      p.set('year',      String(params.year))

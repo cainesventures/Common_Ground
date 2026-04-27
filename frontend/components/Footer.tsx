@@ -14,6 +14,7 @@ export function Footer() {
           <nav className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
             <Link href="/legislation" className="hover:text-foreground transition-colors">Legislation</Link>
             <Link href="/councilmembers" className="hover:text-foreground transition-colors">Council</Link>
+            <Link href="/insights" className="hover:text-foreground transition-colors">Insights</Link>
             <Link href="/donate" className="hover:text-foreground transition-colors">Donate</Link>
             <Link href="/legal" className="hover:text-foreground transition-colors">Legal &amp; Disclaimer</Link>
           </nav>

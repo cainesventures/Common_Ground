@@ -10,7 +10,10 @@ settings = get_settings()
 engine = create_engine(
     settings.database_url,
     echo=settings.debug,
-    future=True
+    future=True,
+    pool_size=30,
+    max_overflow=10,
+    pool_timeout=60,
 )
 
 # Create session factory

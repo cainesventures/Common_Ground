@@ -84,6 +84,7 @@ export function Navbar() {
   const navLinks = [
     { href: '/legislation', label: 'Legislation' },
     { href: '/councilmembers', label: 'Council' },
+    { href: '/insights', label: 'Insights' },
     ...(user ? [{ href: '/my-bills', label: 'My Bills' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/admin', label: 'Admin' }] : []),
