@@ -514,6 +514,8 @@ async def search_legislation(
     has_perspectives: bool = Query(False, description="Only return bills with at least one generated perspective"),
     missing_perspectives: bool = Query(False, description="Only return bills with no generated perspectives"),
     city: str = Query("", max_length=50, description="City slug filter (e.g. 'philadelphia', 'chicago'). Defaults to 'philadelphia' for local searches."),
+    bill_type: str = Query("", max_length=30, description="Filter by bill_type: substantive, ceremonial, procedural"),
+    committee: str = Query("", max_length=100, description="Filter by committee name (partial match)"),
     db: Session = Depends(get_db)
 ):
     """Search for legislation with optional filters."""
@@ -533,6 +535,7 @@ async def search_legislation(
             year=year or None, month=month or None, status=status or None, sponsor=sponsor or None,
             has_votes=has_votes or None, has_perspectives=has_perspectives or None,
             missing_perspectives=missing_perspectives or None, city=effective_city or None,
+            bill_type=bill_type or None, committee=committee or None,
         )
         return {
             "success": True,

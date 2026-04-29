@@ -398,6 +398,8 @@ class LegislationIngestionService:
         has_perspectives: Optional[bool] = None,
         missing_perspectives: Optional[bool] = None,
         city: Optional[str] = None,
+        bill_type: Optional[str] = None,
+        committee: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -442,6 +444,10 @@ class LegislationIngestionService:
             base_query = base_query.filter(Legislation.status.in_(status_list))
         if sponsor:
             base_query = base_query.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+        if bill_type:
+            base_query = base_query.filter(Legislation.bill_type == bill_type)
+        if committee:
+            base_query = base_query.filter(Legislation.committee.ilike(f"%{committee}%"))
         if has_votes:
             from sqlalchemy import exists
             base_query = base_query.filter(

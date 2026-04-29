@@ -167,6 +167,7 @@ async def get_insights_summary(db: Session = Depends(get_db)):
     from datetime import datetime
 
     current_year = datetime.utcnow().year
+    TERMINAL = ["signed_into_law", "failed", "vetoed", "withdrawn", "tabled"]
 
     total = db.query(func.count(Legislation.id)).filter(Legislation.level == "local").scalar()
     active = db.query(func.count(Legislation.id)).filter(
@@ -177,20 +178,199 @@ async def get_insights_summary(db: Session = Depends(get_db)):
         Legislation.level == "local",
         extract("year", Legislation.introduced_date) == current_year,
     ).scalar()
+    last_year = db.query(func.count(Legislation.id)).filter(
+        Legislation.level == "local",
+        extract("year", Legislation.introduced_date) == current_year - 1,
+    ).scalar()
     signed = db.query(func.count(Legislation.id)).filter(
         Legislation.level == "local",
         Legislation.status == "signed_into_law",
+    ).scalar()
+    terminal_total = db.query(func.count(Legislation.id)).filter(
+        Legislation.level == "local",
+        Legislation.status.in_(TERMINAL),
+    ).scalar()
+    avg_impact = db.query(func.avg(Legislation.impact_score)).filter(
+        Legislation.level == "local",
+        Legislation.impact_score.isnot(None),
+        Legislation.analyzed_at.isnot(None),
     ).scalar()
     years_covered = db.query(
         func.min(extract("year", Legislation.introduced_date)),
         func.max(extract("year", Legislation.introduced_date)),
     ).filter(Legislation.level == "local", Legislation.introduced_date.isnot(None)).first()
 
+    pass_rate = round(signed / terminal_total, 3) if terminal_total else 0.0
+
     return {
         "total_bills": total,
         "active_bills": active,
         "bills_this_year": this_year,
+        "bills_last_year": last_year,
         "signed_into_law": signed,
+        "pass_rate": pass_rate,
+        "avg_impact_score": round(float(avg_impact), 1) if avg_impact else None,
         "years_from": int(years_covered[0]) if years_covered[0] else current_year,
         "years_to": int(years_covered[1]) if years_covered[1] else current_year,
     }
+
+
+@router.get("/impact-by-year")
+async def get_impact_by_year(
+    from_year: int = Query(default=0),
+    to_year:   int = Query(default=0),
+    db: Session = Depends(get_db),
+):
+    """Bill type and impact level breakdown per year."""
+    from datetime import datetime
+
+    current_year = datetime.utcnow().year
+    effective_from = from_year if from_year else 2000
+    effective_to   = to_year   if to_year   else current_year
+
+    rows = (
+        db.query(
+            extract("year", Legislation.introduced_date).label("year"),
+            Legislation.bill_type,
+            Legislation.impact_level,
+            func.count(Legislation.id).label("count"),
+        )
+        .filter(
+            Legislation.introduced_date.isnot(None),
+            Legislation.level == "local",
+            Legislation.analyzed_at.isnot(None),
+            extract("year", Legislation.introduced_date) >= effective_from,
+            extract("year", Legislation.introduced_date) <= effective_to,
+        )
+        .group_by("year", Legislation.bill_type, Legislation.impact_level)
+        .order_by("year")
+        .all()
+    )
+
+    by_year: dict[int, dict] = {}
+    for row in rows:
+        year = int(row.year)
+        if year not in by_year:
+            by_year[year] = {
+                "year": year,
+                "total": 0,
+                "bill_type": {"substantive": 0, "ceremonial": 0, "procedural": 0, "unknown": 0},
+                "impact_level": {"high": 0, "medium": 0, "low": 0},
+            }
+        by_year[year]["total"] += row.count
+        bt = row.bill_type or "unknown"
+        il = row.impact_level
+        if bt in by_year[year]["bill_type"]:
+            by_year[year]["bill_type"][bt] += row.count
+        else:
+            by_year[year]["bill_type"]["unknown"] += row.count
+        if il in by_year[year]["impact_level"]:
+            by_year[year]["impact_level"][il] += row.count
+
+    return {"years": sorted(by_year.values(), key=lambda x: x["year"])}
+
+
+@router.get("/sponsor-leaderboard")
+async def get_sponsor_leaderboard(
+    year:  int = Query(default=0, description="Year filter (0 = all time)"),
+    limit: int = Query(default=15, le=50),
+    db: Session = Depends(get_db),
+):
+    """Top sponsors ranked by bill volume and pass rate."""
+    from sqlalchemy import extract
+
+    TERMINAL = ["signed_into_law", "failed", "vetoed", "withdrawn", "tabled"]
+
+    q = (
+        db.query(
+            Legislation.sponsor,
+            func.count(Legislation.id).label("total"),
+            func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)).label("signed"),
+            func.sum(case((Legislation.status.in_(TERMINAL), 1), else_=0)).label("terminal"),
+            func.avg(
+                case((Legislation.impact_score.isnot(None), Legislation.impact_score), else_=None)
+            ).label("avg_impact"),
+        )
+        .filter(
+            Legislation.level == "local",
+            Legislation.sponsor.isnot(None),
+            Legislation.sponsor != "",
+        )
+    )
+    if year:
+        q = q.filter(extract("year", Legislation.introduced_date) == year)
+
+    rows = (
+        q.group_by(Legislation.sponsor)
+        .order_by(func.count(Legislation.id).desc())
+        .limit(limit)
+        .all()
+    )
+
+    sponsors = []
+    for row in rows:
+        terminal = int(row.terminal or 0)
+        signed = int(row.signed or 0)
+        sponsors.append({
+            "sponsor": row.sponsor,
+            "total": int(row.total),
+            "signed_into_law": signed,
+            "not_passed": terminal - signed,
+            "pass_rate": round(signed / terminal, 3) if terminal else 0.0,
+            "avg_impact_score": round(float(row.avg_impact), 1) if row.avg_impact else None,
+        })
+
+    return {"sponsors": sponsors, "year": year}
+
+
+@router.get("/committee-activity")
+async def get_committee_activity(
+    year:  int = Query(default=0, description="Year filter (0 = all time)"),
+    top_n: int = Query(default=12, le=30),
+    db: Session = Depends(get_db),
+):
+    """Top committees by bill volume with pass rate breakdown."""
+    from sqlalchemy import extract
+
+    TERMINAL = ["signed_into_law", "failed", "vetoed", "withdrawn", "tabled"]
+
+    q = (
+        db.query(
+            Legislation.committee,
+            func.count(Legislation.id).label("total"),
+            func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)).label("signed"),
+            func.sum(case((Legislation.status == "in_committee", 1), else_=0)).label("in_committee"),
+            func.sum(case((Legislation.status == "introduced", 1), else_=0)).label("introduced"),
+            func.sum(case((Legislation.status.in_(TERMINAL), 1), else_=0)).label("terminal"),
+        )
+        .filter(
+            Legislation.level == "local",
+            Legislation.committee.isnot(None),
+            Legislation.committee != "",
+        )
+    )
+    if year:
+        q = q.filter(extract("year", Legislation.introduced_date) == year)
+
+    rows = (
+        q.group_by(Legislation.committee)
+        .order_by(func.count(Legislation.id).desc())
+        .limit(top_n)
+        .all()
+    )
+
+    committees = []
+    for row in rows:
+        terminal = int(row.terminal or 0)
+        signed = int(row.signed or 0)
+        committees.append({
+            "committee": row.committee,
+            "total": int(row.total),
+            "signed_into_law": signed,
+            "in_committee": int(row.in_committee or 0),
+            "introduced": int(row.introduced or 0),
+            "not_passed": terminal - signed,
+            "pass_rate": round(signed / terminal, 3) if terminal else 0.0,
+        })
+
+    return {"committees": committees, "year": year}

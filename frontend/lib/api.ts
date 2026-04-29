@@ -101,6 +101,30 @@ export const api = {
 
   getInsightsSummary: () => apiFetch('/api/insights/summary'),
 
+  getInsightsImpactByYear: (params?: { from_year?: number; to_year?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.from_year) p.set('from_year', String(params.from_year))
+    if (params?.to_year)   p.set('to_year',   String(params.to_year))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/impact-by-year${qs ? `?${qs}` : ''}`)
+  },
+
+  getInsightsSponsorLeaderboard: (params?: { year?: number; limit?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.year)  p.set('year',  String(params.year))
+    if (params?.limit) p.set('limit', String(params.limit))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/sponsor-leaderboard${qs ? `?${qs}` : ''}`)
+  },
+
+  getInsightsCommitteeActivity: (params?: { year?: number; top_n?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.year)  p.set('year',  String(params.year))
+    if (params?.top_n) p.set('top_n', String(params.top_n))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/committee-activity${qs ? `?${qs}` : ''}`)
+  },
+
   countLegislation: (params: { year?: number; month?: number; date_from?: string; date_to?: string; analyzed?: string }) => {
     const p = new URLSearchParams()
     if (params.year)      p.set('year',      String(params.year))
@@ -122,10 +146,10 @@ export const api = {
     return apiFetch(`/api/legislation/month-counts?${p}`)
   },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false) => {
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false, billType = '', committee = '') => {
     const tagStr = Array.isArray(tag) ? tag.join(',') : tag
     const statusStr = Array.isArray(status) ? status.join(',') : status
-    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}`)
+    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}${billType ? `&bill_type=${encodeURIComponent(billType)}` : ''}${committee ? `&committee=${encodeURIComponent(committee)}` : ''}`)
   },
 
   getSpotlight: (limit = 8) =>
