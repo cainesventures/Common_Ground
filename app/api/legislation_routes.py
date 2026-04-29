@@ -178,6 +178,8 @@ async def list_legislation(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+_tag_counts_cache: dict | None = None
+
 @router.get("/tag-counts")
 async def get_tag_counts(
     q: str = Query('', max_length=200),
@@ -191,9 +193,16 @@ async def get_tag_counts(
     db: Session = Depends(get_db),
 ):
     """Return tag counts scoped to the current filters."""
+    global _tag_counts_cache
     import json
     from collections import Counter
     from sqlalchemy import extract
+
+    # Fast path: unfiltered local/analyzed request — serve from in-memory cache
+    is_unfiltered = not q and not impact and not status and not sponsor and not year and not month
+    if is_unfiltered and level in ("", "local") and analyzed in ("", "true"):
+        if _tag_counts_cache is not None:
+            return _tag_counts_cache
 
     base_query = db.query(Legislation.tags).filter(
         Legislation.tags.isnot(None),
@@ -236,10 +245,15 @@ async def get_tag_counts(
         except Exception:
             pass
 
-    return {
-        "tags": [{"tag": tag, "count": count} for tag, count in counter.most_common()]
-    }
+    result = {"tags": [{"tag": tag, "count": count} for tag, count in counter.most_common()]}
 
+    if is_unfiltered and level in ("", "local") and analyzed in ("", "true"):
+        _tag_counts_cache = result
+
+    return result
+
+
+_year_counts_cache: dict | None = None
 
 @router.get("/year-counts")
 async def get_year_counts(
@@ -252,7 +266,12 @@ async def get_year_counts(
     db: Session = Depends(get_db),
 ):
     """Return bill counts grouped by introduction year, sorted ascending."""
+    global _year_counts_cache
     from sqlalchemy import func, extract
+
+    is_unfiltered = not q and not tag and not impact and not status and not sponsor
+    if is_unfiltered and analyzed in ("", "true") and _year_counts_cache is not None:
+        return _year_counts_cache
 
     base = db.query(
         extract("year", Legislation.introduced_date).label("year"),
@@ -280,7 +299,12 @@ async def get_year_counts(
         base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
 
     rows = base.group_by("year").order_by("year").all()
-    return {"years": [{"year": int(row.year), "count": row.count} for row in rows]}
+    result = {"years": [{"year": int(row.year), "count": row.count} for row in rows]}
+
+    if is_unfiltered and analyzed in ("", "true"):
+        _year_counts_cache = result
+
+    return result
 
 
 @router.get("/month-counts")

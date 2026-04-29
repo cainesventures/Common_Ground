@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { api } from '@/lib/api'
@@ -232,10 +232,10 @@ function DrilldownChart({
   const [yearCounts,  setYearCounts]  = useState<YearCount[]>([])
   const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
 
+  // Year counts: load once — the bar chart is for navigation, not dynamic filter feedback
   useEffect(() => {
-    api.getYearCounts(filters).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
+    api.getYearCounts({ analyzed: 'true' }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!selectedYear) { setMonthCounts([]); return }
@@ -367,21 +367,20 @@ function LegislationPageInner() {
     }
   }, [])
 
+  // Tag counts: load once on mount for sidebar discovery — no need to re-fetch on every filter change
   useEffect(() => {
-    api.getTagCounts({
-      q: query,
-      level: selectedLevel,
-      analyzed: analyzedOnly ? 'true' : '',
-      impact: selectedImpact,
-      status: selectedStatuses.join(',') || undefined,
-      sponsor: selectedSponsor || undefined,
-      year: selectedYear ?? undefined,
-      month: selectedMonth ?? undefined,
-    }).then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
-  }, [query, selectedLevel, analyzedOnly, selectedImpact, selectedStatuses, selectedSponsor, selectedYear, selectedMonth])
+    api.getTagCounts({ level: 'local', analyzed: 'true' })
+      .then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
+  }, [])
 
+  // Debounce bill search — 250ms prevents rapid re-fetches while user is typing or clicking filters
+  const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+    if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
+    fetchTimerRef.current = setTimeout(() => {
+      fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+    }, 250)
+    return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
   }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
 
   useEffect(() => {
