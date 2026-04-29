@@ -60,20 +60,43 @@ def main():
     row = c.fetchone()
     total = row["total"]
 
-    # Perspectives: count bills that have at least the 5 core perspectives
-    # (full relevance check requires loading each bill's tags, so we use core as proxy)
+    # Non-terminal bills are the only ones eligible for perspectives/news
+    TERMINAL = "('signed_into_law','failed','vetoed','withdrawn','tabled')"
+    c.execute(f"""
+        SELECT count(*) as n FROM legislation
+        WHERE source = 'legistar' AND skip_reason IS NULL
+        AND analyzed_at IS NOT NULL
+        AND status NOT IN {TERMINAL}
+        {year_clause}
+    """)
+    non_terminal = c.fetchone()["n"]
+
+    # Perspectives: non-terminal bills with 5+ perspectives
     c.execute(f"""
         SELECT count(*) as has_persp FROM (
             SELECT l.id FROM legislation l
             JOIN bill_perspectives bp ON bp.bill_id = l.id
-            WHERE l.source = 'legistar' {year_clause}
+            WHERE l.source = 'legistar' AND l.skip_reason IS NULL
+            AND l.status NOT IN {TERMINAL}
+            {year_clause}
             GROUP BY l.id
             HAVING count(DISTINCT bp.perspective_type) >= 5
         )
     """)
     has_persp = c.fetchone()["has_persp"]
 
-    # "Fully complete" = text + analyzed + headline + metadata + 17 perspectives
+    # News: non-terminal bills with news fetched
+    c.execute(f"""
+        SELECT count(*) as has_news_active FROM legislation
+        WHERE source = 'legistar' AND skip_reason IS NULL
+        AND analyzed_at IS NOT NULL
+        AND status NOT IN {TERMINAL}
+        AND news_fetched_at IS NOT NULL
+        {year_clause}
+    """)
+    has_news_active = c.fetchone()["has_news_active"]
+
+    # "Fully complete" = text + analyzed + headline + metadata + perspectives (non-terminal only)
     c.execute(f"""
         SELECT count(*) as complete FROM (
             SELECT l.id FROM legislation l
@@ -87,7 +110,10 @@ def main():
               AND l.headline IS NOT NULL
               AND l.lede IS NOT NULL
               AND l.metadata_fetched_at IS NOT NULL
-              AND COALESCE(p.pcount, 0) >= 5
+              AND (
+                l.status IN {TERMINAL}
+                OR COALESCE(p.pcount, 0) >= 5
+              )
               {year_clause}
         )
     """)
@@ -116,8 +142,8 @@ def main():
     print(f"    Analyzed         : {row['analyzed']:>5}  ({pct(row['analyzed'], eligible)})")
     print(f"    Headline/lede    : {row['has_headline']:>5}  ({pct(row['has_headline'], eligible)})")
     print(f"    Metadata         : {row['has_metadata']:>5}  ({pct(row['has_metadata'], eligible)})")
-    print(f"    Perspectives(5+) : {has_persp:>5}  ({pct(has_persp, eligible)})")
-    print(f"    News             : {row['has_news']:>5}  ({pct(row['has_news'], eligible)})")
+    print(f"    Perspectives(5+) : {has_persp:>5}  ({pct(has_persp, non_terminal)}) of {non_terminal} non-terminal")
+    print(f"    News             : {has_news_active:>5}  ({pct(has_news_active, non_terminal)}) of {non_terminal} non-terminal")
     print()
     print(f"  Permanently skipped: {row['skipped']}")
     for sr in skip_rows:
