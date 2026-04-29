@@ -51,7 +51,6 @@ const TAG_PALETTE = [
 ]
 
 const CURRENT_YEAR = new Date().getFullYear()
-const DEFAULT_FROM = CURRENT_YEAR - 3
 
 // ── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -383,111 +382,146 @@ function StatusFunnelChart({
   )
 }
 
-// ── Tag Trends Chart ──────────────────────────────────────────────────────────
+// ── Tag Spark Chart ───────────────────────────────────────────────────────────
 
-function TagTrendsChart({ data, tags }: { data: TagYearRow[]; tags: string[] }) {
-  const [hovered, setHovered] = useState<string | null>(null)
+function TagSparkChart({ tag, data, color }: { tag: string; data: TagYearRow[]; color: string }) {
+  const points = data.map(r => ({ year: r.year, count: (r[tag] as number) ?? 0 }))
+  const maxVal = Math.max(...points.map(p => p.count), 1)
+  const peakCount = maxVal
+  const peakYear = points.find(p => p.count === peakCount)?.year
+
+  // Taller chart with room for value labels above dots and year labels below
+  const W = 600, H = 110, PL = 12, PR = 12, PT = 22, PB = 22
+  const iW = W - PL - PR
+  const iH = H - PT - PB
+  const n = points.length
+  const xPos = (i: number) => PL + (i / Math.max(n - 1, 1)) * iW
+  const yPos = (v: number) => PT + iH - (v / maxVal) * iH
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(p.count)}`).join(' ')
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium capitalize">{tag.replace(/-/g, ' ')} — all years</span>
+        <span className="text-xs text-muted-foreground">
+          peak {peakCount} in {peakYear}
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+        {/* Area fill */}
+        <path
+          d={`${pathD} L ${xPos(n - 1)} ${PT + iH} L ${xPos(0)} ${PT + iH} Z`}
+          fill={color} fillOpacity={0.1}
+        />
+        {/* Line */}
+        <path d={pathD} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Dots + value labels + year labels */}
+        {points.map((p, i) => (
+          <g key={p.year}>
+            {p.count > 0 && (
+              <>
+                <circle cx={xPos(i)} cy={yPos(p.count)} r={3} fill={color} stroke="var(--background)" strokeWidth={1.5} />
+                {/* Value above dot — skip if 0, nudge left/right at edges */}
+                <text
+                  x={xPos(i)}
+                  y={yPos(p.count) - 6}
+                  textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+                  fontSize={8}
+                  fill={color}
+                  fillOpacity={0.85}
+                  fontWeight={p.count === peakCount ? 700 : 400}
+                >
+                  {p.count}
+                </text>
+              </>
+            )}
+            {/* Year label below */}
+            <text
+              x={xPos(i)}
+              y={H - 4}
+              textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+              fontSize={8}
+              fill="currentColor"
+              fillOpacity={0.4}
+            >
+              {p.year}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+// ── Tag Trends Chart ──────────────────────────────────────────────────────────
+// Shows top tags for the currently selected year as horizontal bars.
+// Click a tag to filter the status chart and see its full history spark.
+
+function TagTrendsChart({
+  year, data, tags, selectedTag, onTagClick,
+}: {
+  year: number
+  data: TagYearRow[]
+  tags: string[]
+  selectedTag: string
+  onTagClick: (tag: string) => void
+}) {
+  const row = data.find(r => r.year === year)
+  const items = tags
+    .map((tag, i) => ({ tag, count: row?.[tag] ?? 0, color: TAG_PALETTE[i % TAG_PALETTE.length] }))
+    .filter(t => t.count > 0)
+    .sort((a, b) => b.count - a.count)
 
   if (!data.length) return (
     <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading...</div>
   )
 
-  const maxVal = Math.max(...data.flatMap(row => tags.map(t => row[t] ?? 0)), 1)
+  if (!items.length) return (
+    <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">No tag data for {year}.</div>
+  )
+
+  const maxVal = items[0].count
+  const selectedItem = items.find(t => t.tag === selectedTag)
 
   return (
-    <div className="space-y-3">
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3">
-        {tags.map((tag, i) => (
+    <div className="space-y-1.5">
+      {items.map(({ tag, count, color }) => {
+        const isSelected = selectedTag === tag
+        return (
           <button
             key={tag}
-            className="flex items-center gap-1.5 text-xs transition-opacity"
-            style={{ opacity: hovered && hovered !== tag ? 0.4 : 1 }}
-            onMouseEnter={() => setHovered(tag)}
-            onMouseLeave={() => setHovered(null)}
+            onClick={() => onTagClick(tag)}
+            className={`w-full flex items-center gap-3 rounded-md px-1 py-0.5 transition-colors ${
+              isSelected ? 'bg-muted' : 'hover:bg-muted/50'
+            }`}
           >
-            <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: TAG_PALETTE[i % TAG_PALETTE.length] }} />
-            <span className="text-muted-foreground capitalize">{tag.replace(/-/g, ' ')}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Grouped bars by year */}
-      <div className="flex items-end gap-3" style={{ height: 200 }}>
-        {data.map(row => (
-          <div key={row.year} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-            <div className="w-full flex items-end gap-px" style={{ height: 180 }}>
-              {tags.map((tag, i) => {
-                const val = row[tag] ?? 0
-                const barH = Math.max((val / maxVal) * 160, val > 0 ? 2 : 0)
-                return (
-                  <div
-                    key={tag}
-                    className="flex-1 rounded-t-sm transition-all"
-                    style={{
-                      height: barH,
-                      backgroundColor: TAG_PALETTE[i % TAG_PALETTE.length],
-                      opacity: hovered && hovered !== tag ? 0.2 : 1,
-                      transition: 'opacity 150ms ease',
-                    }}
-                    title={`${row.year} — ${tag.replace(/-/g, ' ')}: ${val.toLocaleString()}`}
-                  />
-                )
-              })}
+            <div className={`w-28 shrink-0 text-xs text-right capitalize truncate ${isSelected ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+              {tag.replace(/-/g, ' ')}
             </div>
-            <span className="text-xs text-muted-foreground tabular-nums">{row.year}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
+            <div className="flex-1 h-5 rounded-sm overflow-hidden bg-muted/40">
+              <div
+                className="h-full rounded-sm transition-all duration-300"
+                style={{
+                  width: `${(count / maxVal) * 100}%`,
+                  backgroundColor: color,
+                  opacity: selectedTag && !isSelected ? 0.4 : 1,
+                }}
+              />
+            </div>
+            <div className={`w-10 shrink-0 text-xs tabular-nums text-right ${isSelected ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+              {count}
+            </div>
+          </button>
+        )
+      })}
 
-// ── Year Range Picker ─────────────────────────────────────────────────────────
-
-function YearRangePicker({
-  fromYear, toYear, allFrom, onChange,
-}: {
-  fromYear: number
-  toYear: number
-  allFrom: number
-  onChange: (from: number, to: number) => void
-}) {
-  const expanded = fromYear <= allFrom + 2
-
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      <span className="text-muted-foreground">Showing</span>
-      <select
-        value={fromYear}
-        onChange={e => onChange(Number(e.target.value), toYear)}
-        className="rounded border bg-background px-2 py-1 text-sm"
-      >
-        {Array.from({ length: toYear - allFrom + 1 }, (_, i) => allFrom + i).map(y => (
-          <option key={y} value={y}>{y}</option>
-        ))}
-      </select>
-      <span className="text-muted-foreground">–</span>
-      <span className="font-medium">{toYear}</span>
-      {!expanded && (
-        <button
-          onClick={() => onChange(allFrom, toYear)}
-          className="text-xs text-primary hover:underline ml-1"
-        >
-          Show all years ({allFrom}–{toYear})
-        </button>
-      )}
-      {expanded && fromYear > allFrom && (
-        <button
-          onClick={() => onChange(CURRENT_YEAR - 3, toYear)}
-          className="text-xs text-muted-foreground hover:text-foreground ml-1"
-        >
-          ← Last 4 years
-        </button>
+      {selectedItem && (
+        <TagSparkChart tag={selectedItem.tag} data={data} color={selectedItem.color} />
       )}
     </div>
   )
 }
+
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -498,30 +532,27 @@ export default function InsightsPage() {
   const [tagData, setTagData]           = useState<TagYearRow[]>([])
   const [tags, setTags]                 = useState<string[]>([])
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
-  const [fromYear, setFromYear]         = useState(DEFAULT_FROM)
-  const [toYear]                        = useState(CURRENT_YEAR)
-  const [allFrom, setAllFrom]           = useState(DEFAULT_FROM)
   const [tagFilter, setTagFilter]       = useState('')
+  const [selectedTag, setSelectedTag]   = useState('')
 
   const loadStatusData = useCallback(() => {
     api.getInsightsStatusByYear({ tag: tagFilter || undefined })
       .then(d => {
         if (!d) return
         setStatusData(d.years ?? [])
-        if (d.all_from_year) setAllFrom(d.all_from_year)
       })
       .catch(() => {})
   }, [tagFilter])
 
   const loadTagData = useCallback(() => {
-    api.getInsightsTagByYear({ from_year: fromYear, to_year: toYear, top_n: 10 })
+    api.getInsightsTagByYear({ top_n: 10 })
       .then(d => {
         if (!d) return
         setTagData(d.years ?? [])
         setTags(d.tags ?? [])
       })
       .catch(() => {})
-  }, [fromYear, toYear])
+  }, [])
 
   useEffect(() => {
     api.getInsightsSummary().then(d => d && setSummary(d)).catch(() => {})
@@ -532,6 +563,12 @@ export default function InsightsPage() {
 
   const handleYearChange = (year: number) => {
     setSelectedYear(year)
+  }
+
+  const handleTagClick = (tag: string) => {
+    const next = selectedTag === tag ? '' : tag
+    setSelectedTag(next)
+    setTagFilter(next)
   }
 
   const handleDrillDown = () => {
@@ -566,22 +603,20 @@ export default function InsightsPage() {
 
       {/* Status funnel */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-lg font-semibold">Bill Status by Year</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              See how bills flow through the legislative process — and where they get stuck.
-            </p>
+            {selectedTag && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted border">
+                <span className="capitalize">{selectedTag.replace(/-/g, ' ')}</span>
+                <button onClick={() => handleTagClick(selectedTag)} className="text-muted-foreground hover:text-foreground ml-0.5">×</button>
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="Filter by tag…"
-              value={tagFilter}
-              onChange={e => setTagFilter(e.target.value)}
-              className="rounded border bg-background px-2 py-1 text-sm w-36"
-            />
-          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            See how bills flow through the legislative process — and where they get stuck.
+            {!selectedTag && ' Click a tag below to filter.'}
+          </p>
         </div>
 
         <StatusFunnelChart
@@ -601,20 +636,19 @@ export default function InsightsPage() {
       {/* Tag trends */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">Top Issues by Year</h2>
+          <h2 className="text-lg font-semibold">Top Issues — {selectedYear ?? statusData[statusData.length - 1]?.year}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Which topics dominated each council session.
+            Click a tag to filter the status chart above and see its full history.
           </p>
         </div>
 
-        <YearRangePicker
-          fromYear={fromYear}
-          toYear={toYear}
-          allFrom={allFrom}
-          onChange={(f) => { setFromYear(f) }}
+        <TagTrendsChart
+          year={selectedYear ?? statusData[statusData.length - 1]?.year ?? CURRENT_YEAR}
+          data={tagData}
+          tags={tags}
+          selectedTag={selectedTag}
+          onTagClick={handleTagClick}
         />
-
-        <TagTrendsChart data={tagData} tags={tags} />
       </div>
 
     </div>

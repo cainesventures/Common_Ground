@@ -112,7 +112,7 @@ async def get_tag_by_year(
     import json
 
     current_year = datetime.utcnow().year
-    effective_from = from_year if from_year else current_year - 3
+    effective_from = from_year if from_year else 2000
     effective_to   = to_year   if to_year   else current_year
 
     bills = (

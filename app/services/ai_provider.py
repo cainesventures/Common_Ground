@@ -27,6 +27,10 @@ class OllamaProvider(AIProvider):
     def __init__(self, base_url: str, model: str):
         self.base_url = base_url.rstrip("/")
         self.model = model
+        # Shared connection pool across all calls — avoids creating a new TCP
+        # connection (and httpx transport) for every perspective generation.
+        import httpx
+        self._client = httpx.Client(timeout=120, limits=httpx.Limits(max_connections=30, max_keepalive_connections=10))
 
     def _ensure_running(self) -> None:
         """Start Ollama if it's not reachable, then wait until ready."""
@@ -68,19 +72,20 @@ class OllamaProvider(AIProvider):
         payload = {
             "model": self.model,
             "stream": False,
+            "keep_alive": "5m",  # release model from RAM 5 min after last use
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         }
         try:
-            r = httpx.post(url, json=payload, timeout=120)
+            r = self._client.post(url, json=payload)
             r.raise_for_status()
             return r.json()["message"]["content"]
         except (httpx.ConnectError, httpx.ConnectTimeout):
             # Ollama not running — start it and retry once
             self._ensure_running()
-            r = httpx.post(url, json=payload, timeout=120)
+            r = self._client.post(url, json=payload)
             r.raise_for_status()
             return r.json()["message"]["content"]
 
@@ -133,8 +138,13 @@ class OpenAIProvider(AIProvider):
         return r.json()["choices"][0]["message"]["content"]
 
 
+_provider_instance: AIProvider | None = None
+
 def get_ai_provider() -> AIProvider:
-    """Return the configured AI provider based on env vars."""
+    """Return the configured AI provider (singleton — one instance per process)."""
+    global _provider_instance
+    if _provider_instance is not None:
+        return _provider_instance
     from app.config import get_settings
     s = get_settings()
 
@@ -145,12 +155,13 @@ def get_ai_provider() -> AIProvider:
 
     if provider == "ollama":
         logger.debug(f"AI provider: Ollama ({base_url}, model={model})")
-        return OllamaProvider(base_url=base_url, model=model)
+        _provider_instance = OllamaProvider(base_url=base_url, model=model)
     elif provider == "claude":
         logger.debug(f"AI provider: Claude (model={model})")
-        return ClaudeProvider(api_key=api_key, model=model)
+        _provider_instance = ClaudeProvider(api_key=api_key, model=model)
     elif provider == "openai":
         logger.debug(f"AI provider: OpenAI-compatible (base_url={base_url}, model={model})")
-        return OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
+        _provider_instance = OpenAIProvider(api_key=api_key, model=model, base_url=base_url)
     else:
         raise ValueError(f"Unknown AI_PROVIDER={provider!r}. Must be 'ollama', 'claude', or 'openai'.")
+    return _provider_instance

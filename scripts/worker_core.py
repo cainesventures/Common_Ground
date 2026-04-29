@@ -88,18 +88,30 @@ def run_worker(
         # have fewer perspectives than needed — avoids burning the whole batch on
         # unanalyzed bills that silently return "complete".
         if allowed_steps == ["perspectives"]:
+            from sqlalchemy import or_
             q = (
                 q.filter(Legislation.analyzed_at.isnot(None))
                 .filter(~Legislation.status.in_(TERMINAL_STATUSES))
                 .filter(
-                    ~Legislation.supplementary_data.contains('"perspectives_complete": true')
+                    or_(
+                        Legislation.supplementary_data.is_(None),
+                        ~Legislation.supplementary_data.contains('"perspectives_complete": true'),
+                    )
                 )
             )
 
-        # For general workers, prioritize bills that still need text fetched so
-        # the batch isn't dominated by already-complete bills.
+        # For general workers, include bills that still need any enrichment step
+        # so already-complete bills don't crowd out the batch.
         if "text" in allowed_steps:
-            q = q.filter(Legislation.full_text.is_(None))
+            from sqlalchemy import or_
+            q = q.filter(
+                or_(
+                    Legislation.full_text.is_(None),
+                    Legislation.analyzed_at.is_(None),
+                    Legislation.headline.is_(None),
+                    Legislation.lede.is_(None),
+                )
+            )
 
         bill_ids = [
             row[0] for row in q.order_by(
@@ -174,11 +186,16 @@ def process_bill(
         needs_analyze = bool(bill.full_text) and not bill.analyzed_at
         needs_headline = bool(bill.analyzed_at) and (not bill.headline or not bill.lede)
         needs_metadata = is_legistar and not bill.metadata_fetched_at
+        _persp_count = _perspective_count(bill, db)
+        _persp_needed = _relevant_perspective_count(bill)
         needs_perspectives = (
             bool(bill.analyzed_at)
             and bill.status not in TERMINAL_STATUSES
-            and _perspective_count(bill, db) < _relevant_perspective_count(bill)
+            and _persp_count < _persp_needed
         )
+        # Stamp complete if already has enough perspectives but wasn't stamped yet
+        if bool(bill.analyzed_at) and not needs_perspectives and bill.status not in TERMINAL_STATUSES and _persp_count >= _persp_needed:
+            _mark_perspectives_complete(bill, db)
         needs_news = (
             bool(bill.analyzed_at)
             and not bill.news_fetched_at
