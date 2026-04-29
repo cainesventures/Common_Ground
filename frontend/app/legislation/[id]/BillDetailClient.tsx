@@ -610,22 +610,22 @@ export default function BillDetailClient() {
   const loggedIn = isLoggedIn()
 
   const loadData = useCallback(() => {
+    // Phase 1: load bill (includes perspectives + vote_records inline)
     Promise.all([
       api.getLegislation(id),
       api.getCouncilmembers().catch(() => ({ members: [] })),
       loggedIn ? api.getTrackedBillIds().catch(() => ({ ids: [] })) : Promise.resolve({ ids: [] }),
       loggedIn ? api.getMe().catch(() => null) : Promise.resolve(null),
-      api.getRollCall(id).catch(() => ({ data: [] })),
-      api.getPerspectives(id).catch(() => ({ perspectives: [] })),
     ])
-      .then(([legData, cmData, trackData, meData, rollCallData, perspData]) => {
+      .then(([legData, cmData, trackData, meData]) => {
         const bill = legData?.data ?? null
         setLeg(bill)
         setMembers(cmData?.members ?? [])
         setTracked((trackData?.ids ?? []).includes(id))
         setIsAdmin(meData?.user?.subscription_tier === 'dev')
-        setRollCallCount((rollCallData?.data ?? []).length)
-        setPerspectivesCount((perspData?.perspectives ?? []).length)
+        // perspectives and roll call count come from getLegislation now
+        setPerspectivesCount((bill?.perspectives ?? []).length)
+        setRollCallCount((bill?.vote_records?.length ?? 0))
         if (bill) {
           posthog?.capture('bill_viewed', {
             bill_id: id,
@@ -997,7 +997,7 @@ export default function BillDetailClient() {
           <RollCallSection legislationId={id} />
           <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} />
           <RepVoteCallout legislationId={id} members={members} yourVote={yourVote} />
-          <CombinedSentimentBar billId={id} voteCounts={voteCounts} />
+          <CombinedSentimentBar perspectives={leg?.perspectives ?? []} voteCounts={voteCounts} />
         </div>
       )}
 
@@ -1234,20 +1234,15 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
 
 // ── Combined Sentiment Bar ────────────────────────────────────────────────────
 
-function CombinedSentimentBar({ billId, voteCounts }: { billId: string; voteCounts: Record<string, number> }) {
-  const [perspCounts, setPerspCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
-
-  useEffect(() => {
-    api.getPerspectives(billId).then((perspData) => {
-      const perspectives: { position: string }[] = perspData?.perspectives ?? []
-      const p = { support: 0, neutral: 0, oppose: 0 } as Record<string, number>
-      for (const persp of perspectives) {
-        const pos = persp.position === 'mixed' ? 'neutral' : persp.position
-        if (pos in p) p[pos]++
-      }
-      setPerspCounts(p)
-    }).catch(() => {})
-  }, [billId])
+function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { perspectives: { position: string }[]; voteCounts: Record<string, number> }) {
+  const perspCounts = (() => {
+    const p = { support: 0, neutral: 0, oppose: 0 } as Record<string, number>
+    for (const persp of perspectivesProp ?? []) {
+      const pos = persp.position === 'mixed' ? 'neutral' : persp.position
+      if (pos in p) p[pos]++
+    }
+    return p
+  })()
 
   const totals = {
     support: (voteCounts.support ?? 0) + perspCounts.support,

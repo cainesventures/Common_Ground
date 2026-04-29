@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional, List
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Float, Integer, Boolean, Enum, UniqueConstraint
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Float, Integer, Boolean, Enum, UniqueConstraint, Index
 from sqlalchemy.orm import declarative_base, relationship
 from enum import Enum as PyEnum
 
@@ -89,6 +89,16 @@ class Legislation(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_legislation_level_date", "level", "introduced_date"),
+        Index("ix_legislation_status", "status"),
+        Index("ix_legislation_impact_level", "impact_level"),
+        Index("ix_legislation_bill_type", "bill_type"),
+        Index("ix_legislation_city", "city"),
+        Index("ix_legislation_analyzed_at", "analyzed_at"),
+        Index("ix_legislation_sponsor", "sponsor"),
+    )
 
 
 class BillPerspective(Base):

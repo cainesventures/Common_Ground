@@ -2470,14 +2470,30 @@ async def get_legislation(
 ):
     """Get detailed information about specific legislation."""
     try:
+        from sqlalchemy.orm import selectinload as _sil
         leg = (
             db.query(Legislation)
-            .options(joinedload(Legislation.perspectives))
+            .options(
+                joinedload(Legislation.perspectives),
+                _sil(Legislation.vote_records),
+            )
             .filter(Legislation.id == legislation_id)
             .first()
         )
         if not leg:
             raise HTTPException(status_code=404, detail="Legislation not found")
+
+        perspectives_data = [
+            {
+                "id": p.id,
+                "perspective_type": p.perspective_type,
+                "position": p.position,
+                "key_arguments": p.key_arguments,
+                "concerns": p.concerns,
+                "assessment": p.assessment,
+            }
+            for p in leg.perspectives
+        ]
 
         return {
             "success": True,
@@ -2488,12 +2504,17 @@ async def get_legislation(
                 "description": leg.description,
                 "full_text": leg.full_text,
                 "sponsor": leg.sponsor,
+                "co_sponsors": leg.co_sponsors,
+                "committee": leg.committee,
                 "status": leg.status,
                 "source": leg.source,
                 "level": leg.level,
                 "introduced_date": leg.introduced_date,
+                "final_date": leg.final_date.isoformat() if leg.final_date else None,
                 "external_url": leg.external_url,
                 "plain_title": leg.plain_title,
+                "headline": leg.headline,
+                "lede": leg.lede,
                 "summary": leg.summary,
                 "impact_score": leg.impact_score,
                 "impact_level": leg.impact_level,
@@ -2507,6 +2528,8 @@ async def get_legislation(
                 "next_hearing_body":     leg.next_hearing_body,
                 "next_hearing_location": leg.next_hearing_location,
                 "next_hearing_url":      leg.next_hearing_url,
+                "perspectives": perspectives_data,
+                "perspective_count": len(perspectives_data),
             }
         }
     except HTTPException:

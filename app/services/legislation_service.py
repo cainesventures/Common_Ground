@@ -466,8 +466,16 @@ class LegislationIngestionService:
                 ~_exists().where(BillPerspective.bill_id == Legislation.id)
             )
         total = base_query.count()
+        from sqlalchemy.orm import defer, selectinload
         results = (
             base_query
+            # Defer the large text columns not needed in list view
+            .options(
+                defer(Legislation.full_text),
+                defer(Legislation.description),
+                defer(Legislation.supplementary_data),
+                selectinload(Legislation.perspectives),
+            )
             .order_by(Legislation.introduced_date.desc())
             .offset(offset)
             .limit(limit)
