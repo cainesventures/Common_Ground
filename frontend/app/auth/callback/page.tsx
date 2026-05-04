@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { setToken } from '@/lib/auth'
 import posthog from 'posthog-js'
 import { api } from '@/lib/api'
+import Link from 'next/link'
 
 function AuthCallbackInner() {
   const router = useRouter()
@@ -12,6 +13,10 @@ function AuthCallbackInner() {
   const [error, setError] = useState(false)
 
   useEffect(() => {
+    if (params.get('error')) {
+      setError(true)
+      return
+    }
     const token = params.get('token')
     if (!token) {
       setError(true)
@@ -30,9 +35,15 @@ function AuthCallbackInner() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
-        <p className="text-destructive font-medium">Sign-in failed — no token received.</p>
-        <a href="/" className="text-sm text-primary hover:underline">Return to home</a>
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-4 gap-4">
+        <p className="text-2xl">🔒</p>
+        <h1 className="text-xl font-semibold">Sign-in unavailable</h1>
+        <p className="text-muted-foreground max-w-sm text-sm">
+          Open Common Ground is currently in early access. Sign-in will be available to everyone shortly — check back soon.
+        </p>
+        <Link href="/" className="text-sm text-primary hover:underline">
+          Browse legislation without signing in →
+        </Link>
       </div>
     )
   }

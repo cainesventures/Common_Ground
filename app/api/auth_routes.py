@@ -71,6 +71,8 @@ async def google_callback(
     """Exchange the Google auth code for a JWT and create/update the User row."""
     settings = get_settings()
 
+    frontend = settings.frontend_url.rstrip('/')
+
     # Exchange code for access token
     async with httpx.AsyncClient(timeout=15.0) as client:
         token_resp = await client.post(
@@ -85,7 +87,7 @@ async def google_callback(
         )
         if token_resp.status_code != 200:
             logger.error(f"Google token exchange failed: {token_resp.text}")
-            raise HTTPException(status_code=400, detail="Google OAuth token exchange failed")
+            return RedirectResponse(url=f"{frontend}/auth/callback?error=signin_failed")
 
         access_token = token_resp.json().get("access_token")
 
@@ -95,14 +97,14 @@ async def google_callback(
             headers={"Authorization": f"Bearer {access_token}"},
         )
         if info_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch user info from Google")
+            return RedirectResponse(url=f"{frontend}/auth/callback?error=signin_failed")
 
         info = info_resp.json()
 
     google_id = info.get("sub")
     email = info.get("email")
     if not google_id or not email:
-        raise HTTPException(status_code=400, detail="Google did not return a user ID or email")
+        return RedirectResponse(url=f"{frontend}/auth/callback?error=signin_failed")
 
     # Upsert User
     user = db.query(User).filter(User.google_id == google_id).first()
