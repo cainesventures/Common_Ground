@@ -3,7 +3,9 @@
 import logging
 import sys
 import time
-from fastapi import FastAPI, Depends, HTTPException, Request
+import os
+import shutil
+from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -129,6 +131,23 @@ async def health_ai():
         return {"status": "ok", "provider": type(provider).__name__}
     except Exception as e:
         return {"status": "error", "provider": type(get_ai_provider()).__name__ if True else "", "reason": str(e)}
+
+
+@app.post("/admin/seed-db")
+async def seed_db(
+    file: UploadFile = File(...),
+    x_upload_key: str = Header(...),
+):
+    """One-time endpoint to upload the SQLite DB to the volume. Remove after use."""
+    if x_upload_key != settings.jwt_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    db_path = settings.database_url.replace("sqlite:///", "")
+    tmp_path = db_path + ".tmp"
+    with open(tmp_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    os.replace(tmp_path, db_path)
+    size_mb = os.path.getsize(db_path) / 1024 / 1024
+    return {"status": "ok", "path": db_path, "size_mb": round(size_mb, 1)}
 
 
 if __name__ == "__main__":
