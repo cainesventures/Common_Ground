@@ -90,6 +90,7 @@ const VOTE_COLORS: Record<string, string> = {
 }
 
 function RollCallSection({ legislationId }: { legislationId: string }) {
+  const { city } = useParams<{ city: string }>()
   const [records, setRecords] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -134,7 +135,7 @@ function RollCallSection({ legislationId }: { legislationId: string }) {
           <div key={r.voter_name} className="flex items-center justify-between text-xs border rounded px-2 py-1">
             <span className="truncate text-foreground/80">
               {r.councilmember_id
-                ? <a href={`/councilmembers/${r.councilmember_id}`} className="hover:underline hover:text-primary">{formatVoterName(r.voter_name)}</a>
+                ? <a href={`/${city}/councilmembers/${r.councilmember_id}`} className="hover:underline hover:text-primary">{formatVoterName(r.voter_name)}</a>
                 : formatVoterName(r.voter_name)
               }
             </span>
@@ -167,6 +168,7 @@ function RepVoteCallout({ legislationId, members, yourVote }: {
   members: any[]
   yourVote: string | null
 }) {
+  const { city } = useParams<{ city: string }>()
   const [repVote, setRepVote]   = useState<string | null>(null)
   const [repName, setRepName]   = useState<string | null>(null)
   const [repId, setRepId]       = useState<string | null>(null)
@@ -219,7 +221,7 @@ function RepVoteCallout({ legislationId, members, yourVote }: {
         </p>
         <p className={`mt-0.5 ${agree ? 'text-green-800 dark:text-green-400' : 'text-amber-800 dark:text-amber-400'}`}>
           You <span className="font-medium capitalize">{yourVote}d</span> this bill.{' '}
-          <Link href={`/councilmembers/${repId}`} className="font-medium hover:underline">
+          <Link href={`/${city}/councilmembers/${repId}`} className="font-medium hover:underline">
             {repName}
           </Link>{' '}
           voted <span className="font-medium">{repVote}</span>.
@@ -464,6 +466,7 @@ function StatusTimeline({ status }: { status: string }) {
 // ── Related bills ─────────────────────────────────────────────────────────────
 
 function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[]; sponsor?: string }) {
+  const { city } = useParams<{ city: string }>()
   const [bills, setBills] = useState<any[]>([])
 
   useEffect(() => {
@@ -508,7 +511,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
         {bills.map((b) => (
           <Link
             key={b.id}
-            href={`/legislation/${b.id}`}
+            href={`/${city}/legislation/${b.id}`}
             className="flex items-start gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all group"
           >
             <div className="flex-1 min-w-0">
@@ -531,6 +534,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
 }
 
 function SponsorLinks({ sponsor, members }: { sponsor: string; members: any[] }) {
+  const { city } = useParams<{ city: string }>()
   if (!sponsor) return null
   // Split multiple sponsors by comma
   const parts = sponsor.split(',').map((s) => s.trim()).filter(Boolean)
@@ -545,7 +549,7 @@ function SponsorLinks({ sponsor, members }: { sponsor: string; members: any[] })
           <span key={i}>
             {i > 0 && ', '}
             {match ? (
-              <Link href={`/councilmembers/${match.id}`} className="hover:underline text-foreground">
+              <Link href={`/${city}/councilmembers/${match.id}`} className="hover:underline text-foreground">
                 {part}
               </Link>
             ) : (
@@ -579,7 +583,7 @@ const TABS: { key: TabKey; label: string }[] = [
 ]
 
 export default function BillDetailClient() {
-  const { id } = useParams<{ id: string }>()
+  const { city, id } = useParams<{ city: string; id: string }>()
   const searchParams = useSearchParams()
   const [leg, setLeg] = useState<any>(null)
   const [members, setMembers] = useState<any[]>([])
@@ -691,7 +695,7 @@ export default function BillDetailClient() {
 
       {/* Back navigation */}
       <Link
-        href="/legislation"
+        href={`/${city}/legislation`}
         className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 20 20" fill="currentColor">
@@ -1070,7 +1074,7 @@ export default function BillDetailClient() {
       {/* Admin floating panel — always visible */}
       {isAdmin && <AdminFloatingPanel billId={id} leg={leg} onRefresh={loadData} />}
 
-      <Link href="/legislation" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <Link href={`/${city}/legislation`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
         ← All legislation
       </Link>
     </div>

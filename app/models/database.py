@@ -1,20 +1,27 @@
 """Database connection and session management."""
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from app.config import get_settings
 
 settings = get_settings()
 
-# Create database engine
+# SQLite uses NullPool; Postgres uses the default pool
+_is_sqlite = settings.database_url.startswith("sqlite")
 engine = create_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
-    pool_size=30,
-    max_overflow=10,
-    pool_timeout=60,
+    **({} if _is_sqlite else {"pool_size": 30, "max_overflow": 10, "pool_timeout": 60}),
 )
+
+
+@event.listens_for(engine, "connect")
+def set_sqlite_pragmas(dbapi_conn, _):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
 
 # Create session factory
 SessionLocal = sessionmaker(

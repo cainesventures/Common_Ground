@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MultiSelect } from '@/components/ui/multi-select'
@@ -292,6 +292,7 @@ export default function LegislationPage() {
 
 function LegislationPageInner() {
   const searchParams = useSearchParams()
+  const { city } = useParams<{ city: string }>()
   const posthog = usePostHog()
 
   // Initialize filter state from URL on first render
@@ -933,7 +934,7 @@ function LegislationPageInner() {
       {!loading && !error && bills.length > 0 && (
         <div className="space-y-2">
           {bills.map((bill) => (
-            <BillCard key={bill.id} bill={bill} query={query} tab={hasPerspectivesOnly ? 'perspectives' : undefined} />
+            <BillCard key={bill.id} bill={bill} query={query} tab={hasPerspectivesOnly ? 'perspectives' : undefined} citySlug={city} />
           ))}
         </div>
       )}

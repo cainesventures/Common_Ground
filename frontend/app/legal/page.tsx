@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Legal & Disclaimer — Common Ground',
-  description: 'Disclaimer, data sources, and privacy information for Common Ground.',
+  title: 'Legal & Disclaimer — Open Common Ground',
+  description: 'Disclaimer, data sources, and privacy information for Open Common Ground.',
 }
 
 export default function LegalPage() {
@@ -11,7 +11,7 @@ export default function LegalPage() {
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold mb-1">Legal &amp; Disclaimer</h1>
-        <p className="text-sm text-muted-foreground">Last updated: April 2026</p>
+        <p className="text-sm text-muted-foreground">Last updated: May 2026</p>
       </div>
 
       <section className="space-y-3">
@@ -45,8 +45,9 @@ export default function LegalPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold">No Government Affiliation</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Common Ground is an independent civic technology project. It is not affiliated with, endorsed by, or operated by
-          Philadelphia City Council, the City of Philadelphia, or any government agency or official.
+          Open Common Ground is an independent civic technology project operated by Caines Ventures LLC.
+          It is not affiliated with, endorsed by, or operated by Philadelphia City Council, the City of Philadelphia,
+          or any government agency or official.
         </p>
       </section>
 
@@ -66,13 +67,31 @@ export default function LegalPage() {
           for anonymous product analytics to understand how the site is used and improve it.
           You can opt out of analytics by enabling Do Not Track in your browser.
         </p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          To request deletion of your account and associated data, email{' '}
+          <a href="mailto:hello@opencommonground.com" className="underline hover:text-foreground transition-colors">
+            hello@opencommonground.com
+          </a>{' '}
+          with the subject line &ldquo;Delete my account.&rdquo; We will process your request within 30 days.
+        </p>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Limitation of Liability</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Common Ground is provided &ldquo;as is&rdquo; without warranty of any kind. We are not liable for any damages
+          Open Common Ground is provided &ldquo;as is&rdquo; without warranty of any kind. We are not liable for any damages
           arising from your use of this site, reliance on AI-generated content, or inaccuracies in the underlying data.
+        </p>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Contact</h2>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Questions or concerns? Email{' '}
+          <a href="mailto:hello@opencommonground.com" className="underline hover:text-foreground transition-colors">
+            hello@opencommonground.com
+          </a>
+          .
         </p>
       </section>
 

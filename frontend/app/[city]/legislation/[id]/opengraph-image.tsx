@@ -18,7 +18,7 @@ const IMPACT_COLORS: Record<string, { bg: string; text: string; dot: string }> =
   low:    { bg: '#f0fdf4', text: '#166534', dot: '#22c55e' },
 }
 
-export default async function OGImage({ params }: { params: Promise<{ id: string }> }) {
+export default async function OGImage({ params }: { params: Promise<{ city: string; id: string }> }) {
   const { id } = await params
 
   let title = 'Philadelphia City Council Bill'
@@ -71,7 +71,7 @@ export default async function OGImage({ params }: { params: Promise<{ id: string
               background: '#2563eb',
             }} />
             <span style={{ fontSize: '20px', fontWeight: 700, color: '#1e40af', letterSpacing: '-0.5px' }}>
-              Common Ground
+              Open Common Ground
             </span>
           </div>
           {billNumber && (

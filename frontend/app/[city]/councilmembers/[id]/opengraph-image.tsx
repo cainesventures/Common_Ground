@@ -4,7 +4,7 @@ export const runtime = 'edge'
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
-export default async function Image({ params }: { params: Promise<{ id: string }> }) {
+export default async function Image({ params }: { params: Promise<{ city: string; id: string }> }) {
   const { id } = await params
 
   let name = 'Philadelphia City Councilmember'
@@ -43,7 +43,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
       >
         {/* Top: site name */}
         <div style={{ color: '#93c5fd', fontSize: '16px', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          Common Ground · Philadelphia City Council
+          Open Common Ground · Philadelphia City Council
         </div>
 
         {/* Middle: name + meta */}
@@ -72,7 +72,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
 
         {/* Bottom: tagline */}
         <div style={{ color: '#475569', fontSize: '16px' }}>
-          Track votes, sponsored bills, and constituent approval · commonground.philly
+          Track votes, sponsored bills, and constituent approval · opencommonground.com
         </div>
       </div>
     ),

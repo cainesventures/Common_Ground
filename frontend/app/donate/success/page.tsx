@@ -7,7 +7,7 @@ import { api } from '@/lib/api'
 
 const IMPACT: Record<number, string> = {
   5:   'Funds AI analysis for ~5 City Council bills',
-  10:  'Keeps Common Ground running for a week',
+  10:  'Keeps Open Common Ground running for a week',
   20:  'Generates perspectives on a full batch of new bills',
   50:  'Covers a month of hosting and data costs',
   100: 'Keeps the project independent and ad-free for a month',
@@ -35,8 +35,8 @@ function SuccessContent() {
       .finally(() => setLoading(false))
   }, [sessionId])
 
-  const shareText = `I just supported Common Ground — a free civic tool that tracks every Philadelphia City Council bill in plain English. Check it out:`
-  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://commonground.philly'
+  const shareText = `I just supported Open Common Ground — a free civic tool that tracks every Philadelphia City Council bill in plain English. Check it out:`
+  const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://opencommonground.com'
 
   return (
     <div className="max-w-lg mx-auto py-16 px-4 text-center">
@@ -57,8 +57,8 @@ function SuccessContent() {
       {!loading && (
         <p className="text-muted-foreground text-base leading-relaxed mb-8 max-w-sm mx-auto">
           {amount
-            ? `${getImpact(amount)}. Every contribution keeps Common Ground free and independent for all Philadelphians.`
-            : 'Your contribution keeps Common Ground free and independent for all Philadelphians.'}
+            ? `${getImpact(amount)}. Every contribution keeps Open Common Ground free and independent for all Philadelphians.`
+            : 'Your contribution keeps Open Common Ground free and independent for all Philadelphians.'}
         </p>
       )}
 
@@ -112,7 +112,7 @@ function SuccessContent() {
 
       <p className="text-xs text-muted-foreground mt-8">
         A receipt has been sent to your email by Stripe. Questions? Email us at{' '}
-        <a href="mailto:hello@commonground.philly" className="underline hover:text-foreground">hello@commonground.philly</a>.
+        <a href="mailto:hello@opencommonground.com" className="underline hover:text-foreground">hello@opencommonground.com</a>.
       </p>
     </div>
   )

@@ -4,6 +4,16 @@ import { withSentryConfig } from "@sentry/nextjs";
 const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      { source: '/legislation',              destination: '/philadelphia/legislation',              permanent: true },
+      { source: '/legislation/:id',          destination: '/philadelphia/legislation/:id',          permanent: true },
+      { source: '/insights',                 destination: '/philadelphia/insights',                 permanent: true },
+      { source: '/councilmembers',           destination: '/philadelphia/councilmembers',           permanent: true },
+      { source: '/councilmembers/:id',       destination: '/philadelphia/councilmembers/:id',       permanent: true },
+      { source: '/my-bills',                 destination: '/philadelphia/my-bills',                 permanent: true },
+    ]
+  },
   async rewrites() {
     return [
       {

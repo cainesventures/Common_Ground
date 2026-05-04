@@ -6,10 +6,13 @@ import time
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.database import init_db, get_db
+from app.rate_limit import limiter
 from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes, insights_routes
 
 settings = get_settings()
@@ -46,12 +49,14 @@ if settings.sentry_dsn:
     logger.info("Sentry initialized (environment=%s)", settings.environment)
 
 app = FastAPI(
-    title="Common Ground",
+    title="Open Common Ground",
     description="Philadelphia City Council Legislation Tracker",
     version="0.2.0",
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -65,7 +70,7 @@ async def log_requests(request: Request, call_next):
 # CORS — allow the Next.js frontend to call the API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_url, "http://localhost:3000", "http://localhost:3001"],
+    allow_origins=[settings.frontend_url, "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -91,7 +96,7 @@ async def root():
     """Health check endpoint."""
     return {
         "status": "ok",
-        "app": "Common Ground",
+        "app": "Open Common Ground",
         "version": "0.2.0"
     }
 

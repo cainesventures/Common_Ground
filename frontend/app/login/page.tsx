@@ -31,7 +31,7 @@ export default function LoginPage() {
     <div className="min-h-[70vh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Sign in to Common Ground</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Sign in to Open Common Ground</h1>
           <p className="text-sm text-muted-foreground">
             Vote on legislation, save bills, and track your council members.
           </p>

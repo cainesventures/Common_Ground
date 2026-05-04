@@ -35,6 +35,7 @@ interface BillCardProps {
   accentBar?: boolean
   showDate?: boolean
   tab?: string
+  citySlug?: string
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -52,7 +53,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   )
 }
 
-export function BillCard({ bill, query = '', showDate = false, tab }: BillCardProps) {
+export function BillCard({ bill, query = '', showDate = false, tab, citySlug = 'philadelphia' }: BillCardProps) {
   const statusClass = STATUS_COLORS[bill.status] ?? STATUS_COLORS_FALLBACK
 
   let tags: string[] = []
@@ -79,7 +80,7 @@ export function BillCard({ bill, query = '', showDate = false, tab }: BillCardPr
 
   return (
     <Link
-      href={tab ? `/legislation/${bill.id}?tab=${tab}` : `/legislation/${bill.id}`}
+      href={tab ? `/${citySlug}/legislation/${bill.id}?tab=${tab}` : `/${citySlug}/legislation/${bill.id}`}
       className="flex rounded-lg border bg-background hover:shadow-md transition-all group overflow-hidden"
     >
       {/* Category strip */}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
@@ -65,6 +66,7 @@ function findDistrictFromGeoJSON(lat: number, lng: number, geojson: any): number
 }
 
 function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound: (id: string) => void }) {
+  const { city } = useParams<{ city: string }>()
   const [address, setAddress] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -138,7 +140,7 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
             <p className="text-sm font-semibold">{result.name}</p>
             <p className="text-xs text-muted-foreground">{result.district}</p>
           </div>
-          <a href={`/councilmembers/${result.id}`} className="ml-auto text-xs text-primary hover:underline">
+          <a href={`/${city}/councilmembers/${result.id}`} className="ml-auto text-xs text-primary hover:underline">
             View profile →
           </a>
         </div>
@@ -148,6 +150,7 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
 }
 
 function SponsorshipChart({ members }: { members: Member[] }) {
+  const { city } = useParams<{ city: string }>()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const sorted = [...members].filter(m => m.bills_sponsored > 0).sort((a, b) => b.bills_sponsored - a.bills_sponsored)
   if (sorted.length === 0) return null
@@ -162,7 +165,7 @@ function SponsorshipChart({ members }: { members: Member[] }) {
         return (
           <Link
             key={m.id}
-            href={`/councilmembers/${m.id}`}
+            href={`/${city}/councilmembers/${m.id}`}
             className="flex items-center gap-3 group"
             onMouseEnter={() => setHoveredId(m.id)}
             onMouseLeave={() => setHoveredId(null)}
@@ -190,12 +193,13 @@ function SponsorshipChart({ members }: { members: Member[] }) {
 }
 
 function MemberCard({ member, highlighted }: { member: Member; highlighted?: boolean }) {
+  const { city } = useParams<{ city: string }>()
   const isAtLarge = member.district === 'At-Large'
 
   return (
     <Link
       id={`member-${member.id}`}
-      href={`/councilmembers/${member.id}`}
+      href={`/${city}/councilmembers/${member.id}`}
       className={`flex items-start gap-4 border rounded-lg p-4 hover:border-primary/60 hover:shadow-sm transition-all ${highlighted ? 'ring-2 ring-primary border-primary' : ''}`}
     >
       <div className="shrink-0 w-14 h-14 rounded-full overflow-hidden bg-muted flex items-center justify-center">
@@ -225,6 +229,7 @@ function MemberCard({ member, highlighted }: { member: Member; highlighted?: boo
 }
 
 export default function CouncilmembersPage() {
+  const { city } = useParams<{ city: string }>()
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)

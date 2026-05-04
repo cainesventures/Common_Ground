@@ -6,7 +6,7 @@ import logging
 import re
 import uuid as _uuid
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -14,7 +14,8 @@ from fastapi.responses import StreamingResponse
 from app.models.database import get_db
 from app.services.legislation_service import LegislationIngestionService, sync_vote_records
 from app.models import Legislation, LegislationVote, BillPerspective, BillVoteRecord
-from app.auth import require_dev_tier, get_optional_user
+from app.auth import require_dev_tier, get_optional_user, get_current_user
+from app.rate_limit import limiter
 from app.services.perspectives_service import ALL_PERSPECTIVES
 
 
@@ -522,7 +523,9 @@ async def export_legislation(
 
 
 @router.get("/search")
+@limiter.limit("30/minute")
 async def search_legislation(
+    request: Request,
     q: str = Query('', max_length=200),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -1514,17 +1517,19 @@ def _vote_counts(db: Session, legislation_id: str) -> dict:
 
 
 @router.post("/{legislation_id}/vote")
+@limiter.limit("10/minute")
 async def cast_vote(
+    request: Request,
     legislation_id: str,
     body: VoteRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(get_optional_user),
+    current_user=Depends(get_current_user),
 ):
     """Cast or update a Support / Oppose / Neutral vote on a piece of legislation.
 
-    Votes are anonymous and deduplicated by ``voter_token`` (a UUID the client
-    generates once and persists in localStorage).  Submitting again with the
-    same token updates the existing vote rather than adding a new one.
+    Requires authentication. Votes are deduplicated by ``voter_token`` (a UUID
+    the client generates once and persists in localStorage). Submitting again
+    with the same token updates the existing vote rather than adding a new one.
     """
     leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
     if not leg:
@@ -1544,14 +1549,14 @@ async def cast_vote(
             existing.vote = body.vote
             if body.debate_id:
                 existing.debate_id = body.debate_id
-            if current_user and not existing.user_id:
+            if not existing.user_id:
                 existing.user_id = current_user.id
         else:
             db.add(LegislationVote(
                 id=f"vote_{_uuid.uuid4().hex[:12]}",
                 legislation_id=legislation_id,
                 debate_id=body.debate_id,
-                user_id=current_user.id if current_user else None,
+                user_id=current_user.id,
                 vote=body.vote,
                 voter_token=body.voter_token,
             ))

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import DrillDownPanel, { DrillDownSearchParams } from '@/components/insights/DrillDownPanel'
 
@@ -159,6 +159,7 @@ function StatusFunnelChart({
   onYearChange: (year: number) => void
 }) {
   const router = useRouter()
+  const { city } = useParams<{ city: string }>()
   const [tooltip, setTooltip] = useState<{ x: number; y: number; stage: FunnelStage; count: number } | null>(null)
   const [selectedStage, setSelectedStage] = useState<FunnelStage | null>(null)
   const [bills, setBills] = useState<BillRow[]>([])
@@ -284,7 +285,7 @@ function StatusFunnelChart({
                   {billsTotal > 0 && <span className="text-xs text-muted-foreground">({billsTotal.toLocaleString()} bills)</span>}
                 </div>
                 <div className="flex items-center gap-3">
-                  <button onClick={() => router.push(`/legislation?year=${activeYear}&status=${encodeURIComponent(FUNNEL_STATUS_MAP[selectedStage])}`)}
+                  <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}&status=${encodeURIComponent(FUNNEL_STATUS_MAP[selectedStage])}`)}
                     className="text-xs text-primary hover:underline">View all →</button>
                   <button onClick={() => setSelectedStage(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
                 </div>
@@ -298,7 +299,7 @@ function StatusFunnelChart({
                   <ul className="divide-y">
                     {bills.map(bill => (
                       <li key={bill.id}>
-                        <a href={`/legislation/${bill.id}`}
+                        <a href={`/${city}/legislation/${bill.id}`}
                           className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -400,6 +401,7 @@ function DonutChart({
 // ── Impact Distribution ───────────────────────────────────────────────────────
 
 function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
+  const { city } = useParams<{ city: string }>()
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [drillDown, setDrillDown] = useState<{ params: DrillDownSearchParams; title: string; href: string } | null>(null)
 
@@ -428,7 +430,7 @@ function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
     setDrillDown({
       params: { billType: key, year },
       title: `${key.charAt(0).toUpperCase() + key.slice(1)} Bills — ${year}`,
-      href: `/legislation?year=${year}&bill_type=${key}`,
+      href: `/${city}/legislation?year=${year}&bill_type=${key}`,
     })
   }
 
@@ -437,7 +439,7 @@ function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
     setDrillDown({
       params: { impact: key, year },
       title: `${key.charAt(0).toUpperCase() + key.slice(1)} Impact Bills — ${year}`,
-      href: `/legislation?year=${year}&impact=${key}`,
+      href: `/${city}/legislation?year=${year}&impact=${key}`,
     })
   }
 
@@ -509,6 +511,7 @@ function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
 // ── Bill Type Over Time ───────────────────────────────────────────────────────
 
 function BillTypeOverTimeSection({ years }: { years: ImpactYearRow[] }) {
+  const { city } = useParams<{ city: string }>()
   const [drillDown, setDrillDown] = useState<{ params: DrillDownSearchParams; title: string; href: string } | null>(null)
 
   if (!years.length) return (
@@ -531,7 +534,7 @@ function BillTypeOverTimeSection({ years }: { years: ImpactYearRow[] }) {
     setDrillDown({
       params: { billType: btKey, year: yearVal },
       title: `${btKey.charAt(0).toUpperCase() + btKey.slice(1)} Bills — ${yearVal}`,
-      href: `/legislation?year=${yearVal}&bill_type=${btKey}`,
+      href: `/${city}/legislation?year=${yearVal}&bill_type=${btKey}`,
     })
   }
 
@@ -600,6 +603,7 @@ function BillTypeOverTimeSection({ years }: { years: ImpactYearRow[] }) {
 // ── Sponsor Leaderboard ───────────────────────────────────────────────────────
 
 function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
+  const { city } = useParams<{ city: string }>()
   const [activeYear, setActiveYear] = useState(0)
   const [sort, setSort] = useState<'active' | 'effective'>('active')
   const [sponsors, setSponsors] = useState<SponsorRow[]>([])
@@ -689,7 +693,7 @@ function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
         <DrillDownPanel
           title={`${drillDown.sponsor}${drillDown.year ? ` — ${drillDown.year}` : ' — All time'}`}
           searchParams={{ sponsor: drillDown.sponsor, year: drillDown.year || undefined }}
-          viewAllHref={`/legislation?sponsor=${encodeURIComponent(drillDown.sponsor)}${drillDown.year ? `&year=${drillDown.year}` : ''}`}
+          viewAllHref={`/${city}/legislation?sponsor=${encodeURIComponent(drillDown.sponsor)}${drillDown.year ? `&year=${drillDown.year}` : ''}`}
           onClose={() => setDrillDown(null)}
         />
       )}
@@ -794,6 +798,7 @@ function TagTrendsChart({
 
 export default function InsightsPage() {
   const router = useRouter()
+  const { city } = useParams<{ city: string }>()
   const [summary, setSummary]           = useState<Summary | null>(null)
   const [statusData, setStatusData]     = useState<YearStatusRow[]>([])
   const [tagData, setTagData]           = useState<TagYearRow[]>([])
@@ -870,7 +875,7 @@ export default function InsightsPage() {
           </p>
         </div>
         <StatusFunnelChart data={statusData} selectedYear={selectedYear} onYearChange={setSelectedYear} />
-        <button onClick={() => router.push(`/legislation?year=${activeYear}${tagFilter ? `&tag=${tagFilter}` : ''}`)}
+        <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}${tagFilter ? `&tag=${tagFilter}` : ''}`)}
           className="text-sm text-primary hover:underline">
           View all {activeYear} bills →
         </button>

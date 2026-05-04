@@ -1,6 +1,7 @@
 """Application configuration management."""
 
 from pydantic_settings import BaseSettings
+from pydantic import model_validator
 from functools import lru_cache
 
 
@@ -62,7 +63,7 @@ class Settings(BaseSettings):
 
     # Email (Resend)
     resend_api_key: str = ""                    # Get from resend.com
-    email_from: str = "Common Ground <digest@commonground.philly>"
+    email_from: str = "Open Common Ground <hello@opencommonground.com>"
     frontend_base_url: str = "http://localhost:3000"  # Used in email links
 
     # Stripe Donations
@@ -79,6 +80,12 @@ class Settings(BaseSettings):
 
     # Sentry error tracking (optional — leave blank to disable)
     sentry_dsn: str = ""
+
+    @model_validator(mode='after')
+    def validate_production_secrets(self):
+        if self.environment == 'production' and self.jwt_secret == 'change-me-in-production':
+            raise ValueError("JWT_SECRET must be changed from default in production")
+        return self
 
     class Config:
         env_file = ".env"

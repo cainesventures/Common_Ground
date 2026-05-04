@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
+import { getCityConfig } from '@/lib/city'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { api } from '@/lib/api'
@@ -81,11 +82,16 @@ export function Navbar() {
 
   const isDev = process.env.NODE_ENV === 'development'
 
+  // Derive city from path: /philadelphia/... → 'philadelphia'
+  const citySlug = pathname.split('/')[1]
+  const cityConfig = getCityConfig(citySlug)
+  const p = cityConfig ? `/${citySlug}` : ''
+
   const navLinks = [
-    { href: '/legislation', label: 'Legislation' },
-    { href: '/councilmembers', label: 'Council' },
-    { href: '/insights', label: 'Insights' },
-    ...(user ? [{ href: '/my-bills', label: 'My Bills' }] : []),
+    { href: `${p}/legislation`, label: 'Legislation' },
+    { href: `${p}/councilmembers`, label: 'Council' },
+    { href: `${p}/insights`, label: 'Insights' },
+    ...(user ? [{ href: `${p}/my-bills`, label: 'My Bills' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ...(user?.subscription_tier === 'dev' ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
@@ -95,7 +101,7 @@ export function Navbar() {
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="font-bold text-lg tracking-tight shrink-0">
-          Common Ground
+          Open Common Ground
         </Link>
 
         {/* Desktop links */}

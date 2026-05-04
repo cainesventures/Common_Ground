@@ -54,9 +54,9 @@ export default function DonatePage() {
   return (
     <div className="max-w-lg mx-auto py-12 px-4 relative">
       <div className="text-center mb-10">
-        <h1 className="text-3xl font-bold tracking-tight mb-3">Support Common Ground</h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-3">Support Open Common Ground</h1>
         <p className="text-muted-foreground text-base leading-relaxed">
-          Common Ground is a free, open civic tool for Philadelphia residents. Your donation keeps
+          Open Common Ground is a free, open civic tool for Philadelphia residents. Your donation keeps
           it running — covering AI analysis costs, hosting, and development.
         </p>
       </div>

@@ -1,106 +1,78 @@
-'use client'
-
+import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
 
-const tiers = [
-  {
-    name: 'Free',
-    price: '$0',
-    period: 'forever',
-    description: 'Watch AI debates and follow legislation you care about.',
-    features: [
-      'Browse all public debates',
-      'Read full debate transcripts',
-      'Vote on legislation (login required)',
-      'View vote tallies and sentiment',
-      'Follow debate feed',
-    ],
-    cta: 'Get started',
-    ctaHref: '/',
-    highlighted: false,
-  },
-  {
-    name: 'Paid',
-    price: '$9',
-    period: 'per month',
-    description: 'Create your own debates and build custom AI personas.',
-    features: [
-      'Everything in Free',
-      'Create AI debates on any bill',
-      'Add preset debator personas',
-      'Create custom Claude agents',
-      'Configure debate settings',
-      'Private debates',
-    ],
-    cta: 'Contact us to upgrade',
-    ctaHref: 'mailto:hello@commonground.ai?subject=Paid%20Tier%20Upgrade',
-    highlighted: true,
-  },
-]
+export const metadata: Metadata = {
+  title: 'Pricing — Open Common Ground',
+  description: 'Open Common Ground is free forever, supported by donations.',
+}
 
 export default function PricingPage() {
   return (
-    <div className="space-y-10">
+    <div className="max-w-lg mx-auto py-12 px-4 space-y-10">
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold tracking-tight">Simple, transparent pricing</h1>
-        <p className="text-muted-foreground max-w-xl mx-auto">
-          Start for free. Upgrade when you want to create debates or deploy custom AI.
+        <h1 className="text-3xl font-bold tracking-tight">Free forever</h1>
+        <p className="text-muted-foreground">
+          Open Common Ground is and will always be free. No subscriptions, no paywalls, no ads.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto w-full">
-        {tiers.map((tier) => (
-          <div
-            key={tier.name}
-            className={`rounded-xl border p-6 space-y-6 flex flex-col ${
-              tier.highlighted
-                ? 'border-primary ring-2 ring-primary/20 bg-primary/[0.02]'
-                : 'border-border bg-background'
-            }`}
-          >
-            {tier.highlighted && (
-              <div className="text-xs font-semibold text-primary uppercase tracking-wide">
-                Most popular
-              </div>
-            )}
-
-            <div>
-              <h2 className="text-xl font-bold">{tier.name}</h2>
-              <div className="mt-1 flex items-baseline gap-1">
-                <span className="text-3xl font-bold">{tier.price}</span>
-                <span className="text-sm text-muted-foreground">/ {tier.period}</span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-2">{tier.description}</p>
-            </div>
-
-            <ul className="space-y-2 flex-1">
-              {tier.features.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-sm">
-                  <span className="text-green-500 shrink-0 mt-0.5">✓</span>
-                  {f}
-                </li>
-              ))}
-            </ul>
-
-            <a href={tier.ctaHref}>
-              <Button
-                className="w-full"
-                variant={tier.highlighted ? 'default' : 'outline'}
-              >
-                {tier.cta}
-              </Button>
-            </a>
+      <div className="rounded-xl border p-8 space-y-6">
+        <div>
+          <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Everything included</div>
+          <div className="flex items-baseline gap-1">
+            <span className="text-4xl font-bold">$0</span>
+            <span className="text-sm text-muted-foreground">/ forever</span>
           </div>
-        ))}
+          <p className="text-sm text-muted-foreground mt-2">
+            Every feature, every bill, every perspective — free for every Philadelphian.
+          </p>
+        </div>
+
+        <ul className="space-y-2">
+          {[
+            'Browse and search all City Council bills',
+            'AI summaries in plain English',
+            '17 political perspectives per bill',
+            'Impact scores and analysis',
+            'Sponsor and committee insights',
+            'Vote on legislation (sign-in required)',
+            'Save and track bills you care about',
+            'Insights dashboard — 26 years of data',
+          ].map((f) => (
+            <li key={f} className="flex items-start gap-2 text-sm">
+              <span className="text-green-500 shrink-0 mt-0.5">✓</span>
+              {f}
+            </li>
+          ))}
+        </ul>
+
+        <Link
+          href="/"
+          className="block w-full text-center py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 transition-colors"
+        >
+          Start exploring →
+        </Link>
+      </div>
+
+      <div className="rounded-xl border border-dashed p-6 space-y-3 text-center">
+        <p className="text-sm font-semibold">Keep it running</p>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          The site runs on donations. If it&apos;s useful to you, consider contributing a few dollars
+          to cover AI analysis costs and hosting.
+        </p>
+        <Link
+          href="/donate"
+          className="inline-block px-6 py-2.5 rounded-lg border text-sm font-semibold hover:bg-muted/50 transition-colors"
+        >
+          Donate to support the project
+        </Link>
       </div>
 
       <p className="text-center text-sm text-muted-foreground">
         Questions?{' '}
-        <a href="mailto:hello@commonground.ai" className="underline hover:no-underline">
-          Get in touch
+        <a href="mailto:hello@opencommonground.com" className="underline hover:no-underline">
+          hello@opencommonground.com
         </a>
-        {' '}— we&apos;re happy to help find the right plan.
       </p>
     </div>
   )

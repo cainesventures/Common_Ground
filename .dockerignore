@@ -1,0 +1,35 @@
+# Secrets and local config
+.env
+.env.*
+
+# Local databases (never bake DB into image)
+*.db
+*.db-wal
+*.db-shm
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+
+# Version control
+.git
+.gitignore
+
+# Frontend (built separately on Vercel)
+frontend/
+node_modules/
+
+# Dev scripts and local tooling
+scripts/
+alembic/versions/__pycache__
+
+# Docs
+*.md
+LICENSE
+
+# OS
+.DS_Store
+Thumbs.db

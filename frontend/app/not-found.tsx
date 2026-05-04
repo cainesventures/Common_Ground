@@ -10,7 +10,7 @@ export default function NotFound() {
       </p>
       <div className="flex items-center gap-4">
         <Link
-          href="/legislation"
+          href="/philadelphia/legislation"
           className="inline-flex items-center justify-center rounded-md bg-primary px-4 h-9 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           Browse legislation

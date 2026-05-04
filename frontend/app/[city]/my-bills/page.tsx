@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -61,6 +61,7 @@ interface TrackedBill {
 
 export default function MyBillsPage() {
   const router = useRouter()
+  const { city } = useParams<{ city: string }>()
   const [bills, setBills] = useState<TrackedBill[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -131,7 +132,7 @@ export default function MyBillsPage() {
             <p className="text-sm font-semibold">No saved bills yet</p>
             <p className="text-sm text-muted-foreground">Bookmark bills to track their progress and come back to them easily.</p>
           </div>
-          <Link href="/legislation" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
+          <Link href={`/${city}/legislation`} className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
             Browse legislation →
           </Link>
         </div>
@@ -145,7 +146,7 @@ export default function MyBillsPage() {
 
             return (
               <div key={bill.id} className="relative border rounded-lg hover:border-primary/60 hover:bg-muted/20 transition-all">
-                <Link href={`/legislation/${bill.id}`} className="block px-4 py-3">
+                <Link href={`/${city}/legislation/${bill.id}`} className="block px-4 py-3">
                   <div className="flex items-center gap-2 flex-wrap mb-1 pr-8">
                     <span className="text-xs text-muted-foreground font-mono shrink-0">{bill.bill_number}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${statusColor}`}>

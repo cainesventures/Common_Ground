@@ -13,8 +13,8 @@ import NextTopLoader from 'nextjs-toploader'
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
 export const metadata: Metadata = {
-  title: 'Common Ground — Philadelphia City Council Tracker',
-  description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives.',
+  title: 'Open Common Ground — Philadelphia City Council Tracker',
+  description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives. Free, independent, no ads.',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

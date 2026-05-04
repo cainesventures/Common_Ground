@@ -418,9 +418,6 @@ export const api = {
   analyzeLegislation: (id: string) =>
     apiFetch(`/api/legislation/${id}/analyze`, { method: 'POST' }),
 
-  fetchBillDetails: (id: string) =>
-    apiFetch(`/api/legislation/${id}/fetch-details`, { method: 'POST' }),
-
   generateBillHeadline: (id: string) =>
     apiFetch(`/api/legislation/${id}/generate-headline`, { method: 'POST' }),
 

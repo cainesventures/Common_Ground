@@ -331,6 +331,7 @@ const VOTE_BADGE: Record<string, string> = {
 }
 
 function VoteHistorySection({ memberId }: { memberId: string }) {
+  const { city } = useParams<{ city: string }>()
   const [records, setRecords]   = useState<any[]>([])
   const [total, setTotal]       = useState(0)
   const [page, setPage]         = useState(1)
@@ -364,7 +365,7 @@ function VoteHistorySection({ memberId }: { memberId: string }) {
           {records.map((r) => (
             <Link
               key={r.legislation_id}
-              href={`/legislation/${r.legislation_id}`}
+              href={`/${city}/legislation/${r.legislation_id}`}
               className="flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:border-primary/60 hover:shadow-sm transition-all group"
             >
               <div className="flex-1 min-w-0">
@@ -443,7 +444,7 @@ const TABS: { key: TabKey; label: string }[] = [
 const BILLS_PER_PAGE = 20
 
 export default function CouncilmemberDetailClient() {
-  const { id } = useParams<{ id: string }>()
+  const { city, id } = useParams<{ city: string; id: string }>()
   const [data, setData]           = useState<any>(null)
   const [loading, setLoading]     = useState(true)
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
@@ -616,7 +617,7 @@ export default function CouncilmemberDetailClient() {
                 {bills.results.map((bill: any) => (
                   <Link
                     key={bill.id}
-                    href={`/legislation/${bill.id}`}
+                    href={`/${city}/legislation/${bill.id}`}
                     className="flex items-start justify-between gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all"
                   >
                     <div className="flex-1 min-w-0">
@@ -684,7 +685,7 @@ export default function CouncilmemberDetailClient() {
         <DistrictMap district={member.district} />
       )}
 
-      <Link href="/councilmembers" className="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors pt-2">
+      <Link href={`/${city}/councilmembers`} className="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors pt-2">
         ← All council members
       </Link>
     </div>
