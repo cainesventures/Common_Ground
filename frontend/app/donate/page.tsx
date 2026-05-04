@@ -3,8 +3,8 @@
 import { useState } from 'react'
 import { api } from '@/lib/api'
 
-const AMOUNTS = [5, 10, 20, 50, 100]
-const MIN = 5
+const AMOUNTS = [1, 5, 10, 20, 50]
+const MIN = 1
 const MAX = 10_000
 
 function parseCustomAmount(raw: string): number | null {
