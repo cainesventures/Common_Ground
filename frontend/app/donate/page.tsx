@@ -61,6 +61,11 @@ export default function DonatePage() {
         </p>
       </div>
 
+      <div className="border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg px-5 py-4 mb-8 text-sm text-yellow-800 dark:text-yellow-200 text-center">
+        <p className="font-semibold mb-1">Donations coming soon</p>
+        <p className="text-yellow-700 dark:text-yellow-300">We&apos;re finishing payment setup — check back in a day or two. Thank you for your support!</p>
+      </div>
+
       {/* What your donation does */}
       <div className="border rounded-lg px-5 py-4 mb-8 space-y-2">
         <p className="text-sm font-semibold mb-3">What your support funds</p>
