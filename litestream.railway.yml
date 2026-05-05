@@ -1,0 +1,8 @@
+dbs:
+  - path: /data/common_ground.db
+    replicas:
+      - type: s3
+        bucket: opencommonground-db
+        endpoint: s3.us-east-005.backblazeb2.com
+        access-key-id: $B2_APPLICATION_KEY_ID
+        secret-access-key: $B2_APPLICATION_KEY

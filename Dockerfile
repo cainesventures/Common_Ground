@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Litestream
+RUN curl -fsSL https://github.com/benbjohnson/litestream/releases/download/v0.5.11/litestream-0.5.11-linux-x86_64.tar.gz \
+    | tar -xz -C /usr/local/bin
+
 # Install Python dependencies first (layer caches until requirements change)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -19,4 +23,5 @@ COPY . .
 
 EXPOSE 8080
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# On startup: restore DB from B2 if not already on volume, then launch app
+CMD ["sh", "-c", "litestream restore -if-db-not-exists -config /app/litestream.railway.yml /data/common_ground.db && uvicorn main:app --host 0.0.0.0 --port $PORT"]
