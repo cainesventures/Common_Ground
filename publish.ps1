@@ -56,15 +56,12 @@ Log "Step 3/3 — Uploading DB to Backblaze B2..."
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
 
-Log "Triggering Railway redeploy..."
-$headers = @{ Authorization = "Bearer $env:RAILWAY_TOKEN" }
-$body = @{ query = "mutation { serviceInstanceRedeploy(environmentId: \"$env:RAILWAY_ENVIRONMENT_ID\", serviceId: \"$env:RAILWAY_SERVICE_ID\") }" } | ConvertTo-Json
-try {
-    Invoke-RestMethod -Uri "https://backboard.railway.com/graphql/v2" -Method Post -Headers $headers -Body $body -ContentType "application/json" | Out-Null
-    Log "Redeploy triggered. Production will update in ~2 minutes."
-} catch {
-    Log "Could not auto-trigger Railway redeploy — trigger it manually in the Railway dashboard."
-}
-
 Log ""
-Log "Done. opencommonground.com will reflect new data shortly."
+Log "============================================================"
+Log " DB uploaded to Backblaze B2 successfully."
+Log ""
+Log " ACTION REQUIRED: Trigger a redeploy in Railway dashboard."
+Log "   1. Go to railway.com → opencommonground-api"
+Log "   2. Click Redeploy"
+Log "   3. Production updates in ~2 minutes"
+Log "============================================================"
