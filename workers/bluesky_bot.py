@@ -184,8 +184,26 @@ def post_weekly_roundup(token: str, did: str) -> None:
         print(f"Weekly roundup failed: {e}")
 
 
+def check_api_health() -> bool:
+    print(f"Testing API at {API_BASE} ...")
+    try:
+        data = http_get(f"{API_BASE}/health")
+        print(f"Health OK: {data}")
+        return True
+    except urllib.error.HTTPError as e:
+        print(f"Health check failed: HTTP {e.code}")
+        return False
+    except Exception as e:
+        print(f"Health check error: {e}")
+        return False
+
+
 def main():
     print(f"Bluesky bot starting — {datetime.now(timezone.utc).isoformat()}")
+
+    if not check_api_health():
+        print("API unreachable — aborting.")
+        sys.exit(1)
 
     token, did = bsky_login()
     print("Logged in to Bluesky.")
