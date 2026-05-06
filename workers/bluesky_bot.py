@@ -34,7 +34,7 @@ def http_post(url: str, data: dict, headers: dict = {}) -> dict:
 
 
 def http_get(url: str) -> dict:
-    req = urllib.request.Request(url)
+    req = urllib.request.Request(url, headers={"User-Agent": "OpenCommonGround-Bot/1.0"})
     with urllib.request.urlopen(req, timeout=15) as resp:
         return json.loads(resp.read())
 
