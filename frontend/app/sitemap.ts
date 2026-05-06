@@ -25,7 +25,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     if (billsRes.ok) {
       const data = await billsRes.json()
-      const bills = data?.bills ?? data ?? []
+      const bills = data?.results ?? []
       for (const bill of bills) {
         if (bill.id) {
           billRoutes.push({
@@ -39,7 +39,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
     if (membersRes.ok) {
       const members = await membersRes.json()
-      for (const member of Array.isArray(members) ? members : (members?.councilmembers ?? [])) {
+      for (const member of members?.members ?? []) {
         if (member.id) {
           memberRoutes.push({
             url: `${BASE_URL}/philadelphia/councilmembers/${member.id}`,
