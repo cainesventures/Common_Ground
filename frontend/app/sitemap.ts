@@ -18,8 +18,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const [billsRes, membersRes] = await Promise.all([
-      fetch(`${API_URL}/api/legislation/search?limit=5000&level=local`),
-      fetch(`${API_URL}/api/councilmembers`),
+      fetch(`${API_URL}/api/legislation/search?limit=2000&level=local`, { signal: AbortSignal.timeout(10000) }),
+      fetch(`${API_URL}/api/councilmembers`, { signal: AbortSignal.timeout(5000) }),
     ])
 
     const billRoutes: MetadataRoute.Sitemap = []
