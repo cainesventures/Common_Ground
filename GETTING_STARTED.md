@@ -1,4 +1,4 @@
-# Getting Started — Common Ground
+# Getting Started — Open Common Ground
 
 Get the app running locally in about 10 minutes.
 
@@ -189,3 +189,115 @@ stripe listen --forward-to localhost:8000/api/donations/webhook
 **Email digest not sending** — check that `RESEND_API_KEY` is set and the user has `digest_enabled = true`. Check backend logs for the Resend API response.
 
 **Stripe checkout fails** — ensure `STRIPE_SECRET_KEY` starts with `sk_test_` (test mode) or `sk_live_` (live mode) and that the key matches your Stripe account. Check backend logs for the Stripe error.
+
+---
+
+## 9. Deployment to production
+
+This section covers the production setup used at [opencommonground.com](https://opencommonground.com): Next.js on Vercel, FastAPI on Railway, SQLite replicated via Litestream to Backblaze B2.
+
+### Architecture
+
+```
+Local machine (you)                   Cloud
+──────────────────                    ──────────────────────────────
+Admin panel / scripts                 Vercel  ←  opencommonground.com
+    ↓ ingest + enrich
+SQLite DB (140MB)
+    ↓ Litestream (auto)               Backblaze B2 (opencommonground-db)
+                                          ↑ restore on startup
+                                      Railway ← api.opencommonground.com
+```
+
+### Backblaze B2 setup
+
+1. Create a free account at [backblaze.com](https://www.backblaze.com/cloud-storage.html)
+2. Create a private bucket named `opencommonground-db`
+3. Create an App Key with read/write access to that bucket
+4. Note the endpoint URL (e.g. `s3.us-east-005.backblazeb2.com`)
+
+### Litestream — local setup (Windows)
+
+Download [Litestream v0.5.x](https://github.com/benbjohnson/litestream/releases) for Windows and place the binary at `C:\tools\litestream.exe`.
+
+Create `litestream.yml` in the project root:
+
+```yaml
+dbs:
+  - path: C:\Projects\Common_Ground\common_ground_test.db
+    replicas:
+      - type: s3
+        bucket: opencommonground-db
+        endpoint: s3.us-east-005.backblazeb2.com
+        access-key-id: $B2_APPLICATION_KEY_ID
+        secret-access-key: $B2_APPLICATION_KEY
+```
+
+Add to `.env`:
+```env
+B2_APPLICATION_KEY_ID=your_key_id
+B2_APPLICATION_KEY=your_key
+```
+
+To publish a DB snapshot to B2:
+```powershell
+$env:B2_APPLICATION_KEY_ID="your_key_id"
+$env:B2_APPLICATION_KEY="your_key"
+C:\tools\litestream.exe replicate -config litestream.yml -once -force-snapshot
+```
+
+Or run `publish.ps1` which wraps this with the full pipeline.
+
+### Railway setup
+
+Railway runs the backend and restores the DB from B2 on every deployment.
+
+Required environment variables in Railway:
+```
+DATABASE_URL=sqlite:////data/common_ground.db
+JWT_SECRET=<strong random value>
+ENVIRONMENT=production
+FRONTEND_URL=https://opencommonground.com
+APP_BASE_URL=https://api.opencommonground.com
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+B2_APPLICATION_KEY_ID=...
+B2_APPLICATION_KEY=...
+```
+
+The `Dockerfile` installs Litestream and runs:
+```
+litestream restore -if-db-not-exists ... && uvicorn main:app ...
+```
+So every `railway redeploy` restores the latest DB snapshot from B2.
+
+### Publish workflow
+
+After enriching bills locally, push the DB to production:
+
+```powershell
+# Full pipeline: fetch → enrich → publish
+.\publish.ps1
+
+# Skip fetch or enrich if already done
+.\publish.ps1 -SkipFetch
+.\publish.ps1 -SkipFetch -SkipEnrich
+```
+
+Then trigger a Railway redeploy from the Railway dashboard or CLI:
+```bash
+railway redeploy
+```
+
+### Vercel setup
+
+Connect the `frontend/` directory to Vercel. Required environment variables:
+```
+NEXT_PUBLIC_API_URL=https://api.opencommonground.com
+NEXT_PUBLIC_SENTRY_DSN=...   # optional
+```
+
+Vercel auto-deploys on every push to `main`.

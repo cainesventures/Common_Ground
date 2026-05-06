@@ -1,4 +1,6 @@
-# Common Ground — Philadelphia City Council Tracker
+# Open Common Ground — Philadelphia City Council Tracker
+
+**Live at [opencommonground.com](https://opencommonground.com)**
 
 A free, citizen-friendly tracker for Philadelphia City Council legislation. Every bill gets a plain-language name and summary, 17 AI perspectives, related news articles, and filterable category tags — so any Philadelphian can understand what their City Council is actually doing.
 
@@ -33,10 +35,10 @@ A free, citizen-friendly tracker for Philadelphia City Council legislation. Ever
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 16 (App Router), TailwindCSS, TypeScript |
+| Frontend | Next.js 15 (App Router), TailwindCSS, TypeScript — hosted on Vercel |
 | Maps | Leaflet + react-leaflet (OpenStreetMap tiles, no API key needed) |
-| Backend | FastAPI (async Python), SQLAlchemy ORM |
-| Database | SQLite (dev) / PostgreSQL (production) |
+| Backend | FastAPI (async Python), SQLAlchemy ORM — hosted on Railway |
+| Database | SQLite + WAL mode, replicated via Litestream → Backblaze B2 |
 | AI | Plug-and-play: Ollama (default, free), Claude, or OpenAI — set via env vars |
 | Ingestion | Playwright headless browser scraper (Philadelphia Legistar) |
 | Auth | Google OAuth 2.0 + JWT (dev-only bypass available) |
@@ -299,7 +301,6 @@ Full interactive docs at `http://localhost:8000/docs`.
 | `FRONTEND_URL` | Prod only | Public frontend URL for CORS |
 | `APP_URL` | Prod only | Public backend URL for OAuth redirect |
 | `FRONTEND_BASE_URL` | Prod only | Used in email digest links (defaults to localhost:3000) |
-| `REDIS_URL` | No | Required for Celery background tasks |
 | `RESEND_API_KEY` | Optional | Enables weekly email digests (resend.com) |
 | `EMAIL_FROM` | No | Sender address for digest emails |
 | `STRIPE_SECRET_KEY` | Optional | Enables donation checkout (Stripe dashboard) |
@@ -364,29 +365,27 @@ Common_Ground/
 
 ## Production Checklist
 
-- [ ] Set `DATABASE_URL` to PostgreSQL
 - [ ] Set `ENVIRONMENT=production` and `DEBUG=false`
 - [ ] Set `APP_URL`, `FRONTEND_URL`, `FRONTEND_BASE_URL` to your public domains
 - [ ] Generate a strong `JWT_SECRET` (`python -c "import secrets; print(secrets.token_hex(32))"`)
-- [ ] Configure `AI_PROVIDER` and `AI_API_KEY` for production model
-- [ ] Run `alembic upgrade head` against production DB
+- [ ] Configure `AI_PROVIDER` and `AI_API_KEY` for production model (or use Ollama locally for the data pipeline)
 - [ ] Set up Google OAuth and add redirect URI to Google Cloud Console
 - [ ] Set at least one user's `subscription_tier = 'dev'` in the DB
-- [ ] Set up HTTPS on frontend and backend
 - [ ] Add `next.config.ts` remote patterns for any additional image domains
 - [ ] Set `RESEND_API_KEY` and `EMAIL_FROM` to enable weekly digests
 - [ ] Set `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` to enable donations
 - [ ] Register the Stripe webhook endpoint (`POST /api/donations/webhook`) in the Stripe dashboard
-- [ ] Set up a server-side cron job for daily bill ingest (do not rely on local machine — see Scheduled Ingest note below)
+- [ ] Set up Litestream → Backblaze B2 for DB backup and publish workflow (see GETTING_STARTED.md)
 
-## Scheduled Ingest
+## Data Pipeline
 
-The app has no built-in scheduler — ingest must be triggered either manually from the admin panel or via a server-side cron job. On a VPS or cloud provider, add a cron entry like:
+Bill ingestion and AI analysis are fully manual — triggered from the admin panel or via `publish.ps1`. The production workflow is:
 
-```bash
-# Daily at 2am — ingest new Philadelphia bills and sync statuses
-3 2 * * * curl -s -X POST https://your-domain.com/api/legislation/ingest/local/philadelphia \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
-4 2 * * * curl -s -X POST https://your-domain.com/api/legislation/sync-statuses \
-  -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
+1. Run local ingest from admin panel (scrapes Legistar for new bills)
+2. Run local AI analysis (Ollama enriches new bills)
+3. Litestream syncs the enriched DB to Backblaze B2 automatically
+4. Run `railway redeploy` — Railway restores from B2 on startup
+```
+
+This design keeps AI costs at zero during early growth. See GETTING_STARTED.md → Deployment for the full setup.
