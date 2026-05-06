@@ -53,9 +53,9 @@ async def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db)):
                     "currency": "usd",
                     "unit_amount": body.amount_usd * 100,  # cents
                     "product_data": {
-                        "name": "Common Ground — Support Philadelphia Civic Tech",
+                        "name": "Open Common Ground — Support Philadelphia Civic Tech",
                         "description": (
-                            "Your donation keeps Common Ground free and open for all Philadelphians. "
+                            "Your donation keeps Open Common Ground free and open for all Philadelphians. "
                             "We track City Council legislation and provide AI-powered perspectives."
                         ),
                     },
