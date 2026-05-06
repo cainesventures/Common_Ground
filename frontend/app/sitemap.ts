@@ -1,7 +1,9 @@
 import { MetadataRoute } from 'next'
 
+export const dynamic = 'force-dynamic'
+
 const BASE_URL = 'https://opencommonground.com'
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://api.opencommonground.com'
+const API_URL = 'https://api.opencommonground.com'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
@@ -16,8 +18,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const [billsRes, membersRes] = await Promise.all([
-      fetch(`${API_URL}/api/legislation/search?limit=5000&level=local`, { next: { revalidate: 3600 } }),
-      fetch(`${API_URL}/api/councilmembers`, { next: { revalidate: 3600 } }),
+      fetch(`${API_URL}/api/legislation/search?limit=5000&level=local`),
+      fetch(`${API_URL}/api/councilmembers`),
     ])
 
     const billRoutes: MetadataRoute.Sitemap = []
