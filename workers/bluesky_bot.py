@@ -18,7 +18,7 @@ from typing import Optional
 import urllib.request
 import urllib.error
 
-API_BASE = os.environ.get("API_BASE", "https://api.opencommonground.com")
+API_BASE = os.environ.get("API_BASE", "https://opencommonground-api-production.up.railway.app")
 BLUESKY_HANDLE = os.environ["BLUESKY_HANDLE"]
 BLUESKY_APP_PASSWORD = os.environ["BLUESKY_APP_PASSWORD"]
 SITE_BASE = "https://opencommonground.com"

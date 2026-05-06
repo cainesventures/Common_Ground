@@ -20,4 +20,4 @@ jobs:
         env:
           BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
           BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
-          API_BASE: https://api.opencommonground.com
+          API_BASE: https://opencommonground-api-production.up.railway.app
