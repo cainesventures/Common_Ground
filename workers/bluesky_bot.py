@@ -34,9 +34,17 @@ def http_post(url: str, data: dict, headers: dict = {}) -> dict:
 
 
 def http_get(url: str) -> dict:
-    req = urllib.request.Request(url, headers={"User-Agent": "OpenCommonGround-Bot/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.loads(resp.read())
+    req = urllib.request.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (compatible; OpenCommonGround/1.0)",
+        "Accept": "application/json",
+    })
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        print(f"HTTP {e.code} from {url}: {body[:400]}")
+        raise
 
 
 def bsky_login() -> tuple[str, str]:
@@ -67,7 +75,7 @@ def bsky_post(token: str, did: str, text: str) -> None:
 
 def fetch_recent_bills(hours: int = 24) -> list:
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&sort=introduced_date")
+        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local")
         bills = data.get("results", [])
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
         recent = []
