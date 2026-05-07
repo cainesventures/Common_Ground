@@ -69,11 +69,13 @@ def gather_stats(db_path: str) -> dict:
     """)
     busiest = c.fetchall()
 
+    current_year = str(datetime.now().year)
     c.execute("""
         SELECT strftime('%Y', introduced_date) as yr, COUNT(*) as n
         FROM legislation WHERE level='local' AND introduced_date IS NOT NULL
+          AND strftime('%Y', introduced_date) < ?
         GROUP BY yr ORDER BY n ASC LIMIT 3
-    """)
+    """, (current_year,))
     quietest = c.fetchall()
 
     c.execute("""
@@ -133,14 +135,15 @@ def build_prompt(s: dict) -> str:
     busiest_str  = ", ".join(f"{yr} ({n:,})" for yr, n in s["busiest"][:3])
     quietest_str = ", ".join(f"{yr} ({n:,})" for yr, n in s["quietest"][:2])
 
+    current_year = datetime.now().year
     return f"""You are a data journalist writing a compelling narrative summary of {years_span} years of Philadelphia City Council legislative activity for a civic website called Open Common Ground.
 
-KEY STATISTICS:
+KEY STATISTICS (note: {current_year} is a partial year — exclude it from year comparisons):
 - Total bills introduced: {s["total"]:,} ({s["year_from"]}–{s["year_to"]})
 - Bills signed into law: {s["signed"]:,} ({pass_pct}% of closed bills)
 - Currently active: {s["active"]:,} bills (introduced or in committee)
-- Most active years: {busiest_str}
-- Quietest years: {quietest_str}
+- Most active years (completed years only): {busiest_str}
+- Quietest years (completed years only): {quietest_str}
 - Top issue areas: {tags_str}
 - Most prolific sponsors: {sponsors_str}
 

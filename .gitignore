@@ -60,3 +60,9 @@ logs/
 # Redis
 dump.rdb
 =0.8.0
+
+# Litestream — local WAL replica (auto-generated, never commit)
+*.db-litestream/
+
+# Claude Code internal files
+.claude/scheduled_tasks.lock
