@@ -63,13 +63,14 @@ $Principal = New-ScheduledTaskPrincipal `
     -LogonType Interactive `
     -RunLevel Limited
 
+$desc = "Common Ground publish pipeline - runs at logon if $MinDays+ days since last run"
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $Action `
     -Trigger $Trigger `
     -Settings $Settings `
     -Principal $Principal `
-    -Description "Common Ground publish pipeline — runs at logon if $MinDays+ days since last run" `
+    -Description $desc `
     | Out-Null
 
 Write-Host ""
