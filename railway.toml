@@ -3,7 +3,7 @@
   dockerfilePath = "Dockerfile"
 
 [deploy]
-  startCommand = "sh -c 'rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && uvicorn main:app --host 0.0.0.0 --port $PORT'"
+  startCommand = "sh -c 'STORED=$(cat /data/.restore_version 2>/dev/null || echo \"\"); TARGET=\"${DB_RESTORE_VERSION:-}\"; if [ -n \"$TARGET\" ] && [ \"$STORED\" != \"$TARGET\" ]; then rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && echo \"$TARGET\" > /data/.restore_version; elif [ ! -f /data/common_ground.db ]; then litestream restore -config /app/litestream.railway.yml /data/common_ground.db; fi && uvicorn main:app --host 0.0.0.0 --port $PORT'"
   healthcheckPath = "/health"
   healthcheckTimeout = 120
   restartPolicyType = "ON_FAILURE"

@@ -167,7 +167,12 @@ if ($staged) {
 # ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
 if ($railwayOk) {
     Log "Step 7/7 - Triggering Railway redeploy..."
-    railway redeploy --from-source --yes 2>&1
+    # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
+    # Without this, Railway skips the restore on restarts (preserving user accounts).
+    $version = Get-Date -Format "yyyyMMdd-HHmmss"
+    railway variables set "DB_RESTORE_VERSION=$version" 2>&1 | Out-Null
+    Log "DB_RESTORE_VERSION set to $version"
+    railway up --detach 2>&1
     if ($LASTEXITCODE -eq 0) {
         Log "Railway redeploy triggered - backend updates in ~3 min."
     } else {
