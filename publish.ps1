@@ -32,26 +32,32 @@ Set-Location $ROOT
 
 # Step 1: Fetch new bills from Legistar
 if (-not $SkipFetch) {
-    Log "Step 1/3 — Fetching new bills from Legistar..."
+    Log "Step 1/4 — Fetching new bills from Legistar..."
     python scripts/worker.py --steps fetch
     if ($LASTEXITCODE -ne 0) { Fail "Bill fetch failed. Fix errors above before continuing." }
     Log "Fetch complete."
 } else {
-    Log "Step 1/3 — Skipping fetch."
+    Log "Step 1/4 — Skipping fetch."
 }
 
 # Step 2: Enrich with Ollama (full analysis pipeline)
 if (-not $SkipEnrich) {
-    Log "Step 2/3 — Running Ollama enrichment pipeline..."
+    Log "Step 2/4 — Running Ollama enrichment pipeline..."
     python scripts/worker.py
     if ($LASTEXITCODE -ne 0) { Fail "Enrichment failed. Fix errors above before continuing." }
     Log "Enrichment complete."
 } else {
-    Log "Step 2/3 — Skipping enrichment."
+    Log "Step 2/4 — Skipping enrichment."
 }
 
-# Step 3: Sync to Backblaze B2 + trigger Railway redeploy
-Log "Step 3/3 — Uploading DB to Backblaze B2..."
+# Step 3: Regenerate static sitemap.xml
+Log "Step 3/4 — Regenerating sitemap.xml..."
+python scripts/generate_sitemap.py
+if ($LASTEXITCODE -ne 0) { Fail "Sitemap generation failed." }
+Log "Sitemap updated."
+
+# Step 4: Sync to Backblaze B2 + trigger Railway redeploy
+Log "Step 4/4 — Uploading DB to Backblaze B2..."
 & "C:\tools\litestream.exe" replicate -config "$ROOT\litestream.yml" -once -force-snapshot
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
