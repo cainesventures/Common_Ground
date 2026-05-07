@@ -111,7 +111,7 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     try:
         tag_list = json.loads(tags) if tags and tags.startswith("[") else []
         if tag_list:
-            tag_line = f"\n{' · '.join(f'#{t.replace(\"-\", \"\")}' for t in tag_list[:3])}"
+            tag_line = "\n" + " · ".join("#" + t.replace("-", "") for t in tag_list[:3])
     except Exception:
         pass
 

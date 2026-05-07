@@ -46,10 +46,14 @@ def _load_env():
 
 _load_env()
 
-from app.models.database import SessionLocal
-from app.models.legislation import Legislation
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import sessionmaker
+from app.models import Base, Legislation
 from app.integrations.legistar_scraper import PhilaLegistarScraper, _parse_date, _normalize_status
-from sqlalchemy import func
+
+DB_PATH = os.environ.get("DB_PATH", str(ROOT / "common_ground_test.db"))
+_engine = create_engine(f"sqlite:///{DB_PATH}", connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(bind=_engine)
 
 
 def get_latest_introduced_date(db) -> datetime | None:
