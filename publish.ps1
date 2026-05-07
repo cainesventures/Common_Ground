@@ -1,15 +1,22 @@
 # publish.ps1 — Full pipeline: fetch new bills, enrich with Ollama, push to production
 #
-# Usage: .\publish.ps1
-# Optional: .\publish.ps1 -SkipFetch          (skip Legistar scrape)
-# Optional: .\publish.ps1 -SkipEnrich         (skip Ollama enrichment)
-# Optional: .\publish.ps1 -SkipNarrative      (skip narrative regeneration)
-# Optional: .\publish.ps1 -SkipFetch -SkipEnrich  (sitemap + upload only)
+# FIRST-TIME SETUP (run once, manually):
+#   railway login          — authenticate Railway CLI (token persists)
+#   railway link           — link this directory to the Railway service
+#
+# SCHEDULED USE:
+#   .\scripts\schedule_publish.ps1  — register weekly Task Scheduler job (Friday 6am)
+#   Start-ScheduledTask -TaskName CommonGroundPublish  — run immediately
+#
+# MANUAL USE:
+#   .\publish.ps1                              — full pipeline
+#   .\publish.ps1 -SkipFetch                  — skip Legistar scrape
+#   .\publish.ps1 -SkipEnrich -SkipNarrative  — sitemap + upload only
 #
 # Steps:
 #  1. scripts/fetch_bills.py          — incremental Legistar scrape (since last ingest date)
 #  2. scripts/worker.py               — Ollama enrichment (full_text, analyze, headline, metadata, perspectives)
-#  3. scripts/generate_legislative_narrative.py — regenerate 26-year narrative JSON
+#  3. scripts/generate_legislative_narrative.py — regenerate 26-year narrative JSON (Ollama)
 #  4. scripts/generate_sitemap.py     — regenerate static sitemap.xml
 #  5. litestream replicate            — upload DB snapshot to Backblaze B2
 #  6. git push                        — Vercel picks up new sitemap.xml + narrative JSON (~2 min)
@@ -28,9 +35,31 @@ function Log($msg) {
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Cyan
 }
 
+function Warn($msg) {
+    Write-Host "[WARN] $msg" -ForegroundColor Yellow
+}
+
 function Fail($msg) {
     Write-Host "[ERROR] $msg" -ForegroundColor Red
     exit 1
+}
+
+function Wait-Ollama {
+    Log "Checking Ollama..."
+    for ($i = 0; $i -lt 12; $i++) {
+        try {
+            $null = Invoke-RestMethod "http://localhost:11434/api/tags" -TimeoutSec 3
+            Log "Ollama is ready."
+            return $true
+        } catch {
+            if ($i -eq 0) {
+                Log "Ollama not running — starting it..."
+                Start-Process "ollama" -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
+            }
+            Start-Sleep 5
+        }
+    }
+    return $false
 }
 
 # Load .env
@@ -41,56 +70,79 @@ Get-Content "$ROOT\.env" | ForEach-Object {
 }
 
 Set-Location $ROOT
+Log "Publish pipeline starting..."
 
-# Step 1: Fetch new bills from Legistar (incremental — only bills after last ingest date)
+# ── Pre-flight checks ─────────────────────────────────────────────────────────
+
+# Ollama required for steps 2 and 3
+$needsOllama = (-not $SkipEnrich) -or (-not $SkipNarrative)
+if ($needsOllama) {
+    if (-not (Wait-Ollama)) {
+        Fail "Ollama did not start. Ensure Ollama is installed: https://ollama.com"
+    }
+}
+
+# Railway auth check (non-fatal — we warn and skip if not logged in)
+$railwayOk = $false
+try {
+    railway status 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { $railwayOk = $true }
+} catch { }
+if (-not $railwayOk) {
+    Warn "Railway CLI not logged in or project not linked."
+    Warn "Run: railway login && railway link"
+    Warn "Step 7 (redeploy) will be skipped this run."
+}
+
+# ── Step 1: Fetch new bills from Legistar ────────────────────────────────────
 if (-not $SkipFetch) {
-    Log "Step 1/5 — Fetching new bills from Legistar (incremental)..."
+    Log "Step 1/7 — Fetching new bills from Legistar (incremental)..."
     python scripts/fetch_bills.py
     if ($LASTEXITCODE -ne 0) { Fail "Bill fetch failed. Fix errors above before continuing." }
     Log "Fetch complete."
 } else {
-    Log "Step 1/5 — Skipping fetch."
+    Log "Step 1/7 — Skipping fetch."
 }
 
-# Step 2: Enrich with Ollama (full analysis pipeline)
+# ── Step 2: Enrich with Ollama ───────────────────────────────────────────────
 if (-not $SkipEnrich) {
-    Log "Step 2/5 — Running Ollama enrichment pipeline..."
+    Log "Step 2/7 — Running Ollama enrichment pipeline..."
     python scripts/worker.py
     if ($LASTEXITCODE -ne 0) { Fail "Enrichment failed. Fix errors above before continuing." }
     Log "Enrichment complete."
 } else {
-    Log "Step 2/5 — Skipping enrichment."
+    Log "Step 2/7 — Skipping enrichment."
 }
 
-# Step 3: Regenerate 26-year legislative narrative
+# ── Step 3: Regenerate 26-year legislative narrative ─────────────────────────
 if (-not $SkipNarrative) {
-    Log "Step 3/5 — Regenerating legislative narrative..."
+    Log "Step 3/7 — Regenerating legislative narrative..."
     python scripts/generate_legislative_narrative.py
     if ($LASTEXITCODE -ne 0) { Fail "Narrative generation failed." }
     Log "Narrative updated."
 } else {
-    Log "Step 3/5 — Skipping narrative."
+    Log "Step 3/7 — Skipping narrative."
 }
 
-# Step 4: Regenerate static sitemap.xml
-Log "Step 4/5 — Regenerating sitemap.xml..."
+# ── Step 4: Regenerate sitemap ───────────────────────────────────────────────
+Log "Step 4/7 — Regenerating sitemap.xml..."
 python scripts/generate_sitemap.py
 if ($LASTEXITCODE -ne 0) { Fail "Sitemap generation failed." }
 Log "Sitemap updated."
 
-# Step 5: Sync to Backblaze B2
-Log "Step 5/5 — Uploading DB to Backblaze B2..."
+# ── Step 5: Upload DB to Backblaze B2 ────────────────────────────────────────
+Log "Step 5/7 — Uploading DB to Backblaze B2..."
 & "C:\tools\litestream.exe" replicate -config "$ROOT\litestream.yml" -once -force-snapshot
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
 
-# Step 6: Git push — Vercel picks up sitemap.xml + narrative JSON
+# ── Step 6: Git push (Vercel auto-deploys on push) ───────────────────────────
 Log "Step 6/7 — Committing and pushing sitemap + narrative to GitHub..."
 git add frontend/public/sitemap.xml frontend/public/data/legislative_history.json
 $staged = git diff --cached --name-only
 if ($staged) {
     $stamp = Get-Date -Format "yyyy-MM-dd"
-    git commit -m "Data update $stamp`: refresh sitemap and legislative narrative"
+    git commit -m "Data update ${stamp}: refresh sitemap and legislative narrative"
     if ($LASTEXITCODE -ne 0) { Fail "Git commit failed." }
     git push
     if ($LASTEXITCODE -ne 0) { Fail "Git push failed." }
@@ -99,20 +151,24 @@ if ($staged) {
     Log "No sitemap/narrative changes to push."
 }
 
-# Step 7: Railway redeploy — picks up new DB from B2
-Log "Step 7/7 — Triggering Railway redeploy..."
-railway redeploy --yes 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Log "[warn] Railway CLI redeploy failed (may need 'railway link' first)."
-    Log "       Manual fallback: railway.com → opencommonground-api → Redeploy"
+# ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
+if ($railwayOk) {
+    Log "Step 7/7 — Triggering Railway redeploy..."
+    railway redeploy --yes 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Log "Railway redeploy triggered — backend updates in ~3 min."
+    } else {
+        Warn "Railway redeploy failed. Manual fallback:"
+        Warn "  railway.com → opencommonground-api → Redeploy"
+    }
 } else {
-    Log "Railway redeploy triggered — production updates in ~3 min."
+    Warn "Step 7/7 — Skipping Railway redeploy (not logged in)."
+    Warn "Manual: railway.com → opencommonground-api → Redeploy"
 }
 
 Log ""
 Log "============================================================"
 Log " Publish complete!"
-Log ""
-Log " Vercel (frontend):  ~2 min to pick up new sitemap + narrative"
-Log " Railway (backend):  ~3 min to restore DB and restart"
+Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
+Log " Railway (backend):  restores DB from B2 and restarts in ~3 min"
 Log "============================================================"
