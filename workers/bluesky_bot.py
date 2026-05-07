@@ -3,18 +3,19 @@
 Posts daily about notable Philadelphia City Council legislation.
 
 Post types:
-  - New high-impact bills introduced in the last 24h (impact_score >= 7)
-  - Bills signed into law in the last 24h
-  - Sunday 9am: weekly roundup (counts + spotlight bill)
+  - Weekdays: daily spotlight — a randomly selected high-impact bill
+              (impact_score >= 6) from the full catalog
+  - Weekdays: recently signed bills (last 30 days), if any
+  - Sunday 9am: weekly roundup (counts + active bills)
 
 Run via GitHub Actions daily at 9am ET.
 """
 
 import os
 import json
+import random
 import sys
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 import urllib.request
 import urllib.error
 
@@ -73,68 +74,101 @@ def bsky_post(token: str, did: str, text: str) -> None:
     print(f"Posted: {text[:80]}...")
 
 
-def fetch_recent_bills(hours: int = 24) -> list:
+def fetch_spotlight_bill() -> dict | None:
+    """Pick a random high-impact analyzed bill from the full catalog."""
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local")
+        # impact=high returns bills with impact_level='high', which maps to score >= 7
+        # We fetch a larger pool and filter for score >= 6 to widen the net
+        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
         bills = data.get("results", [])
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6]
+        if not candidates:
+            # Fall back to medium-impact if no high-impact bills
+            data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
+            candidates = data.get("results", [])
+        if not candidates:
+            return None
+        return random.choice(candidates)
+    except Exception as e:
+        print(f"Failed to fetch spotlight bill: {e}")
+        return None
+
+
+def post_daily_spotlight(token: str, did: str) -> bool:
+    bill = fetch_spotlight_bill()
+    if not bill:
+        print("No spotlight bill found.")
+        return False
+
+    title = bill.get("plain_title") or bill.get("title") or "Untitled bill"
+    bill_id = bill.get("id", "")
+    sponsor = bill.get("sponsor") or ""
+    impact = bill.get("impact_score", "")
+    tags = bill.get("tags", "")
+
+    # Format tags — stored as JSON array string
+    tag_line = ""
+    try:
+        tag_list = json.loads(tags) if tags and tags.startswith("[") else []
+        if tag_list:
+            tag_line = f"\n{' · '.join(f'#{t.replace(\"-\", \"\")}' for t in tag_list[:3])}"
+    except Exception:
+        pass
+
+    sponsor_line = f"\nSponsor: {sponsor}" if sponsor else ""
+    url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
+
+    text = (
+        f"📌 Philadelphia City Council Spotlight\n\n"
+        f"{title}{sponsor_line}"
+        f"{tag_line}\n\n"
+        f"Impact: {impact}/10\n"
+        f"{url}"
+    )
+
+    if len(text) > 300:
+        # Trim title to fit
+        budget = 300 - len(text) + len(title)
+        title = title[:budget - 3] + "..."
+        text = (
+            f"📌 Philadelphia City Council Spotlight\n\n"
+            f"{title}{sponsor_line}"
+            f"{tag_line}\n\n"
+            f"Impact: {impact}/10\n"
+            f"{url}"
+        )
+
+    bsky_post(token, did, text)
+    return True
+
+
+def fetch_recently_signed(days: int = 30) -> list:
+    """Bills signed into law within the last N days."""
+    try:
+        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&status=signed_into_law")
+        bills = data.get("results", [])
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         recent = []
         for b in bills:
-            introduced = b.get("introduced_date") or b.get("created_at")
-            if not introduced:
+            date_str = b.get("introduced_date") or b.get("created_at")
+            if not date_str:
                 continue
             try:
-                dt = datetime.fromisoformat(introduced.replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
                 if dt >= cutoff:
                     recent.append(b)
             except Exception:
                 continue
         return recent
     except Exception as e:
-        print(f"Failed to fetch bills: {e}")
+        print(f"Failed to fetch signed bills: {e}")
         return []
 
 
-def post_high_impact_bills(token: str, did: str) -> int:
-    bills = fetch_recent_bills(hours=24)
-    high_impact = [b for b in bills if (b.get("impact_score") or 0) >= 7]
-
-    if not high_impact:
-        print("No high-impact bills introduced in the last 24h.")
-        return 0
-
-    posted = 0
-    for bill in high_impact[:3]:  # cap at 3 posts per run
-        title = bill.get("plain_title") or bill.get("title") or "Untitled bill"
-        bill_id = bill.get("id", "")
-        sponsor = bill.get("primary_sponsor") or bill.get("sponsor") or ""
-        impact = bill.get("impact_score", "")
-
-        sponsor_line = f"\nSponsor: {sponsor}" if sponsor else ""
-        url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
-
-        text = (
-            f"🔔 New high-impact bill introduced in Philadelphia City Council\n\n"
-            f"{title}{sponsor_line}\n\n"
-            f"Impact score: {impact}/10\n"
-            f"{url}"
-        )
-
-        if len(text) > 300:
-            text = text[:297] + "..."
-
-        bsky_post(token, did, text)
-        posted += 1
-
-    return posted
-
-
 def post_signed_bills(token: str, did: str) -> int:
-    bills = fetch_recent_bills(hours=24)
-    signed = [b for b in bills if b.get("status") in ("signed_into_law", "enacted", "approved")]
-
+    signed = fetch_recently_signed(days=30)
     if not signed:
-        print("No bills signed into law in the last 24h.")
+        print("No bills signed into law in the last 30 days.")
         return 0
 
     posted = 0
@@ -161,18 +195,15 @@ def post_signed_bills(token: str, did: str) -> int:
 def post_weekly_roundup(token: str, did: str) -> None:
     try:
         data = http_get(f"{API_BASE}/api/insights/summary")
-        total = data.get("total_bills") or data.get("total") or "thousands of"
+        total = data.get("total_bills") or "thousands of"
         active = data.get("active_bills") or ""
         active_line = f"\n📋 Active bills: {active}" if active else ""
 
-        recent = fetch_recent_bills(hours=168)  # last 7 days
-        new_this_week = len(recent)
-
         text = (
             f"📊 Philadelphia City Council — Weekly Update\n\n"
-            f"New bills this week: {new_this_week}"
+            f"Total bills tracked: {total}"
             f"{active_line}\n\n"
-            f"Track all {total} bills at:\n"
+            f"Explore 26 years of legislation:\n"
             f"{SITE_BASE}/philadelphia/legislation"
         )
 
@@ -215,11 +246,11 @@ def main():
         print("Sunday — posting weekly roundup.")
         post_weekly_roundup(token, did)
     else:
-        print("Checking for high-impact bills...")
-        n = post_high_impact_bills(token, did)
-        print(f"Posted {n} high-impact bill(s).")
+        print("Posting daily spotlight...")
+        posted = post_daily_spotlight(token, did)
+        print(f"Spotlight posted: {posted}")
 
-        print("Checking for bills signed into law...")
+        print("Checking for recently signed bills...")
         n = post_signed_bills(token, did)
         print(f"Posted {n} signed bill(s).")
 
