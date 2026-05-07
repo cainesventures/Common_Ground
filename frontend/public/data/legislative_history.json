@@ -1,53 +1,53 @@
 {
-  "generated_at": "2026-05-06T21:28:27.719618Z",
+  "generated_at": "2026-05-07T11:14:45.991555Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
   },
-  "total_bills": 8531,
+  "total_bills": 8578,
   "key_stats": [
     {
       "label": "Bills Introduced",
-      "value": "8,531",
+      "value": "8,578",
       "note": "2000–2026"
     },
     {
       "label": "Signed into Law",
-      "value": "6,593",
+      "value": "6,602",
       "note": "99% of closed bills"
     },
     {
       "label": "Active Bills",
-      "value": "1,846",
+      "value": "1,884",
       "note": "in committee or introduced"
     },
     {
       "label": "Top Issue",
       "value": "Zoning",
-      "note": "2,538 bills"
+      "note": "2,560 bills"
     }
   ],
-  "narrative": "Over the past 27 years, the Philadelphia City Council has churned out an astonishing 8,531 bills, a remarkable volume of legislative activity that reflects the city's relentless pursuit of progress. From zoning regulations to transportation infrastructure, this flood of legislation has shaped the very fabric of our city, with many bills ultimately making it into law: a staggering 6,593 – or nearly 99% – have been signed by mayoral signature or veto-proof majorities since 2000. This is no small feat, especially considering that over 1,800 bills remain active to this day.\n\nA closer look at the data reveals some fascinating patterns. For instance, zoning and planning issues have dominated the Council's agenda for nearly three decades, accounting for a combined total of over 4,500 bills – more than half of all legislation introduced since 2000. Meanwhile, the number of bills introduced has ebbed and flowed over time, with some years seeing as few as 66 new introductions (in 2026) and others, like 2012 and 2018, witnessing nearly 400 new proposals each year. Perhaps most strikingly, the Council's bills have an unusually high pass rate: 99% of closed bills become law, suggesting a remarkable degree of collaboration between members.\n\nSo what can we learn from all this data? For one thing, it underscores the importance of keeping tabs on our elected representatives – tracking legislation is essential to holding them accountable for their actions. At Open Common Ground, we believe that informed citizens are empowered citizens, and our platform makes it easier than ever to stay up-to-date on Council business. By exploring these numbers and trends, Philadelphians can better understand the issues that affect their lives, connect with like-minded neighbors, and even influence policy decisions in meaningful ways – making Open Common Ground your go-to resource for navigating the City Council's legislative landscape.",
+  "narrative": "Over the past quarter century, Philadelphia's City Council has introduced a staggering 8,578 bills, shaping the city's laws and policies in countless ways. This comprehensive dataset spans an entire generation of council members, revealing trends and patterns that shed light on the city's priorities and challenges. From zoning regulations to transportation infrastructure, the legislative record is a treasure trove of insights into how city government works.\n\nSome striking patterns emerge from this data. For instance, Council President Clarke has sponsored an impressive 775 bills over the years, but other council members have also made significant contributions to the legislative agenda. The most active issue areas – zoning (2,560 bills), planning (1,933 bills), and infrastructure (1,529 bills) – suggest that City Hall is deeply concerned with the physical development of the city. Meanwhile, the 99% pass rate for signed bills implies a relatively efficient and harmonious legislative process, although it's unclear what proportion of those bills were truly contentious or difficult to pass.\n\nThis wealth of data offers a unique opportunity for citizens to engage more deeply with their local government. By tracking legislation on Open Common Ground, Philadelphians can monitor the issues that matter most to them and hold elected officials accountable for their actions. With this information at hand, residents can make informed decisions about which candidates to support or how to organize around specific causes – a vital step towards creating positive change in their communities.",
   "top_issues": [
     {
       "tag": "zoning",
-      "count": 2538
+      "count": 2560
     },
     {
       "tag": "planning",
-      "count": 1931
+      "count": 1933
     },
     {
       "tag": "infrastructure",
-      "count": 1522
+      "count": 1529
     },
     {
       "tag": "housing",
-      "count": 1254
+      "count": 1255
     },
     {
       "tag": "transportation",
-      "count": 1184
+      "count": 1188
     },
     {
       "tag": "finance",
@@ -55,11 +55,11 @@
     },
     {
       "tag": "business",
-      "count": 1137
+      "count": 1138
     },
     {
       "tag": "land-use",
-      "count": 1108
+      "count": 1109
     }
   ],
   "top_sponsors": [
@@ -73,7 +73,7 @@
     },
     {
       "name": "Councilmember Squilla",
-      "count": 621
+      "count": 623
     },
     {
       "name": "Councilmember Clarke",
