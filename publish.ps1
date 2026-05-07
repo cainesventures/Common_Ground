@@ -167,16 +167,16 @@ if ($staged) {
 # ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
 if ($railwayOk) {
     Log "Step 7/7 - Triggering Railway redeploy..."
-    railway redeploy --yes 2>&1
+    railway redeploy --from-source --yes 2>&1
     if ($LASTEXITCODE -eq 0) {
         Log "Railway redeploy triggered - backend updates in ~3 min."
     } else {
         Warn "Railway redeploy failed. Manual fallback:"
-        Warn "  railway.com → opencommonground-api → Redeploy"
+        Warn "  railway.com -> opencommonground-api -> Redeploy"
     }
 } else {
     Warn "Step 7/7 - Skipping Railway redeploy (not logged in)."
-    Warn "Manual: railway.com → opencommonground-api → Redeploy"
+    Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
 }
 
 # Record successful run timestamp (used by scheduler gate)
