@@ -78,17 +78,26 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
 
 
 def fetch_spotlight_bill() -> dict | None:
-    """Pick a random high-impact analyzed bill that has a lede from the full catalog."""
+    """Pick a random high-impact analyzed bill from the current or prior year."""
+    cutoff_year = datetime.now(timezone.utc).year - 1  # e.g. 2025 when running in 2026
+
+    def is_recent(bill: dict) -> bool:
+        raw = bill.get("introduced_date") or ""
+        try:
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            return dt.year >= cutoff_year
+        except Exception:
+            return False
+
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
+        data = http_get(f"{API_BASE}/api/legislation/search?limit=200&level=local&analyzed=true&impact=high")
         bills = data.get("results", [])
-        candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6]
+        candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6 and is_recent(b)]
         if not candidates:
-            data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
-            candidates = data.get("results", [])
+            data = http_get(f"{API_BASE}/api/legislation/search?limit=200&level=local&analyzed=true&impact=medium")
+            candidates = [b for b in data.get("results", []) if is_recent(b)]
         if not candidates:
             return None
-        # Prefer bills with a lede so the post has a proper hook
         with_lede = [b for b in candidates if b.get("lede")]
         return random.choice(with_lede) if with_lede else random.choice(candidates)
     except Exception as e:
