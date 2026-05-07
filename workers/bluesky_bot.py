@@ -90,11 +90,11 @@ def fetch_spotlight_bill() -> dict | None:
             return False
 
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=200&level=local&analyzed=true&impact=high")
+        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
         bills = data.get("results", [])
         candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6 and is_recent(b)]
         if not candidates:
-            data = http_get(f"{API_BASE}/api/legislation/search?limit=200&level=local&analyzed=true&impact=medium")
+            data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
             candidates = [b for b in data.get("results", []) if is_recent(b)]
         if not candidates:
             return None
