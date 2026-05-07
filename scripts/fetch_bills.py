@@ -1,14 +1,21 @@
 """
 Fetch new Philadelphia City Council bills from Legistar and upsert into local DB.
 
-Runs the Playwright scraper directly (no backend needed). Automatically computes
-an incremental cutoff from the most recent bill already in the database — only
-bills introduced after that date are fetched.
+Two modes (both run by default in the weekly pipeline):
+
+1. Incremental fetch — scrapes the Legistar list page for bills introduced after
+   the last ingest date. Fast (~2 min). Captures new bills only.
+
+2. Status sync — exports all 8,500+ bills via Legistar's Excel export, then updates
+   status and final_date for every bill already in the DB. Captures bills that moved
+   from introduced/in_committee → signed_into_law/failed since the last run.
+   Takes ~3-4 min but is the only reliable way to catch status changes.
 
 Usage:
-    python scripts/fetch_bills.py           # incremental: since last ingest date
-    python scripts/fetch_bills.py --limit 50  # cap at 50 rows from Legistar
-    python scripts/fetch_bills.py --since 2026-01-01  # explicit cutoff date
+    python scripts/fetch_bills.py                  # both: incremental + status sync
+    python scripts/fetch_bills.py --skip-sync      # incremental only (faster)
+    python scripts/fetch_bills.py --sync-only      # status sync only
+    python scripts/fetch_bills.py --since 2026-01-01  # explicit incremental cutoff
 
 Part of the publish workflow — run before worker.py and publish.ps1.
 """
@@ -16,6 +23,7 @@ Part of the publish workflow — run before worker.py and publish.ps1.
 import argparse
 import os
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -40,15 +48,14 @@ _load_env()
 
 from app.models.database import SessionLocal
 from app.models.legislation import Legislation
-from app.integrations.legistar_scraper import PhilaLegistarScraper
+from app.integrations.legistar_scraper import PhilaLegistarScraper, _parse_date, _normalize_status
 from sqlalchemy import func
 
 
 def get_latest_introduced_date(db) -> datetime | None:
-    row = db.query(func.max(Legislation.introduced_date)).filter(
+    return db.query(func.max(Legislation.introduced_date)).filter(
         Legislation.level == "local"
     ).scalar()
-    return row
 
 
 def upsert_bills(db, bills: list) -> tuple[int, int]:
@@ -84,40 +91,99 @@ def upsert_bills(db, bills: list) -> tuple[int, int]:
     return ingested, updated
 
 
+def sync_statuses(db) -> tuple[int, int]:
+    """
+    Export all bills from Legistar via Excel and update status + final_date for
+    every bill already in the DB whose status has changed.
+    """
+    print("Downloading Legistar Excel export (all bills)...")
+    scraper = PhilaLegistarScraper(headless=True)
+    tmp = tempfile.mktemp(suffix=".xls")
+    try:
+        scraper.export_to_excel(tmp)
+        rows = PhilaLegistarScraper.parse_excel_export(tmp)
+    finally:
+        if Path(tmp).exists():
+            Path(tmp).unlink()
+
+    print(f"  Parsed {len(rows):,} rows from Excel export")
+
+    checked = updated = 0
+    for row in rows:
+        file_number = row.get("file_number", "").strip()
+        if not file_number:
+            continue
+
+        new_status = _normalize_status(row.get("status", ""))
+        final_date = _parse_date(row.get("final_date", ""))
+
+        bill = db.query(Legislation).filter(
+            Legislation.bill_number == file_number,
+            Legislation.level == "local",
+        ).first()
+
+        if not bill:
+            continue
+
+        checked += 1
+        changed = False
+        if new_status and new_status != bill.status:
+            print(f"  Status: {file_number} {bill.status!r} → {new_status!r}")
+            bill.status = new_status
+            changed = True
+        if final_date and final_date != bill.final_date:
+            bill.final_date = final_date
+            changed = True
+        if changed:
+            bill.updated_at = datetime.utcnow()
+            updated += 1
+
+    db.commit()
+    print(f"  Status sync: checked {checked:,} bills, updated {updated}")
+    return checked, updated
+
+
 def main():
     parser = argparse.ArgumentParser(description="Fetch new Philadelphia bills from Legistar")
-    parser.add_argument("--limit", type=int, default=250, help="Max rows to fetch from Legistar (default: 250)")
+    parser.add_argument("--limit", type=int, default=250, help="Max rows for incremental fetch (default: 250)")
     parser.add_argument("--since", type=str, default=None, help="Cutoff date YYYY-MM-DD (default: auto from DB)")
+    parser.add_argument("--skip-sync", action="store_true", help="Skip status sync, do incremental fetch only")
+    parser.add_argument("--sync-only", action="store_true", help="Run status sync only, skip incremental fetch")
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
-        if args.since:
-            since_date = datetime.strptime(args.since, "%Y-%m-%d")
-            print(f"Since date: {since_date.date()} (from --since flag)")
-        else:
-            since_date = get_latest_introduced_date(db)
-            if since_date:
-                print(f"Since date: {since_date} (auto from DB — most recent bill)")
+        # ── Incremental fetch ─────────────────────────────────────────────────
+        if not args.sync_only:
+            if args.since:
+                since_date = datetime.strptime(args.since, "%Y-%m-%d")
+                print(f"Since date: {since_date.date()} (from --since flag)")
             else:
-                print("No bills in DB — fetching full history (this may take a while)")
+                since_date = get_latest_introduced_date(db)
+                if since_date:
+                    print(f"Since date: {since_date} (auto from DB)")
+                else:
+                    print("No bills in DB — fetching without date cutoff")
 
-        print(f"Scraping Legistar (limit={args.limit}) ...")
-        scraper = PhilaLegistarScraper(headless=True)
-        bills = scraper.scrape_bills(
-            limit=args.limit,
-            fetch_details=False,
-            allowed_types=["Bill"],
-            since_date=since_date,
-        )
-        print(f"Scraped {len(bills)} bills from Legistar")
+            print(f"Scraping Legistar for new bills (limit={args.limit}) ...")
+            scraper = PhilaLegistarScraper(headless=True)
+            bills = scraper.scrape_bills(
+                limit=args.limit,
+                fetch_details=False,
+                allowed_types=["Bill"],
+                since_date=since_date,
+            )
+            print(f"Scraped {len(bills)} bills from Legistar list")
 
-        if not bills:
-            print("No new bills found — DB is up to date.")
-            return
+            if bills:
+                ingested, updated = upsert_bills(db, bills)
+                print(f"Incremental fetch: {ingested} new, {updated} updated")
+            else:
+                print("No new bills found.")
 
-        ingested, updated = upsert_bills(db, bills)
-        print(f"Done: {ingested} new, {updated} updated")
+        # ── Status sync ───────────────────────────────────────────────────────
+        if not args.skip_sync:
+            sync_statuses(db)
 
     finally:
         db.close()
