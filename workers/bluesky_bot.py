@@ -100,43 +100,44 @@ def post_daily_spotlight(token: str, did: str) -> bool:
         print("No spotlight bill found.")
         return False
 
-    title = bill.get("plain_title") or bill.get("title") or "Untitled bill"
+    lede = (bill.get("lede") or "").strip()
+    headline = (bill.get("headline") or "").strip()
+    plain_title = (bill.get("plain_title") or bill.get("title") or "A Philadelphia City Council bill").strip()
     bill_id = bill.get("id", "")
-    sponsor = bill.get("sponsor") or ""
+    sponsor = (bill.get("sponsor") or "").strip()
     impact = bill.get("impact_score", "")
     tags = bill.get("tags", "")
+    url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
 
-    # Format tags — stored as JSON array string
-    tag_line = ""
+    # Use lede as the hook — it's AI-generated for exactly this purpose
+    hook = lede or headline or plain_title
+
+    # Format 1-2 hashtags from tags
+    tag_str = ""
     try:
         tag_list = json.loads(tags) if tags and tags.startswith("[") else []
         if tag_list:
-            tag_line = "\n" + " · ".join("#" + t.replace("-", "") for t in tag_list[:3])
+            tag_str = " ".join("#" + t.replace("-", "") for t in tag_list[:2])
     except Exception:
         pass
 
-    sponsor_line = f"\nSponsor: {sponsor}" if sponsor else ""
-    url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
+    footer_parts = []
+    if sponsor:
+        footer_parts.append(sponsor)
+    if impact:
+        footer_parts.append(f"Impact {impact}/10")
+    footer = " · ".join(footer_parts) if footer_parts else "Philadelphia City Council"
 
-    text = (
-        f"📌 Philadelphia City Council Spotlight\n\n"
-        f"{title}{sponsor_line}"
-        f"{tag_line}\n\n"
-        f"Impact: {impact}/10\n"
-        f"{url}"
-    )
+    text = f"{hook}\n\n{footer}\n{url}"
+    if tag_str:
+        text += f"\n{tag_str}"
 
     if len(text) > 300:
-        # Trim title to fit
-        budget = 300 - len(text) + len(title)
-        title = title[:budget - 3] + "..."
-        text = (
-            f"📌 Philadelphia City Council Spotlight\n\n"
-            f"{title}{sponsor_line}"
-            f"{tag_line}\n\n"
-            f"Impact: {impact}/10\n"
-            f"{url}"
-        )
+        budget = 300 - (len(text) - len(hook))
+        hook = hook[:max(0, budget - 3)] + "..."
+        text = f"{hook}\n\n{footer}\n{url}"
+        if tag_str and len(text) + len(tag_str) + 1 <= 300:
+            text += f"\n{tag_str}"
 
     bsky_post(token, did, text)
     return True
@@ -173,18 +174,20 @@ def post_signed_bills(token: str, did: str) -> int:
 
     posted = 0
     for bill in signed[:2]:
-        title = bill.get("plain_title") or bill.get("title") or "Untitled bill"
+        plain_title = (bill.get("plain_title") or bill.get("title") or "A bill").strip()
+        lede = (bill.get("lede") or "").strip()
         bill_id = bill.get("id", "")
         url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
 
-        text = (
-            f"✅ Signed into law in Philadelphia\n\n"
-            f"{title}\n\n"
-            f"{url}"
-        )
+        if lede:
+            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{lede}\n{url}"
+        else:
+            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{url}"
 
         if len(text) > 300:
-            text = text[:297] + "..."
+            budget = 300 - (len(text) - len(plain_title))
+            plain_title = plain_title[:max(0, budget - 3)] + "..."
+            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{url}"
 
         bsky_post(token, did, text)
         posted += 1
@@ -195,17 +198,22 @@ def post_signed_bills(token: str, did: str) -> int:
 def post_weekly_roundup(token: str, did: str) -> None:
     try:
         data = http_get(f"{API_BASE}/api/insights/summary")
-        total = data.get("total_bills") or "thousands of"
-        active = data.get("active_bills") or ""
-        active_line = f"\n📋 Active bills: {active}" if active else ""
+        total = data.get("total_bills")
+        active = data.get("active_bills")
+        this_year = data.get("bills_this_year")
 
-        text = (
-            f"📊 Philadelphia City Council — Weekly Update\n\n"
-            f"Total bills tracked: {total}"
-            f"{active_line}\n\n"
-            f"Explore 26 years of legislation:\n"
-            f"{SITE_BASE}/philadelphia/legislation"
-        )
+        total_str = f"{total:,}" if total else "thousands of"
+        active_str = f"{active:,}" if active else ""
+        year_str = f"{this_year:,}" if this_year else ""
+
+        lines = [f"Philadelphia City Council has {total_str} bills on record going back to 2000."]
+        if active_str:
+            lines.append(f"{active_str} are active right now.")
+        if year_str:
+            lines.append(f"{year_str} introduced so far this year.")
+        lines.append(f"\n{SITE_BASE}/philadelphia/legislation")
+
+        text = "\n".join(lines)
 
         if len(text) > 300:
             text = text[:297] + "..."
