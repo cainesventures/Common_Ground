@@ -107,8 +107,8 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     plain_title = (bill.get("plain_title") or bill.get("title") or "A Philadelphia City Council bill").strip()
     bill_id = bill.get("id", "")
     sponsor = (bill.get("sponsor") or "").strip()
-    impact = bill.get("impact_score", "")
     tags = bill.get("tags", "")
+    introduced_raw = bill.get("introduced_date") or ""
     url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
 
     # Use lede as the hook — it's AI-generated for exactly this purpose
@@ -124,7 +124,20 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     except Exception:
         pass
 
-    footer = sponsor if sponsor else "Philadelphia City Council"
+    # Format introduced date as "Introduced Mon YYYY"
+    intro_str = ""
+    try:
+        if introduced_raw:
+            dt = datetime.fromisoformat(introduced_raw.replace("Z", "+00:00"))
+            intro_str = f"Introduced {dt.strftime('%b %Y')}"
+    except Exception:
+        pass
+
+    footer_parts = [sponsor] if sponsor else ["Philadelphia City Council"]
+    if intro_str:
+        footer_parts.append(intro_str)
+    footer = " · ".join(footer_parts)
+
     text = f"{hook}\n\n{footer}"
     if tag_str:
         text += f"\n{tag_str}"
