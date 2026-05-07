@@ -78,20 +78,19 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
 
 
 def fetch_spotlight_bill() -> dict | None:
-    """Pick a random high-impact analyzed bill from the full catalog."""
+    """Pick a random high-impact analyzed bill that has a lede from the full catalog."""
     try:
-        # impact=high returns bills with impact_level='high', which maps to score >= 7
-        # We fetch a larger pool and filter for score >= 6 to widen the net
         data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
         bills = data.get("results", [])
         candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6]
         if not candidates:
-            # Fall back to medium-impact if no high-impact bills
             data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
             candidates = data.get("results", [])
         if not candidates:
             return None
-        return random.choice(candidates)
+        # Prefer bills with a lede so the post has a proper hook
+        with_lede = [b for b in candidates if b.get("lede")]
+        return random.choice(with_lede) if with_lede else random.choice(candidates)
     except Exception as e:
         print(f"Failed to fetch spotlight bill: {e}")
         return None
@@ -113,7 +112,8 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
 
     # Use lede as the hook — it's AI-generated for exactly this purpose
-    hook = lede or headline or plain_title
+    # headline is intentionally excluded: it's newspaper-style and too dense for a post
+    hook = lede or plain_title
 
     # Format 1-2 hashtags from tags
     tag_str = ""
