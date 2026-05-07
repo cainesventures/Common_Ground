@@ -1,23 +1,26 @@
 # schedule_publish.ps1
-# Registers a weekly Windows Task Scheduler job that runs the full publish pipeline:
-#   fetch new bills → enrich with Ollama → regenerate narrative + sitemap → push to B2 → Railway redeploy
+# Registers a Windows Task Scheduler job that runs the full publish pipeline
+# at logon — but only if it hasn't run in the last 5 days.
 #
-# Runs every Friday at 6:00am (after Thursday City Council sessions).
+# Resilient to your usage pattern:
+#   - Computer asleep?  → runs on next wake/login
+#   - Didn't log in for a week?  → runs immediately on next login
+#   - Log in every day?  → only runs once every 5 days (gate check)
+#
 # Run once as Administrator to register. Re-run to update settings.
 #
 # Usage:
-#   .\scripts\schedule_publish.ps1                       # schedule at default time (Friday 6am)
-#   .\scripts\schedule_publish.ps1 -DayOfWeek Monday     # different day
-#   .\scripts\schedule_publish.ps1 -AtTime "08:00"       # different time
-#   .\scripts\schedule_publish.ps1 -Remove               # remove the scheduled task
+#   .\scripts\schedule_publish.ps1                  — register (default: 5-day interval)
+#   .\scripts\schedule_publish.ps1 -MinDays 7       — run at most once per week
+#   .\scripts\schedule_publish.ps1 -Remove          — remove the scheduled task
+#   Start-ScheduledTask -TaskName CommonGroundPublish — run immediately (bypasses gate)
 
 param(
-    [string]$DayOfWeek = "Friday",
-    [string]$AtTime = "06:00",
+    [int]$MinDays = 5,
     [switch]$Remove
 )
 
-$TaskName   = "CommonGroundPublish"
+$TaskName    = "CommonGroundPublish"
 $ProjectRoot = "C:\Projects\Common_Ground"
 $PublishScript = "$ProjectRoot\publish.ps1"
 
@@ -36,15 +39,17 @@ if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Write-Host "Removed existing task '$TaskName'"
 }
 
+# Runs publish.ps1 with the minimum-interval gate so it only fires every $MinDays days
+$scriptArgs = "-NonInteractive -ExecutionPolicy Bypass -File `"$PublishScript`" -MinDaysSinceLastRun $MinDays"
+
 $Action = New-ScheduledTaskAction `
     -Execute "powershell.exe" `
-    -Argument "-NonInteractive -ExecutionPolicy Bypass -File `"$PublishScript`"" `
+    -Argument $scriptArgs `
     -WorkingDirectory $ProjectRoot
 
-$Trigger = New-ScheduledTaskTrigger `
-    -Weekly `
-    -DaysOfWeek $DayOfWeek `
-    -At $AtTime
+# Fire at every logon — the MinDaysSinceLastRun gate inside publish.ps1 prevents
+# it from actually running more than once per interval
+$Trigger = New-ScheduledTaskTrigger -AtLogOn
 
 $Settings = New-ScheduledTaskSettingsSet `
     -RunOnlyIfNetworkAvailable `
@@ -64,18 +69,19 @@ Register-ScheduledTask `
     -Trigger $Trigger `
     -Settings $Settings `
     -Principal $Principal `
-    -Description "Common Ground weekly publish: fetch Legistar bills, enrich with Ollama, push to B2 + Railway" `
+    -Description "Common Ground publish pipeline — runs at logon if $MinDays+ days since last run" `
     | Out-Null
 
 Write-Host ""
 Write-Host "Registered: $TaskName"
-Write-Host "  Schedule: Every $DayOfWeek at $AtTime"
+Write-Host "  Trigger : At every logon"
+Write-Host "  Gate    : Only runs if last publish was $MinDays+ days ago"
 Write-Host "  Script  : $PublishScript"
 Write-Host ""
 Write-Host "Commands:"
-Write-Host "  Run now  : Start-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Status   : Get-ScheduledTask  -TaskName '$TaskName' | Select-Object -ExpandProperty State"
-Write-Host "  Last run : (Get-ScheduledTaskInfo -TaskName '$TaskName').LastRunTime"
-Write-Host "  Disable  : Disable-ScheduledTask -TaskName '$TaskName'"
-Write-Host "  Remove   : .\scripts\schedule_publish.ps1 -Remove"
+Write-Host "  Run now (bypasses gate) : Start-ScheduledTask -TaskName '$TaskName'"
+Write-Host "  Check last run time     : (Get-ScheduledTaskInfo -TaskName '$TaskName').LastRunTime"
+Write-Host "  See last publish date   : Get-Content '$ProjectRoot\.last_publish'"
+Write-Host "  Disable                 : Disable-ScheduledTask -TaskName '$TaskName'"
+Write-Host "  Remove                  : .\scripts\schedule_publish.ps1 -Remove"
 Write-Host ""

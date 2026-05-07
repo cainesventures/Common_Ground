@@ -25,7 +25,8 @@
 param(
     [switch]$SkipFetch,
     [switch]$SkipEnrich,
-    [switch]$SkipNarrative
+    [switch]$SkipNarrative,
+    [int]$MinDaysSinceLastRun = 0   # 0 = always run; set by scheduler wrapper to avoid duplicate runs
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,18 @@ Get-Content "$ROOT\.env" | ForEach-Object {
 }
 
 Set-Location $ROOT
+
+# ── Minimum-interval gate (used by scheduler; skipped on manual runs) ─────────
+$LAST_RUN_FILE = "$ROOT\.last_publish"
+if ($MinDaysSinceLastRun -gt 0 -and (Test-Path $LAST_RUN_FILE)) {
+    $lastRun = [datetime](Get-Content $LAST_RUN_FILE)
+    $daysSince = ((Get-Date) - $lastRun).TotalDays
+    if ($daysSince -lt $MinDaysSinceLastRun) {
+        Write-Host "Last publish was $([math]::Round($daysSince,1)) days ago (< $MinDaysSinceLastRun days). Skipping."
+        exit 0
+    }
+}
+
 Log "Publish pipeline starting..."
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
@@ -165,6 +178,9 @@ if ($railwayOk) {
     Warn "Step 7/7 — Skipping Railway redeploy (not logged in)."
     Warn "Manual: railway.com → opencommonground-api → Redeploy"
 }
+
+# Record successful run timestamp (used by scheduler gate)
+(Get-Date).ToString("o") | Set-Content "$ROOT\.last_publish"
 
 Log ""
 Log "============================================================"
