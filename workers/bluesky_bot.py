@@ -56,18 +56,21 @@ def bsky_login() -> tuple[str, str]:
     return resp["accessJwt"], resp["did"]
 
 
-def bsky_post(token: str, did: str, text: str) -> None:
+def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    record = {
+        "$type": "app.bsky.feed.post",
+        "text": text,
+        "createdAt": now,
+    }
+    if embed:
+        record["embed"] = embed
     http_post(
         f"{BSKY_API}/com.atproto.repo.createRecord",
         {
             "repo": did,
             "collection": "app.bsky.feed.post",
-            "record": {
-                "$type": "app.bsky.feed.post",
-                "text": text,
-                "createdAt": now,
-            },
+            "record": record,
         },
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -121,25 +124,28 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     except Exception:
         pass
 
-    footer_parts = []
-    if sponsor:
-        footer_parts.append(sponsor)
-    if impact:
-        footer_parts.append(f"Impact {impact}/10")
-    footer = " · ".join(footer_parts) if footer_parts else "Philadelphia City Council"
-
-    text = f"{hook}\n\n{footer}\n{url}"
+    footer = sponsor if sponsor else "Philadelphia City Council"
+    text = f"{hook}\n\n{footer}"
     if tag_str:
         text += f"\n{tag_str}"
 
     if len(text) > 300:
         budget = 300 - (len(text) - len(hook))
         hook = hook[:max(0, budget - 3)] + "..."
-        text = f"{hook}\n\n{footer}\n{url}"
+        text = f"{hook}\n\n{footer}"
         if tag_str and len(text) + len(tag_str) + 1 <= 300:
             text += f"\n{tag_str}"
 
-    bsky_post(token, did, text)
+    embed = {
+        "$type": "app.bsky.embed.external",
+        "external": {
+            "uri": url,
+            "title": plain_title,
+            "description": headline or lede or "Philadelphia City Council legislation",
+        },
+    }
+
+    bsky_post(token, did, text, embed=embed)
     return True
 
 
@@ -180,16 +186,23 @@ def post_signed_bills(token: str, did: str) -> int:
         url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
 
         if lede:
-            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{lede}\n{url}"
+            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{lede}"
         else:
-            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{url}"
+            text = f"Just signed into law in Philadelphia: {plain_title}"
 
         if len(text) > 300:
-            budget = 300 - (len(text) - len(plain_title))
-            plain_title = plain_title[:max(0, budget - 3)] + "..."
-            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{url}"
+            text = text[:297] + "..."
 
-        bsky_post(token, did, text)
+        embed = {
+            "$type": "app.bsky.embed.external",
+            "external": {
+                "uri": url,
+                "title": plain_title,
+                "description": lede or "Philadelphia City Council legislation",
+            },
+        }
+
+        bsky_post(token, did, text, embed=embed)
         posted += 1
 
     return posted
@@ -211,14 +224,22 @@ def post_weekly_roundup(token: str, did: str) -> None:
             lines.append(f"{active_str} are active right now.")
         if year_str:
             lines.append(f"{year_str} introduced so far this year.")
-        lines.append(f"\n{SITE_BASE}/philadelphia/legislation")
 
         text = "\n".join(lines)
 
         if len(text) > 300:
             text = text[:297] + "..."
 
-        bsky_post(token, did, text)
+        embed = {
+            "$type": "app.bsky.embed.external",
+            "external": {
+                "uri": f"{SITE_BASE}/philadelphia/legislation",
+                "title": "Philadelphia City Council — Open Common Ground",
+                "description": "26 years of local legislation, tracked and analyzed.",
+            },
+        }
+
+        bsky_post(token, did, text, embed=embed)
     except Exception as e:
         print(f"Weekly roundup failed: {e}")
 
