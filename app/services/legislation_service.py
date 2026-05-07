@@ -328,13 +328,22 @@ class LegislationIngestionService:
             # Convert Excel rows to Legislation dicts using scraper's own parser
             bills = [scraper._parse_row(row) for row in rows]
         else:
-            logger.info(f"Philadelphia scrape (limit={limit}) ...")
+            # Compute incremental cutoff: stop scraping once we hit bills already in DB
+            from app.models.legislation import Legislation as LegislationModel
+            from sqlalchemy import func as sqlfunc
+            latest_row = self.db.query(sqlfunc.max(LegislationModel.introduced_date)).filter(
+                LegislationModel.level == "local"
+            ).scalar()
+            since_date = latest_row if latest_row else None
+            if since_date:
+                logger.info(f"Incremental fetch: since_date={since_date}")
             fetch_details = limit <= 20
             bills = await loop.run_in_executor(
                 None, lambda: scraper.scrape_bills(
                     limit=limit,
                     fetch_details=fetch_details,
                     allowed_types=["Bill"],
+                    since_date=since_date,
                 )
             )
 

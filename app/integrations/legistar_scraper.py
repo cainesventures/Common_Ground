@@ -203,6 +203,7 @@ class PhilaLegistarScraper:
         self,
         limit: int = 100,
         allowed_types: Optional[List[str]] = None,
+        since_date: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
         """
         Scrape the legislation list page and return raw row data including matter IDs.
@@ -213,6 +214,9 @@ class PhilaLegistarScraper:
         Args:
             limit: Max number of matching rows to return.
             allowed_types: Bill types to include. Defaults to ["Bill"].
+            since_date: Stop collecting once intro_date drops below this cutoff.
+                        The Legistar list is ordered most-recent-first so this allows
+                        incremental fetches without re-processing the full history.
 
         Returns list of dicts with keys: matter_id, guid, file_number,
         bill_type, status, intro_date, final_date, title_short.
@@ -224,6 +228,7 @@ class PhilaLegistarScraper:
         from playwright.sync_api import sync_playwright
 
         rows: List[Dict[str, Any]] = []
+        stopped_early = False
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
@@ -250,6 +255,14 @@ class PhilaLegistarScraper:
                         if bill_type.lower() not in allowed_lower:
                             continue
 
+                        intro_date_raw = cells[3].inner_text().strip()
+
+                        if since_date:
+                            intro_dt = _parse_date(intro_date_raw)
+                            if intro_dt and intro_dt < since_date:
+                                stopped_early = True
+                                break
+
                         # Extract matter ID and GUID from the link in col 0
                         link = cells[0].query_selector("a")
                         href = link.get_attribute("href") if link else ""
@@ -266,7 +279,7 @@ class PhilaLegistarScraper:
                             "file_number": file_number,
                             "bill_type": bill_type,
                             "status": cells[2].inner_text().strip(),
-                            "intro_date": cells[3].inner_text().strip(),
+                            "intro_date": intro_date_raw,
                             "final_date": cells[4].inner_text().strip(),
                             "title_short": cells[5].inner_text().strip(),
                         })
@@ -274,7 +287,10 @@ class PhilaLegistarScraper:
                         logger.warning(f"Error parsing row: {e}")
                         continue
 
-                logger.info(f"Kept {len(rows)} rows after type filter")
+                if stopped_early:
+                    logger.info(f"Stopped at since_date={since_date.date()} — {len(rows)} new rows")
+                else:
+                    logger.info(f"Kept {len(rows)} rows after type filter")
 
             except Exception as e:
                 logger.error(f"Error scraping legislation list: {e}")
@@ -352,6 +368,7 @@ class PhilaLegistarScraper:
         limit: int = 100,
         fetch_details: bool = True,
         allowed_types: Optional[List[str]] = None,
+        since_date: Optional[datetime] = None,
     ) -> List[Dict[str, Any]]:
         """
         Scrape bills from the list page, then enrich with detail page data.
@@ -361,11 +378,12 @@ class PhilaLegistarScraper:
             fetch_details: If True, visit each detail page for full title + sponsors.
                            If False, use list page data only (faster, less complete).
             allowed_types: Bill types to include. Defaults to ["Bill"].
+            since_date: Stop collecting once intro_date drops below this cutoff.
 
         Returns:
             List of parsed bill dicts ready for Legislation model.
         """
-        list_rows = self.scrape_list(limit=limit, allowed_types=allowed_types)
+        list_rows = self.scrape_list(limit=limit, allowed_types=allowed_types, since_date=since_date)
         logger.info(f"Scraped {len(list_rows)} rows from list page")
 
         results: List[Dict[str, Any]] = []
