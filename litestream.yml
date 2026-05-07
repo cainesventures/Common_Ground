@@ -3,6 +3,7 @@ dbs:
     replicas:
       - type: s3
         bucket: opencommonground-db
+        path: db
         endpoint: s3.us-east-005.backblazeb2.com
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY
