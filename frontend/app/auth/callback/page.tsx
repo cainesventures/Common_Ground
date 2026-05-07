@@ -29,7 +29,8 @@ function AuthCallbackInner() {
         posthog.identify(user.id, { email: user.email, subscription_tier: user.subscription_tier })
       }
     }).catch(() => {}).finally(() => {
-      router.replace('/')
+      // Hard redirect so the Navbar remounts and picks up the new token
+      window.location.href = '/'
     })
   }, [params, router])
 
