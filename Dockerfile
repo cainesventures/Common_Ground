@@ -24,4 +24,4 @@ COPY . .
 EXPOSE 8080
 
 # On startup: always restore fresh DB from B2 (production is read-only), then launch app
-CMD ["sh", "-c", "rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && uvicorn main:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port $PORT"]
