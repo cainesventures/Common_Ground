@@ -132,7 +132,7 @@ def sync_statuses(db) -> tuple[int, int]:
         checked += 1
         changed = False
         if new_status and new_status != bill.status:
-            print(f"  Status: {file_number} {bill.status!r} → {new_status!r}")
+            print(f"  Status: {file_number} {bill.status!r} -> {new_status!r}")
             bill.status = new_status
             changed = True
         if final_date and final_date != bill.final_date:
