@@ -23,5 +23,5 @@ COPY . .
 
 EXPOSE 8080
 
-# On startup: restore DB from B2 if not already on volume, then launch app
-CMD ["sh", "-c", "litestream restore -if-db-not-exists -config /app/litestream.railway.yml /data/common_ground.db && uvicorn main:app --host 0.0.0.0 --port $PORT"]
+# On startup: always restore fresh DB from B2 (production is read-only), then launch app
+CMD ["sh", "-c", "rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && uvicorn main:app --host 0.0.0.0 --port $PORT"]
