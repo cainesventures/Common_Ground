@@ -522,6 +522,16 @@ async def export_legislation(
     )
 
 
+@router.get("/sitemap-ids")
+async def get_sitemap_ids(
+    level: str = Query("local", max_length=20),
+    db: Session = Depends(get_db),
+):
+    """Return all bill IDs for sitemap generation. Returns only IDs — compact response."""
+    rows = db.query(Legislation.id).filter(Legislation.level == level).all()
+    return {"ids": [r[0] for r in rows]}
+
+
 @router.get("/search")
 @limiter.limit("30/minute")
 async def search_legislation(
