@@ -1477,7 +1477,6 @@ async def stream_backfill_sponsors(
 class VoteRequest(BaseModel):
     vote: str
     voter_token: str
-    debate_id: str | None = None
 
     @field_validator("vote")
     @classmethod
@@ -1557,15 +1556,12 @@ async def cast_vote(
 
         if existing:
             existing.vote = body.vote
-            if body.debate_id:
-                existing.debate_id = body.debate_id
             if not existing.user_id:
                 existing.user_id = current_user.id
         else:
             db.add(LegislationVote(
                 id=f"vote_{_uuid.uuid4().hex[:12]}",
                 legislation_id=legislation_id,
-                debate_id=body.debate_id,
                 user_id=current_user.id,
                 vote=body.vote,
                 voter_token=body.voter_token,
