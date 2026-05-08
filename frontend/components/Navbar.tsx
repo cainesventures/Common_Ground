@@ -203,13 +203,13 @@ export function Navbar() {
           <div className="pt-2 border-t mt-2">
             {loading ? null : user ? (
               <div className="flex items-center justify-between px-3 py-2">
-                <div className="flex items-center gap-2 min-w-0">
+                <Link href="/profile" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
                   <Avatar className="h-7 w-7 shrink-0">
                     <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
                     <AvatarFallback>{user.display_name?.[0] ?? 'U'}</AvatarFallback>
                   </Avatar>
                   <span className="text-sm truncate max-w-[150px]">{user.display_name}</span>
-                </div>
+                </Link>
                 <button onClick={handleSignOut} className="text-sm text-muted-foreground hover:text-foreground shrink-0 ml-2">Sign out</button>
               </div>
             ) : (
