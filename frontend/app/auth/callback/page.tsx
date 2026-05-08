@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { setToken } from '@/lib/auth'
+import { setToken, setUserHint } from '@/lib/auth'
 import posthog from 'posthog-js'
 import { api } from '@/lib/api'
 import Link from 'next/link'
@@ -27,6 +27,7 @@ function AuthCallbackInner() {
       const user = data?.user
       if (user) {
         posthog.identify(user.id, { email: user.email, subscription_tier: user.subscription_tier })
+        setUserHint(user.email)
       }
     }).catch(() => {}).finally(() => {
       // Hard redirect so the Navbar remounts and picks up the new token

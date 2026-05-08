@@ -41,7 +41,7 @@ def _redirect_uri() -> str:
 
 
 @router.get("/google")
-async def google_login():
+async def google_login(hint: str = Query(default="")):
     """Redirect the browser to Google's OAuth consent screen."""
     settings = get_settings()
     if not settings.google_client_id:
@@ -56,8 +56,9 @@ async def google_login():
         "response_type": "code",
         "scope": SCOPES,
         "access_type": "offline",
-        "prompt": "select_account",
     }
+    if hint:
+        params["login_hint"] = hint
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return RedirectResponse(url=f"{GOOGLE_AUTH_URL}?{query}")
 

@@ -1,16 +1,22 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isLoggedIn } from '@/lib/auth'
+import { isLoggedIn, getUserHint } from '@/lib/auth'
 
 export default function LoginPage() {
   const router = useRouter()
+  const [loginUrl, setLoginUrl] = useState('/api/auth/google')
 
   // Redirect already-authenticated users away
   useEffect(() => {
     if (isLoggedIn()) router.replace('/')
   }, [router])
+
+  useEffect(() => {
+    const hint = getUserHint()
+    if (hint) setLoginUrl(`/api/auth/google?hint=${encodeURIComponent(hint)}`)
+  }, [])
 
   const isDev = process.env.NODE_ENV === 'development'
 
@@ -39,7 +45,7 @@ export default function LoginPage() {
 
         <div className="space-y-3">
           <a
-            href="/api/auth/google"
+            href={loginUrl}
             className="flex items-center justify-center gap-3 w-full py-2.5 px-4 rounded-lg border bg-white text-gray-800 text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
           >
             <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0" aria-hidden="true">
