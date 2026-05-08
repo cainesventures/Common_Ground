@@ -97,7 +97,7 @@ function SuccessContent() {
       {/* CTAs */}
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
         <Link
-          href="/legislation?analyzed=true"
+          href="/philadelphia/legislation"
           className="px-7 py-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-colors shadow-md"
         >
           Browse the bills →

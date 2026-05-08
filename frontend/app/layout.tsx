@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   title: 'Open Common Ground — Philadelphia City Council Tracker',
   description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives. Free, independent, no ads.',
   openGraph: {
-    title: 'Open Common Ground',
+    title: 'Open Common Ground — Philadelphia City Council Tracker',
     description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives. Free, independent, no ads.',
     url: 'https://opencommonground.com',
     siteName: 'Open Common Ground',
@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Open Common Ground',
+    title: 'Open Common Ground — Philadelphia City Council Tracker',
     description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives. Free, independent, no ads.',
     images: ['/opengraph-image'],
   },

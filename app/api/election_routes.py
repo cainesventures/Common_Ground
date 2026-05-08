@@ -1,5 +1,6 @@
 """API routes for Philadelphia City Council elections and candidate vote predictions."""
 
+import logging
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -11,6 +12,8 @@ from sqlalchemy.orm import Session
 from app.models import Candidate, CandidateVotePrediction, Legislation
 from app.auth import require_dev_tier
 from app.models.database import get_db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/elections", tags=["elections"])
 
