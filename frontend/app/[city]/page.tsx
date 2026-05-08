@@ -564,7 +564,7 @@ export default function LandingPage() {
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <Link
-            href="/api/auth/login"
+            href="/login"
             className="px-7 py-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-colors shadow-md hover:shadow-lg"
           >
             Join free →
