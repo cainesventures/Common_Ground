@@ -102,7 +102,7 @@ export function Navbar() {
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight shrink-0">
-          <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md dark:brightness-0 dark:invert" />
+          <Image src="/logo.png" alt="" width={28} height={28} className="rounded-md dark:hidden" />
           Open Common Ground
         </Link>
 
