@@ -128,6 +128,7 @@ export default function MyBillsPage() {
   const [tab, setTab] = useState<'saved' | 'votes'>('saved')
   const [bills, setBills] = useState<TrackedBill[]>([])
   const [votes, setVotes] = useState<VoteRecord[]>([])
+  const [voteQuery, setVoteQuery] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -319,8 +320,24 @@ export default function MyBillsPage() {
           ) : (
             <>
               <VotingStats votes={votes} />
+              <input
+                type="search"
+                value={voteQuery}
+                onChange={(e) => setVoteQuery(e.target.value)}
+                placeholder="Search your votes…"
+                className="w-full h-9 rounded-md border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {(() => {
+                const q = voteQuery.toLowerCase()
+                const filtered = q ? votes.filter(v =>
+                  (v.legislation?.plain_title ?? '').toLowerCase().includes(q) ||
+                  (v.legislation?.title ?? '').toLowerCase().includes(q) ||
+                  (v.legislation?.bill_number ?? '').toLowerCase().includes(q) ||
+                  v.vote.toLowerCase().includes(q)
+                ) : votes
+                return (
               <div className="flex flex-col gap-2">
-                {votes.map((v, i) => {
+                {filtered.map((v, i) => {
                   const statusColor = v.legislation?.status
                     ? (STATUS_COLORS[v.legislation.status] ?? STATUS_COLORS_FALLBACK)
                     : STATUS_COLORS_FALLBACK
@@ -358,7 +375,12 @@ export default function MyBillsPage() {
                     </Link>
                   )
                 })}
+                {filtered.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-8">No votes match &ldquo;{voteQuery}&rdquo;</p>
+                )}
               </div>
+                )
+              })()}
             </>
           )}
         </div>
