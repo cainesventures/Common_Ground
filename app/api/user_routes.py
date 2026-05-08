@@ -64,6 +64,8 @@ async def get_my_votes(
                 "bill_number": leg.bill_number if leg else None,
                 "status": leg.status if leg else None,
                 "level": leg.level if leg else None,
+                "tags": leg.tags if leg else None,
+                "impact_level": leg.impact_level if leg else None,
             },
         })
 

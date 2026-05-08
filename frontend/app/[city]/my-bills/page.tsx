@@ -69,6 +69,8 @@ interface VoteRecord {
     bill_number: string | null
     status: string | null
     level: string | null
+    tags?: string | null
+    impact_level?: string | null
   } | null
 }
 
@@ -129,6 +131,7 @@ export default function MyBillsPage() {
   const [bills, setBills] = useState<TrackedBill[]>([])
   const [votes, setVotes] = useState<VoteRecord[]>([])
   const [voteQuery, setVoteQuery] = useState('')
+  const [activeTag, setActiveTag] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -328,13 +331,46 @@ export default function MyBillsPage() {
                 className="w-full h-9 rounded-md border bg-background px-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               />
               {(() => {
+                const allTags = Array.from(new Set(
+                  votes.flatMap(v => {
+                    try { return v.legislation?.tags ? JSON.parse(v.legislation.tags) : [] } catch { return [] }
+                  })
+                )).sort() as string[]
+
+                return allTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {allTags.map(tag => (
+                      <button
+                        key={tag}
+                        onClick={() => setActiveTag(t => t === tag ? '' : tag)}
+                        className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize transition-colors ${
+                          activeTag === tag
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 hover:border-blue-400'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                )
+              })()}
+              {(() => {
                 const q = voteQuery.toLowerCase()
-                const filtered = q ? votes.filter(v =>
-                  (v.legislation?.plain_title ?? '').toLowerCase().includes(q) ||
-                  (v.legislation?.title ?? '').toLowerCase().includes(q) ||
-                  (v.legislation?.bill_number ?? '').toLowerCase().includes(q) ||
-                  v.vote.toLowerCase().includes(q)
-                ) : votes
+                const filtered = votes.filter(v => {
+                  if (q && !(
+                    (v.legislation?.plain_title ?? '').toLowerCase().includes(q) ||
+                    (v.legislation?.title ?? '').toLowerCase().includes(q) ||
+                    (v.legislation?.bill_number ?? '').toLowerCase().includes(q) ||
+                    v.vote.toLowerCase().includes(q)
+                  )) return false
+                  if (activeTag) {
+                    let tags: string[] = []
+                    try { tags = v.legislation?.tags ? JSON.parse(v.legislation.tags) : [] } catch { tags = [] }
+                    if (!tags.includes(activeTag)) return false
+                  }
+                  return true
+                })
                 return (
               <div className="flex flex-col gap-2">
                 {filtered.map((v, i) => {
