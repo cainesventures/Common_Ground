@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
 import { getCityConfig } from '@/lib/city'
@@ -100,7 +101,8 @@ export function Navbar() {
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="font-bold text-lg tracking-tight shrink-0">
+        <Link href="/" className="flex items-center gap-2 font-bold text-lg tracking-tight shrink-0">
+          <Image src="/logo.png" alt="" width={28} height={28} className="dark:invert" />
           Open Common Ground
         </Link>
 
