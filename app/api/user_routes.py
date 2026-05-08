@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import get_current_user, require_dev_tier
 from app.models import BillTracking, Legislation, LegislationVote, User
 from app.models.database import get_db
 
@@ -231,3 +231,19 @@ async def trigger_digest(
     except Exception as e:
         logger.error(f"Digest send failed: {e}")
         raise HTTPException(status_code=500, detail="Failed to send digest")
+
+
+# ── Admin Stats ───────────────────────────────────────────────────────────────
+
+@router.get("/admin/stats")
+async def get_admin_stats(
+    _: User = Depends(require_dev_tier),
+    db: Session = Depends(get_db),
+):
+    """Return high-level user and engagement counts. Dev tier only."""
+    return {
+        "success": True,
+        "users": db.query(User).count(),
+        "bills_tracked": db.query(BillTracking).count(),
+        "votes_cast": db.query(LegislationVote).count(),
+    }
