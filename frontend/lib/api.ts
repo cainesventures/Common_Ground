@@ -29,25 +29,6 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
 }
 
 export const api = {
-  // ── Debates ───────────────────────────────────────────────────────────────
-  getDebates: (limit = 20, offset = 0, filters?: { status?: string; level?: string; sort?: string; tag?: string }) => {
-    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-    if (filters?.status) params.set('status', filters.status)
-    if (filters?.level) params.set('level', filters.level)
-    if (filters?.sort) params.set('sort', filters.sort)
-    if (filters?.tag) params.set('tag', filters.tag)
-    return apiFetch(`/api/debates/list?${params}`)
-  },
-
-  getDebatesByLegislation: (legislationId: string, limit = 20, offset = 0) =>
-    apiFetch(`/api/debates/list?legislation_id=${encodeURIComponent(legislationId)}&limit=${limit}&offset=${offset}`),
-
-  getDebate: (id: string) =>
-    apiFetch(`/api/debates/${id}`),
-
-  getDebateMessages: (id: string) =>
-    apiFetch(`/api/debates/${id}/messages`),
-
   // ── Legislation ───────────────────────────────────────────────────────────
   getLegislation: (id: string) =>
     apiFetch(`/api/legislation/${id}`),
@@ -175,10 +156,10 @@ export const api = {
     apiFetch('/api/legislation/sync-statuses', { method: 'POST' }),
 
   // ── Voting ────────────────────────────────────────────────────────────────
-  castVote: (legislationId: string, vote: string, voterToken: string, debateId?: string) =>
+  castVote: (legislationId: string, vote: string, voterToken: string) =>
     apiFetch(`/api/legislation/${legislationId}/vote`, {
       method: 'POST',
-      body: JSON.stringify({ vote, voter_token: voterToken, debate_id: debateId ?? null }),
+      body: JSON.stringify({ vote, voter_token: voterToken }),
     }),
 
   getVotes: (legislationId: string, voterToken?: string) =>
@@ -275,71 +256,6 @@ export const api = {
     const qs = p.toString()
     return apiFetch(`/api/metrics${qs ? `?${qs}` : ''}`)
   },
-
-  getMyDebates: (limit = 20, offset = 0) =>
-    apiFetch(`/api/users/me/debates?limit=${limit}&offset=${offset}`),
-
-  getMyAgent: () => apiFetch('/api/users/me/agent'),
-
-  createMyAgent: (stances: Record<string, number>, displayName?: string, avatarId?: string) =>
-    apiFetch('/api/users/me/agent', {
-      method: 'POST',
-      body: JSON.stringify({ stances, display_name: displayName || null, avatar_id: avatarId || null }),
-    }),
-
-  deleteMyAgent: () => apiFetch('/api/users/me/agent', { method: 'DELETE' }),
-
-  getDimensions: () => apiFetch('/api/users/stances/dimensions'),
-
-  // ── Agents ────────────────────────────────────────────────────────────────
-  getAgents: (limit = 20, offset = 0) =>
-    apiFetch(`/api/agents/list?limit=${limit}&offset=${offset}`),
-
-  getAgent: (id: string) =>
-    apiFetch(`/api/agents/${id}`),
-
-  getAgentDebates: (id: string, limit = 10, offset = 0) =>
-    apiFetch(`/api/agents/${id}/debates?limit=${limit}&offset=${offset}`),
-
-  createAgent: (data: {
-    name: string
-    description: string
-    persona: string
-    system_prompt: string
-    expertise_areas?: string[]
-    agent_type?: string
-    model_name?: string
-    api_url?: string
-    api_key?: string
-    avatar_id?: string
-    voice_id?: string
-  }) =>
-    apiFetch('/api/agents/create', { method: 'POST', body: JSON.stringify(data) }),
-
-  createPresetAgent: (presetName: string) =>
-    apiFetch(`/api/agents/create-preset/${presetName}`, { method: 'POST' }),
-
-  // ── Debates (create) ──────────────────────────────────────────────────────
-  createDebate: (data: {
-    legislation_id: string
-    topic: string
-    agent_ids: string[]
-    max_turns?: number
-    research_enabled?: boolean
-    is_public?: boolean
-    participant_settings?: Record<string, { conviction: number }>
-  }) =>
-    apiFetch('/api/debates/create', { method: 'POST', body: JSON.stringify(data) }),
-
-  runDebate: (id: string) =>
-    apiFetch(`/api/debates/${id}/run-all`, { method: 'POST' }),
-
-  triggerAutoDebates: (maxDebates = 1, lookbackHours = 48) =>
-    apiFetch(`/api/debates/auto-generate?max_debates=${maxDebates}&lookback_hours=${lookbackHours}`, { method: 'POST' }),
-
-  // ── Video ─────────────────────────────────────────────────────────────────
-  getVideoStatus: (debateId: string) =>
-    apiFetch(`/api/debates/${debateId}/video`),
 
   // ── Donations ─────────────────────────────────────────────────────────────
   getDonationConfig: () => apiFetch('/api/donations/config'),
