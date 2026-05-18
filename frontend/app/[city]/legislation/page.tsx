@@ -317,8 +317,12 @@ function LegislationPageInner() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => sp.get('category') ? sp.get('category')!.split(',').filter(Boolean) : [])
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
-  const [tagCounts,       setTagCounts]       = useState<{tag: string; count: number}[]>([])
   const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
+  const [facets, setFacets] = useState<{
+    statuses: {value: string; count: number}[]
+    sponsors: {name: string; count: number}[]
+    tags: {tag: string; count: number}[]
+  }>({ statuses: [], sponsors: [], tags: [] })
 
   // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
   useEffect(() => {
@@ -368,18 +372,25 @@ function LegislationPageInner() {
     }
   }, [])
 
-  // Tag counts: load once on mount for sidebar discovery — no need to re-fetch on every filter change
-  useEffect(() => {
-    api.getTagCounts({ level: 'local', analyzed: 'true' })
-      .then((d) => setTagCounts(d?.tags ?? [])).catch(() => {})
-  }, [])
-
-  // Debounce bill search — 250ms prevents rapid re-fetches while user is typing or clicking filters
+  // Debounce bill search + facets together — both react to the same filter changes
   const fetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current)
     fetchTimerRef.current = setTimeout(() => {
+      const categoryTags = selectedCategories.flatMap(cat => CATEGORY_TAGS[cat] ?? [])
+      const allTags = categoryTags.length > 0 ? [...new Set([...selectedTags, ...categoryTags])] : selectedTags
       fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+      api.getFacets({
+        q: query || undefined,
+        level: selectedLevel || 'local',
+        analyzed: analyzedOnly ? 'true' : 'false',
+        tag: allTags.join(',') || undefined,
+        impact: selectedImpact || undefined,
+        status: selectedStatuses.join(',') || undefined,
+        sponsor: selectedSponsor || undefined,
+        year: selectedYear ?? undefined,
+        month: selectedMonth ?? undefined,
+      }).then(d => { if (d) setFacets(d) }).catch(() => {})
     }, 250)
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
   }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
@@ -592,7 +603,10 @@ function LegislationPageInner() {
           {/* Row 2: Status · Sponsor · Category · Tags */}
           <div className="flex flex-wrap gap-2 items-center">
             <MultiSelect
-              options={STATUSES}
+              options={STATUSES.map(s => {
+                const f = facets.statuses.find(fs => fs.value === s.value)
+                return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
+              })}
               selected={selectedStatuses}
               onChange={(v) => reset({ statuses: v })}
               placeholder="All Statuses"
@@ -605,23 +619,38 @@ function LegislationPageInner() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All sponsors</SelectItem>
-                  {councilMembers.map(m => (
-                    <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
-                  ))}
+                  {councilMembers.map(m => {
+                    const f = facets.sponsors.find(fs => fs.name === m.name)
+                    return (
+                      <SelectItem key={m.id} value={m.name ?? ''}>
+                        {m.name}{f ? ` (${f.count.toLocaleString()})` : ''}
+                      </SelectItem>
+                    )
+                  }).sort((a, b) => {
+                    const aCount = facets.sponsors.find(fs => fs.name === (a.props as any).value)?.count ?? 0
+                    const bCount = facets.sponsors.find(fs => fs.name === (b.props as any).value)?.count ?? 0
+                    return bCount - aCount
+                  })}
                 </SelectContent>
               </Select>
             )}
             <MultiSelect
-              options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => ({ value: key, label: cat.label }))}
+              options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
+                const catTags = CATEGORY_TAGS[key] ?? []
+                const count = catTags.reduce((sum, t) => {
+                  return sum + (facets.tags.find(ft => ft.tag === t)?.count ?? 0)
+                }, 0)
+                return { value: key, label: count > 0 ? `${cat.label} (${count.toLocaleString()})` : cat.label }
+              })}
               selected={selectedCategories}
               onChange={(v) => reset({ categories: v })}
               placeholder="All Categories"
               searchPlaceholder="Search categories…"
               className="h-8 min-w-[150px]"
             />
-            {tagCounts.length > 0 && (
+            {facets.tags.length > 0 && (
               <MultiSelect
-                options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
+                options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
                 selected={selectedTags}
                 onChange={(v) => reset({ tags: v })}
                 placeholder="All Tags"
@@ -796,7 +825,10 @@ function LegislationPageInner() {
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
                 <MultiSelect
-                  options={STATUSES}
+                  options={STATUSES.map(s => {
+                    const f = facets.statuses.find(fs => fs.value === s.value)
+                    return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
+                  })}
                   selected={selectedStatuses}
                   onChange={(v) => reset({ statuses: v })}
                   placeholder="All Statuses"
@@ -814,9 +846,18 @@ function LegislationPageInner() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__all__">All sponsors</SelectItem>
-                      {councilMembers.map(m => (
-                        <SelectItem key={m.id} value={m.name ?? ''}>{m.name}</SelectItem>
-                      ))}
+                      {[...councilMembers].sort((a, b) => {
+                        const aCount = facets.sponsors.find(fs => fs.name === a.name)?.count ?? 0
+                        const bCount = facets.sponsors.find(fs => fs.name === b.name)?.count ?? 0
+                        return bCount - aCount
+                      }).map(m => {
+                        const f = facets.sponsors.find(fs => fs.name === m.name)
+                        return (
+                          <SelectItem key={m.id} value={m.name ?? ''}>
+                            {m.name}{f ? ` (${f.count.toLocaleString()})` : ''}
+                          </SelectItem>
+                        )
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -855,11 +896,11 @@ function LegislationPageInner() {
               </div>
 
               {/* Tags */}
-              {tagCounts.length > 0 && (
+              {facets.tags.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
                   <MultiSelect
-                    options={tagCounts.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count})` }))}
+                    options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
                     selected={selectedTags}
                     onChange={(v) => reset({ tags: v })}
                     placeholder="All Tags"
@@ -872,7 +913,11 @@ function LegislationPageInner() {
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</p>
                 <MultiSelect
-                  options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => ({ value: key, label: cat.label }))}
+                  options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
+                    const catTags = CATEGORY_TAGS[key] ?? []
+                    const count = catTags.reduce((sum, t) => sum + (facets.tags.find(ft => ft.tag === t)?.count ?? 0), 0)
+                    return { value: key, label: count > 0 ? `${cat.label} (${count.toLocaleString()})` : cat.label }
+                  })}
                   selected={selectedCategories}
                   onChange={(v) => reset({ categories: v })}
                   placeholder="All Categories"

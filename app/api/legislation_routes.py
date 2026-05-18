@@ -254,6 +254,93 @@ async def get_tag_counts(
     return result
 
 
+def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
+                         skip_tag=False, skip_status=False, skip_sponsor=False):
+    """Apply standard filters to a SQLAlchemy query. Skip flags omit one dimension for faceted counts."""
+    from sqlalchemy import extract, or_
+    if q:
+        q_obj = q_obj.filter(
+            (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
+        )
+    if level:
+        q_obj = q_obj.filter(Legislation.level == level)
+    if analyzed == "true":
+        q_obj = q_obj.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        q_obj = q_obj.filter(Legislation.analyzed_at.is_(None))
+    if not skip_tag and tag:
+        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+        q_obj = q_obj.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
+    if impact:
+        q_obj = q_obj.filter(Legislation.impact_level == impact)
+    if not skip_status and status:
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        q_obj = q_obj.filter(Legislation.status.in_(status_list))
+    if not skip_sponsor and sponsor:
+        q_obj = q_obj.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+    if year:
+        q_obj = q_obj.filter(extract("year", Legislation.introduced_date) == year)
+    if month:
+        q_obj = q_obj.filter(extract("month", Legislation.introduced_date) == month)
+    return q_obj
+
+
+@router.get("/facets")
+async def get_facets(
+    q: str = Query("", max_length=200),
+    level: str = Query("local", max_length=20),
+    analyzed: str = Query("true"),
+    tag: str = Query("", max_length=500),
+    impact: str = Query("", max_length=20),
+    status: str = Query("", max_length=100),
+    sponsor: str = Query("", max_length=100),
+    year: int = Query(0),
+    month: int = Query(0),
+    db: Session = Depends(get_db),
+):
+    """Return per-dimension facet counts for the legislation filters.
+
+    Each dimension's counts are computed with all OTHER active filters applied,
+    so selecting a category instantly narrows sponsor/status/tag counts.
+    """
+    import json
+    from collections import Counter
+    kw = dict(q=q, level=level, analyzed=analyzed, tag=tag, impact=impact,
+              status=status, sponsor=sponsor, year=year, month=month)
+
+    # Status counts — all filters except status
+    status_rows = _filter_legislation(**kw, skip_status=True,
+        q_obj=db.query(Legislation.status, func.count(Legislation.id).label("count"))
+               .filter(Legislation.status.isnot(None))
+    ).group_by(Legislation.status).all()
+
+    # Sponsor counts — all filters except sponsor
+    sponsor_rows = _filter_legislation(**kw, skip_sponsor=True,
+        q_obj=db.query(Legislation.sponsor, func.count(Legislation.id).label("count"))
+               .filter(Legislation.sponsor.isnot(None), Legislation.sponsor != "")
+    ).group_by(Legislation.sponsor).order_by(func.count(Legislation.id).desc()).all()
+
+    # Tag counts — all filters except tag (in-memory parse, same as get_tag_counts)
+    tag_rows = _filter_legislation(**kw, skip_tag=True,
+        q_obj=db.query(Legislation.tags)
+               .filter(Legislation.tags.isnot(None), Legislation.tags != "", Legislation.tags != "[]")
+    ).all()
+    tag_counter: Counter = Counter()
+    for (tags_json,) in tag_rows:
+        try:
+            for t in json.loads(tags_json):
+                if isinstance(t, str) and t:
+                    tag_counter[t] += 1
+        except Exception:
+            pass
+
+    return {
+        "statuses": [{"value": r.status, "count": r.count} for r in status_rows],
+        "sponsors": [{"name": r.sponsor, "count": r.count} for r in sponsor_rows if r.sponsor],
+        "tags": [{"tag": t, "count": c} for t, c in tag_counter.most_common()],
+    }
+
+
 _year_counts_cache: dict | None = None
 
 @router.get("/year-counts")

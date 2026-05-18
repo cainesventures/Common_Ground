@@ -36,6 +36,20 @@ export const api = {
   listLegislation: (limit = 20, offset = 0, level = '') =>
     apiFetch(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),
 
+  getFacets: (params: { q?: string; level?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
+    const p = new URLSearchParams()
+    if (params.q)        p.set('q', params.q)
+    if (params.level)    p.set('level', params.level)
+    if (params.analyzed) p.set('analyzed', params.analyzed)
+    if (params.tag)      p.set('tag', params.tag)
+    if (params.impact)   p.set('impact', params.impact)
+    if (params.status)   p.set('status', params.status)
+    if (params.sponsor)  p.set('sponsor', params.sponsor)
+    if (params.year)     p.set('year', String(params.year))
+    if (params.month)    p.set('month', String(params.month))
+    return apiFetch(`/api/legislation/facets?${p}`)
+  },
+
   getTagCounts: (params?: { q?: string; level?: string; analyzed?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
     const p = new URLSearchParams()
     if (params?.q)        p.set('q', params.q)
