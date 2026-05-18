@@ -86,7 +86,7 @@ export function MultiSelect({ options, selected, onChange, placeholder = 'All', 
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 min-w-full w-max max-h-72 flex flex-col rounded-lg bg-background border border-foreground/10 shadow-md">
+        <div className="absolute top-full left-0 mt-1 z-50 min-w-full w-max max-w-[300px] max-h-72 flex flex-col rounded-lg bg-background border border-foreground/10 shadow-md">
           {searchable && (
             <div className="flex items-center gap-2 border-b px-2.5 py-1.5 shrink-0">
               <SearchIcon className="size-3.5 text-muted-foreground shrink-0" />
@@ -122,7 +122,7 @@ export function MultiSelect({ options, selected, onChange, placeholder = 'All', 
                 )}>
                   {isSelected && <CheckIcon className="size-3 text-background" strokeWidth={3} />}
                 </span>
-                <span className={isSelected ? 'font-medium' : ''}>{opt.label}</span>
+                <span className={cn('break-words min-w-0', isSelected ? 'font-medium' : '')}>{opt.label}</span>
               </button>
             )
           })}

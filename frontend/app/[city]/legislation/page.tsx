@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { usePostHog } from 'posthog-js/react'
 import { STATUS_COLORS as STATUS_BADGE, STATUS_COLORS_FALLBACK, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
@@ -228,13 +229,7 @@ function DrilldownChart({
   onMonthSelect: (month: number | null) => void
   filters: ChartFilters
 }) {
-  const [yearCounts,  setYearCounts]  = useState<YearCount[]>([])
   const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
-
-  // Year counts: load once — the bar chart is for navigation, not dynamic filter feedback
-  useEffect(() => {
-    api.getYearCounts({ analyzed: 'true' }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
-  }, [])
 
   useEffect(() => {
     if (!selectedYear) { setMonthCounts([]); return }
@@ -242,9 +237,7 @@ function DrilldownChart({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedYear, filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
 
-  if (!selectedYear) {
-    return <YearPicker yearCounts={yearCounts} onYearSelect={onYearSelect} />
-  }
+  if (!selectedYear) return null
 
   return (
     <div className="space-y-2">
@@ -322,6 +315,7 @@ function LegislationPageInner() {
     tags: {tag: string; count: number}[]
     categories: {key: string; count: number}[]
   }>({ statuses: [], sponsors: [], tags: [], categories: [] })
+  const [yearCounts, setYearCounts] = useState<YearCount[]>([])
 
   // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
   useEffect(() => {
@@ -394,7 +388,9 @@ function LegislationPageInner() {
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
   }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
 
-
+  useEffect(() => {
+    api.getYearCounts({ analyzed: 'true' }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
+  }, [])
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tags: string[]; level: string;
@@ -639,6 +635,21 @@ function LegislationPageInner() {
                 className="h-8 min-w-[130px]"
               />
             )}
+            {yearCounts.length > 0 && (
+              <Select value={selectedYear ? String(selectedYear) : '__all__'} onValueChange={(v) => reset({ year: v === '__all__' ? null : Number(v) })}>
+                <SelectTrigger className="h-8 text-sm w-[120px]" aria-label="Filter by year">
+                  <SelectValue>{selectedYear ? String(selectedYear) : 'All Years'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All years</SelectItem>
+                  {[...yearCounts].reverse().map(y => (
+                    <SelectItem key={y.year} value={String(y.year)}>
+                      {y.year} ({y.count.toLocaleString()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Row 3: Impact chips · toggles */}
@@ -746,8 +757,8 @@ function LegislationPageInner() {
           </div>
         )}
 
-        {/* Bill Activity drill-down */}
-        {filtersExpanded && <div className="hidden sm:block">
+        {/* Month drill-down — only when a year is selected */}
+        {filtersExpanded && selectedYear && <div className="hidden sm:block">
           <DrilldownChart
             selectedYear={selectedYear}
             selectedMonth={selectedMonth}
@@ -876,6 +887,26 @@ function LegislationPageInner() {
                     placeholder="All Tags"
                     className="h-10 w-full"
                   />
+                </div>
+              )}
+
+              {/* Year */}
+              {yearCounts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Year</p>
+                  <Select value={selectedYear ? String(selectedYear) : '__all__'} onValueChange={(v) => reset({ year: v === '__all__' ? null : Number(v) })}>
+                    <SelectTrigger className="h-10 text-sm w-full" aria-label="Filter by year">
+                      <SelectValue>{selectedYear ? String(selectedYear) : 'All years'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All years</SelectItem>
+                      {[...yearCounts].reverse().map(y => (
+                        <SelectItem key={y.year} value={String(y.year)}>
+                          {y.year} ({y.count.toLocaleString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
