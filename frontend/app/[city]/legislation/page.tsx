@@ -125,6 +125,7 @@ function LegislationPageInner() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => sp.get('category') ? sp.get('category')!.split(',').filter(Boolean) : [])
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
+  const [paginationExpanded, setPaginationExpanded] = useState(false)
   const [facets, setFacets] = useState<{
     statuses: {value: string; count: number}[]
     sponsors: {name: string; count: number}[]
@@ -300,8 +301,13 @@ function LegislationPageInner() {
   if (hasPerspectivesOnly)  filterParts.push('has perspectives')
   if (query)          filterParts.push(`"${query}"`)
 
+  const goToPage = (p: number) => {
+    setPage(p)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${totalPages > 1 ? 'pb-14' : ''}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Legislation</h1>
@@ -573,45 +579,6 @@ function LegislationPageInner() {
 
         </div>}{/* end desktop panel */}
 
-        {/* Sticky pagination — shown once there are multiple pages */}
-        {!loading && !error && total > 0 && totalPages > 1 && (
-          <div className="hidden sm:flex items-center justify-between gap-3 border-t pt-2 text-sm">
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
-            >
-              ← Previous
-            </button>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault()
-                const val = parseInt((e.currentTarget.elements.namedItem('pageInputTop') as HTMLInputElement).value)
-                if (!isNaN(val) && val >= 1 && val <= totalPages) setPage(val)
-              }}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground"
-            >
-              <span>Page</span>
-              <input
-                name="pageInputTop"
-                key={page}
-                defaultValue={page}
-                type="number"
-                min={1}
-                max={totalPages}
-                className="w-12 text-center rounded-md border border-input bg-background px-1 py-0.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span>of {totalPages} <span className="text-xs">({total.toLocaleString()} bills)</span></span>
-            </form>
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
-            >
-              Next →
-            </button>
-          </div>
-        )}
 
 
       </div>
@@ -877,62 +844,92 @@ function LegislationPageInner() {
         </div>
       )}
 
-      {/* Pagination */}
-      {!loading && totalPages > 1 && (
-        <div className="flex items-center justify-between pt-2">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-4 py-2 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted/40 transition-colors"
-          >
-            ← Previous
-          </button>
-          <div className="flex items-center gap-1">
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-              // Show first, last, current ±1, and ellipsis
-              let pageNum: number | null
-              if (totalPages <= 7) {
-                pageNum = i + 1
-              } else if (i === 0) {
-                pageNum = 1
-              } else if (i === 6) {
-                pageNum = totalPages
-              } else if (page <= 4) {
-                pageNum = i + 1
-              } else if (page >= totalPages - 3) {
-                pageNum = totalPages - 6 + i
-              } else {
-                pageNum = page - 2 + i
-              }
-              const isEllipsis = totalPages > 7 && (
-                (i === 1 && pageNum !== null && pageNum > 2) ||
-                (i === 5 && pageNum !== null && pageNum < totalPages - 1)
-              )
-              if (isEllipsis) {
-                return <span key={i} className="px-1 text-muted-foreground text-sm">…</span>
-              }
-              return (
+      {/* Fixed bottom pagination */}
+      {totalPages > 1 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur">
+          <div className="max-w-5xl mx-auto px-4">
+            {paginationExpanded ? (
+              <div className="flex items-center justify-between gap-3 py-2">
                 <button
-                  key={i}
-                  onClick={() => pageNum && setPage(pageNum)}
-                  className={`w-8 h-8 rounded text-sm font-medium transition-colors ${
-                    page === pageNum
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted/40 text-muted-foreground'
-                  }`}
+                  onClick={() => goToPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
                 >
-                  {pageNum}
+                  ← Previous
                 </button>
-              )
-            })}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const val = parseInt((e.currentTarget.elements.namedItem('pageInputFixed') as HTMLInputElement).value)
+                    if (!isNaN(val) && val >= 1 && val <= totalPages) goToPage(val)
+                  }}
+                  className="flex items-center gap-1.5 text-sm text-muted-foreground"
+                >
+                  <span>Page</span>
+                  <input
+                    name="pageInputFixed"
+                    key={page}
+                    defaultValue={page}
+                    type="number"
+                    min={1}
+                    max={totalPages}
+                    className="w-12 text-center rounded-md border border-input bg-background px-1 py-0.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                  <span>of {totalPages}</span>
+                  <span className="text-xs hidden sm:inline">({total.toLocaleString()} bills)</span>
+                </form>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => goToPage(Math.min(totalPages, page + 1))}
+                    disabled={page === totalPages}
+                    className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                  >
+                    Next →
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaginationExpanded(false)}
+                    title="Minimize"
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 py-1.5">
+                <button
+                  onClick={() => goToPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                >
+                  ← Previous
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Page {page} of {totalPages}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPaginationExpanded(true)}
+                    title="Expand"
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+                    </svg>
+                  </button>
+                </div>
+                <button
+                  onClick={() => goToPage(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="px-4 py-2 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted/40 transition-colors"
-          >
-            Next →
-          </button>
         </div>
       )}
     </div>
