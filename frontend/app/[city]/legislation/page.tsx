@@ -423,48 +423,8 @@ function LegislationPageInner() {
             </button>
           </form>
 
-          {/* Row 2: Status · Sponsor · Category · Tags */}
+          {/* Row 2: Year · Month · Category · Sponsor · Status · Tags */}
           <div className="flex flex-wrap gap-2 items-center">
-            <MultiSelect
-              options={STATUSES.map(s => {
-                const f = facets.statuses.find(fs => fs.value === s.value)
-                return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
-              })}
-              selected={selectedStatuses}
-              onChange={(v) => reset({ statuses: v })}
-              placeholder="All Statuses"
-              className="h-8 min-w-[140px]"
-            />
-            {facets.sponsors.length > 0 && (
-              <MultiSelect
-                options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
-                selected={selectedSponsors}
-                onChange={(v) => reset({ sponsors: v })}
-                placeholder="All Sponsors"
-                searchPlaceholder="Search sponsors…"
-                className="h-8 min-w-[150px]"
-              />
-            )}
-            <MultiSelect
-              options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
-                const f = facets.categories.find(fc => fc.key === key)
-                return { value: key, label: f ? `${cat.label} (${f.count.toLocaleString()})` : cat.label }
-              })}
-              selected={selectedCategories}
-              onChange={(v) => reset({ categories: v })}
-              placeholder="All Categories"
-              searchPlaceholder="Search categories…"
-              className="h-8 min-w-[150px]"
-            />
-            {facets.tags.length > 0 && (
-              <MultiSelect
-                options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
-                selected={selectedTags}
-                onChange={(v) => reset({ tags: v })}
-                placeholder="All Tags"
-                className="h-8 min-w-[130px]"
-              />
-            )}
             {yearCounts.length > 0 && (
               <Select value={selectedYear ? String(selectedYear) : '__all__'} onValueChange={(v) => reset({ year: v === '__all__' ? null : Number(v) })}>
                 <SelectTrigger className="h-8 text-sm w-[120px]" aria-label="Filter by year">
@@ -494,6 +454,46 @@ function LegislationPageInner() {
                   ))}
                 </SelectContent>
               </Select>
+            )}
+            <MultiSelect
+              options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
+                const f = facets.categories.find(fc => fc.key === key)
+                return { value: key, label: f ? `${cat.label} (${f.count.toLocaleString()})` : cat.label }
+              })}
+              selected={selectedCategories}
+              onChange={(v) => reset({ categories: v })}
+              placeholder="All Categories"
+              searchPlaceholder="Search categories…"
+              className="h-8 min-w-[150px]"
+            />
+            {facets.sponsors.length > 0 && (
+              <MultiSelect
+                options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
+                selected={selectedSponsors}
+                onChange={(v) => reset({ sponsors: v })}
+                placeholder="All Sponsors"
+                searchPlaceholder="Search sponsors…"
+                className="h-8 min-w-[150px]"
+              />
+            )}
+            <MultiSelect
+              options={STATUSES.map(s => {
+                const f = facets.statuses.find(fs => fs.value === s.value)
+                return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
+              })}
+              selected={selectedStatuses}
+              onChange={(v) => reset({ statuses: v })}
+              placeholder="All Statuses"
+              className="h-8 min-w-[140px]"
+            />
+            {facets.tags.length > 0 && (
+              <MultiSelect
+                options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
+                selected={selectedTags}
+                onChange={(v) => reset({ tags: v })}
+                placeholder="All Tags"
+                className="h-8 min-w-[130px]"
+              />
             )}
           </div>
 
@@ -642,82 +642,6 @@ function LegislationPageInner() {
             {/* Scrollable content */}
             <div className="overflow-y-auto flex-1 px-4 py-5 space-y-6">
 
-              {/* Status */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
-                <MultiSelect
-                  options={STATUSES.map(s => {
-                    const f = facets.statuses.find(fs => fs.value === s.value)
-                    return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
-                  })}
-                  selected={selectedStatuses}
-                  onChange={(v) => reset({ statuses: v })}
-                  placeholder="All Statuses"
-                  className="h-10 w-full"
-                />
-              </div>
-
-              {/* Sponsor */}
-              {facets.sponsors.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sponsor</p>
-                  <MultiSelect
-                    options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
-                    selected={selectedSponsors}
-                    onChange={(v) => reset({ sponsors: v })}
-                    placeholder="All Sponsors"
-                    searchPlaceholder="Search sponsors…"
-                    className="h-10 w-full"
-                  />
-                </div>
-              )}
-
-              {/* Impact */}
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Impact</p>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => reset({ impact: '' })}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
-                      !selectedImpact
-                        ? 'bg-foreground text-background border-foreground'
-                        : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
-                    }`}
-                  >All</button>
-                  {IMPACTS.map(imp => (
-                    <button
-                      key={imp}
-                      onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
-                      className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize border transition-colors ${
-                        selectedImpact === imp
-                          ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
-                          : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
-                          :                   'bg-green-500 text-white border-green-500'
-                          : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 dark:hover:bg-red-900/20'
-                          : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400 dark:hover:bg-amber-900/20'
-                          :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 dark:hover:bg-green-900/20'
-                      }`}
-                    >
-                      {imp}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Tags */}
-              {facets.tags.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
-                  <MultiSelect
-                    options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
-                    selected={selectedTags}
-                    onChange={(v) => reset({ tags: v })}
-                    placeholder="All Tags"
-                    className="h-10 w-full"
-                  />
-                </div>
-              )}
-
               {/* Year */}
               {yearCounts.length > 0 && (
                 <div className="space-y-2">
@@ -772,6 +696,82 @@ function LegislationPageInner() {
                   searchPlaceholder="Search categories…"
                   className="h-10 w-full"
                 />
+              </div>
+
+              {/* Sponsor */}
+              {facets.sponsors.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sponsor</p>
+                  <MultiSelect
+                    options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
+                    selected={selectedSponsors}
+                    onChange={(v) => reset({ sponsors: v })}
+                    placeholder="All Sponsors"
+                    searchPlaceholder="Search sponsors…"
+                    className="h-10 w-full"
+                  />
+                </div>
+              )}
+
+              {/* Status */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+                <MultiSelect
+                  options={STATUSES.map(s => {
+                    const f = facets.statuses.find(fs => fs.value === s.value)
+                    return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
+                  })}
+                  selected={selectedStatuses}
+                  onChange={(v) => reset({ statuses: v })}
+                  placeholder="All Statuses"
+                  className="h-10 w-full"
+                />
+              </div>
+
+              {/* Tags */}
+              {facets.tags.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tags</p>
+                  <MultiSelect
+                    options={facets.tags.map(({ tag, count }) => ({ value: tag, label: `${tag} (${count.toLocaleString()})` }))}
+                    selected={selectedTags}
+                    onChange={(v) => reset({ tags: v })}
+                    placeholder="All Tags"
+                    className="h-10 w-full"
+                  />
+                </div>
+              )}
+
+              {/* Impact */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Impact</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => reset({ impact: '' })}
+                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                      !selectedImpact
+                        ? 'bg-foreground text-background border-foreground'
+                        : 'bg-background text-muted-foreground border-border hover:border-foreground/50 hover:text-foreground'
+                    }`}
+                  >All</button>
+                  {IMPACTS.map(imp => (
+                    <button
+                      key={imp}
+                      onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                      className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize border transition-colors ${
+                        selectedImpact === imp
+                          ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
+                          : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
+                          :                   'bg-green-500 text-white border-green-500'
+                          : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 dark:hover:bg-red-900/20'
+                          : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400 dark:hover:bg-amber-900/20'
+                          :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 dark:hover:bg-green-900/20'
+                      }`}
+                    >
+                      {imp}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Options */}
