@@ -254,6 +254,64 @@ async def get_tag_counts(
     return result
 
 
+_TAG_TO_CATEGORY: dict[str, str] = {
+    # Zoning
+    'zoning': 'zoning', 'land use': 'zoning', 'land-use': 'zoning', 'land_use': 'zoning',
+    'land use planning': 'zoning', 'planning': 'zoning', 'development': 'zoning',
+    'neighborhood development': 'zoning', 'construction': 'zoning', 'residential': 'zoning',
+    'physical development': 'zoning', 'urban-planning': 'zoning', 'real estate': 'zoning',
+    'affordable_housing': 'zoning', 'housing': 'zoning',
+    # Budget
+    'budget': 'budget', 'finance': 'budget', 'taxation': 'budget', 'taxes': 'budget',
+    'tax': 'budget', 'revenue': 'budget', 'fees': 'budget', 'funding': 'budget',
+    'capital': 'budget', 'fiscal_policy': 'budget', 'capital_budget': 'budget',
+    'capital spending': 'budget', 'city finances': 'budget', 'procurement': 'budget',
+    'inheritance': 'budget', 'trade': 'budget',
+    # Transportation
+    'transportation': 'transportation', 'public transportation': 'transportation',
+    'infrastructure': 'transportation', 'traffic': 'transportation', 'parking': 'transportation',
+    'parking regulations': 'transportation', 'towing': 'transportation',
+    'street improvements': 'transportation', 'street management': 'transportation',
+    'right-of-way': 'transportation', 'encroachments': 'transportation',
+    # Public Safety
+    'law enforcement': 'public safety', 'public safety': 'public safety',
+    'criminal justice': 'public safety', 'civil enforcement': 'public safety',
+    # Civil Rights
+    'civil rights': 'civil rights', 'discrimination': 'civil rights',
+    'elections': 'civil rights', 'personal data protection': 'civil rights',
+    'transparency': 'civil rights', 'fair practices ordinance': 'civil rights',
+    'referendum': 'civil rights',
+    # Immigration
+    'immigration': 'immigration',
+    # Government
+    'home rule charter amendment': 'government', 'government': 'government',
+    'city government': 'government', 'city-government': 'government',
+    'city_government': 'government', 'government regulation': 'government',
+    'government policy': 'government', 'government structure': 'government',
+    'city services': 'government', 'procurement contracts': 'government', 'office': 'government',
+    # Environment
+    'energy': 'environment', 'utilities': 'environment', 'air management': 'environment',
+    'asbestos': 'environment', 'cell towers': 'environment', 'cell_towers': 'environment',
+    # Health
+    'public health': 'health', 'health': 'health', 'social services': 'health',
+    'children and youth': 'health', 'alcohol': 'health',
+    # Education
+    'education': 'education', 'school district': 'education',
+    # Business
+    'business': 'business', 'licensing': 'business', 'permits': 'business',
+    'regulation': 'business', 'regulations': 'business', 'commerce': 'business',
+    'retail': 'business', 'hotels': 'business', 'sidewalk cafes': 'business',
+    'sidewalk_cafes': 'business', 'outdoor entertainment': 'business',
+    'outdoor_entertainment': 'business', 'economic development': 'business',
+    'economic-development': 'business',
+    # Community
+    'community': 'community', 'community spaces': 'community', 'public space': 'community',
+    'public_space': 'community', 'arts': 'community', 'culture': 'community',
+    'street renaming': 'community', 'renaming': 'community', 'naming': 'community',
+    'celebration': 'community', 'decorations': 'community',
+}
+
+
 def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
                          skip_tag=False, skip_status=False, skip_sponsor=False):
     """Apply standard filters to a SQLAlchemy query. Skip flags omit one dimension for faceted counts."""
@@ -320,17 +378,22 @@ async def get_facets(
                .filter(Legislation.sponsor.isnot(None), Legislation.sponsor != "")
     ).group_by(Legislation.sponsor).order_by(func.count(Legislation.id).desc()).all()
 
-    # Tag counts — all filters except tag (in-memory parse, same as get_tag_counts)
+    # Tag + category counts — all filters except tag (in-memory parse)
+    # Fetch (id, tags) so we can count distinct bills per category without double-counting.
     tag_rows = _filter_legislation(**kw, skip_tag=True,
-        q_obj=db.query(Legislation.tags)
+        q_obj=db.query(Legislation.id, Legislation.tags)
                .filter(Legislation.tags.isnot(None), Legislation.tags != "", Legislation.tags != "[]")
     ).all()
     tag_counter: Counter = Counter()
-    for (tags_json,) in tag_rows:
+    category_sets: dict[str, set] = {}
+    for (bill_id, tags_json) in tag_rows:
         try:
             for t in json.loads(tags_json):
                 if isinstance(t, str) and t:
                     tag_counter[t] += 1
+                    cat = _TAG_TO_CATEGORY.get(t.lower().strip())
+                    if cat:
+                        category_sets.setdefault(cat, set()).add(bill_id)
         except Exception:
             pass
 
@@ -338,6 +401,7 @@ async def get_facets(
         "statuses": [{"value": r.status, "count": r.count} for r in status_rows],
         "sponsors": [{"name": r.sponsor, "count": r.count} for r in sponsor_rows if r.sponsor],
         "tags": [{"tag": t, "count": c} for t, c in tag_counter.most_common()],
+        "categories": [{"key": k, "count": len(v)} for k, v in category_sets.items()],
     }
 
 

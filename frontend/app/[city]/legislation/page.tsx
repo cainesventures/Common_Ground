@@ -322,7 +322,8 @@ function LegislationPageInner() {
     statuses: {value: string; count: number}[]
     sponsors: {name: string; count: number}[]
     tags: {tag: string; count: number}[]
-  }>({ statuses: [], sponsors: [], tags: [] })
+    categories: {key: string; count: number}[]
+  }>({ statuses: [], sponsors: [], tags: [], categories: [] })
 
   // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
   useEffect(() => {
@@ -636,11 +637,8 @@ function LegislationPageInner() {
             )}
             <MultiSelect
               options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
-                const catTags = CATEGORY_TAGS[key] ?? []
-                const count = catTags.reduce((sum, t) => {
-                  return sum + (facets.tags.find(ft => ft.tag === t)?.count ?? 0)
-                }, 0)
-                return { value: key, label: count > 0 ? `${cat.label} (${count.toLocaleString()})` : cat.label }
+                const f = facets.categories.find(fc => fc.key === key)
+                return { value: key, label: f ? `${cat.label} (${f.count.toLocaleString()})` : cat.label }
               })}
               selected={selectedCategories}
               onChange={(v) => reset({ categories: v })}
@@ -914,9 +912,8 @@ function LegislationPageInner() {
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Category</p>
                 <MultiSelect
                   options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
-                    const catTags = CATEGORY_TAGS[key] ?? []
-                    const count = catTags.reduce((sum, t) => sum + (facets.tags.find(ft => ft.tag === t)?.count ?? 0), 0)
-                    return { value: key, label: count > 0 ? `${cat.label} (${count.toLocaleString()})` : cat.label }
+                    const f = facets.categories.find(fc => fc.key === key)
+                    return { value: key, label: f ? `${cat.label} (${f.count.toLocaleString()})` : cat.label }
                   })}
                   selected={selectedCategories}
                   onChange={(v) => reset({ categories: v })}
