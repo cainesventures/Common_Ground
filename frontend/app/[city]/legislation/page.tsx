@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { usePostHog } from 'posthog-js/react'
 import { STATUS_COLORS as STATUS_BADGE, STATUS_COLORS_FALLBACK, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
@@ -310,14 +309,13 @@ function LegislationPageInner() {
   const [selectedLevel,  setSelectedLevel]  = useState(() => sp.get('level') ?? 'local')
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => sp.get('status') ? sp.get('status')!.split(',').filter(Boolean) : [])
   const [selectedImpact,  setSelectedImpact]  = useState(() => sp.get('impact') ?? '')
-  const [selectedSponsor, setSelectedSponsor] = useState(() => sp.get('sponsor') ?? '')
+  const [selectedSponsors, setSelectedSponsors] = useState<string[]>(() => sp.get('sponsor') ? sp.get('sponsor')!.split(',').filter(Boolean) : [])
   const [analyzedOnly,    setAnalyzedOnly]    = useState(() => sp.get('analyzed') !== '0')
   const [hasVotesOnly,    setHasVotesOnly]    = useState(() => sp.get('has_votes') === '1')
   const [hasPerspectivesOnly, setHasPerspectivesOnly] = useState(() => sp.get('has_perspectives') === '1')
   const [selectedCategories, setSelectedCategories] = useState<string[]>(() => sp.get('category') ? sp.get('category')!.split(',').filter(Boolean) : [])
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
-  const [councilMembers,  setCouncilMembers]  = useState<{id: string; name: string}[]>([])
   const [facets, setFacets] = useState<{
     statuses: {value: string; count: number}[]
     sponsors: {name: string; count: number}[]
@@ -335,7 +333,7 @@ function LegislationPageInner() {
     if (selectedLevel && selectedLevel !== 'local') p.set('level', selectedLevel)
     if (selectedStatuses.length) p.set('status', selectedStatuses.join(','))
     if (selectedImpact)       p.set('impact',  selectedImpact)
-    if (selectedSponsor)      p.set('sponsor', selectedSponsor)
+    if (selectedSponsors.length) p.set('sponsor', selectedSponsors.join(','))
     if (!analyzedOnly)        p.set('analyzed', '0')
     if (hasVotesOnly)         p.set('has_votes', '1')
     if (hasPerspectivesOnly)  p.set('has_perspectives', '1')
@@ -345,11 +343,11 @@ function LegislationPageInner() {
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', url)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsor, analyzedOnly, hasVotesOnly, hasPerspectivesOnly, selectedCategories, page])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsors, analyzedOnly, hasVotesOnly, hasPerspectivesOnly, selectedCategories, page])
 
   const fetchBills = useCallback(async (
     q: string, year: number | null, month: number | null, tags: string[],
-    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsor: string, hasVotes: boolean, hasPerspectives: boolean, categories: string[]
+    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsors: string[], hasVotes: boolean, hasPerspectives: boolean, categories: string[]
   ) => {
     setLoading(true)
     setError('')
@@ -360,7 +358,7 @@ function LegislationPageInner() {
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        allTags, impact, year ?? 0, month ?? 0, statuses, sponsor, hasVotes, hasPerspectives
+        allTags, impact, year ?? 0, month ?? 0, statuses, sponsors.join(','), hasVotes, hasPerspectives
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -380,7 +378,7 @@ function LegislationPageInner() {
     fetchTimerRef.current = setTimeout(() => {
       const categoryTags = selectedCategories.flatMap(cat => CATEGORY_TAGS[cat] ?? [])
       const allTags = categoryTags.length > 0 ? [...new Set([...selectedTags, ...categoryTags])] : selectedTags
-      fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+      fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
       api.getFacets({
         q: query || undefined,
         level: selectedLevel || 'local',
@@ -388,21 +386,19 @@ function LegislationPageInner() {
         tag: allTags.join(',') || undefined,
         impact: selectedImpact || undefined,
         status: selectedStatuses.join(',') || undefined,
-        sponsor: selectedSponsor || undefined,
+        sponsor: selectedSponsors.join(',') || undefined,
         year: selectedYear ?? undefined,
         month: selectedMonth ?? undefined,
       }).then(d => { if (d) setFacets(d) }).catch(() => {})
     }, 250)
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsor, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
 
-  useEffect(() => {
-    api.getCouncilmembers().then((d) => setCouncilMembers(d?.members ?? [])).catch(() => {})
-  }, [])
+
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tags: string[]; level: string;
-    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsor: string; hasVotes: boolean; hasPerspectives: boolean; categories: string[]
+    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsors: string[]; hasVotes: boolean; hasPerspectives: boolean; categories: string[]
   }> = {}) => {
     setPage(1)
     if ('year'            in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
@@ -412,7 +408,7 @@ function LegislationPageInner() {
     if ('statuses'        in overrides) setSelectedStatuses(overrides.statuses!)
     if ('impact'          in overrides) setSelectedImpact(overrides.impact!)
     if ('analyzed'        in overrides) setAnalyzedOnly(overrides.analyzed!)
-    if ('sponsor'         in overrides) setSelectedSponsor(overrides.sponsor!)
+    if ('sponsors'        in overrides) setSelectedSponsors(overrides.sponsors!)
     if ('hasVotes'        in overrides) setHasVotesOnly(overrides.hasVotes!)
     if ('hasPerspectives' in overrides) setHasPerspectivesOnly(overrides.hasPerspectives!)
     if ('categories'      in overrides) setSelectedCategories(overrides.categories!)
@@ -424,7 +420,7 @@ function LegislationPageInner() {
     setSelectedYear(null); setSelectedMonth(null)
     setSelectedTags([]); setSelectedLevel('local')
     setSelectedStatuses([]); setSelectedImpact('')
-    setSelectedSponsor(''); setHasVotesOnly(false)
+    setSelectedSponsors([]); setHasVotesOnly(false)
     setHasPerspectivesOnly(false)
     setSelectedCategories([])
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
@@ -441,7 +437,7 @@ function LegislationPageInner() {
   // Count active drawer filters (excludes search query)
   const drawerFilterCount = [
     selectedStatuses.length > 0,
-    !!selectedSponsor,
+    selectedSponsors.length > 0,
     !!selectedImpact,
     selectedTags.length > 0,
     !analyzedOnly,
@@ -460,7 +456,7 @@ function LegislationPageInner() {
   if (selectedTags.length)     selectedTags.forEach(t => filterParts.push(t))
   if (selectedStatuses.length) selectedStatuses.forEach(s => filterParts.push(fmtStatus(s)))
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
-  if (selectedSponsor) filterParts.push(selectedSponsor)
+  if (selectedSponsors.length) selectedSponsors.forEach(s => filterParts.push(s))
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
   if (hasVotesOnly)         filterParts.push('has roll call')
   if (hasPerspectivesOnly)  filterParts.push('has perspectives')
@@ -486,7 +482,7 @@ function LegislationPageInner() {
           tags={selectedTags}
           impact={selectedImpact}
           statuses={selectedStatuses}
-          sponsor={selectedSponsor}
+          sponsor={selectedSponsors.join(',')}
           year={selectedYear ?? undefined}
           month={selectedMonth ?? undefined}
           total={total}
@@ -613,27 +609,15 @@ function LegislationPageInner() {
               placeholder="All Statuses"
               className="h-8 min-w-[140px]"
             />
-            {councilMembers.length > 0 && (
-              <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
-                <SelectTrigger className="h-8 text-sm w-[160px]" aria-label="Filter by sponsor">
-                  <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All sponsors</SelectItem>
-                  {councilMembers.map(m => {
-                    const f = facets.sponsors.find(fs => fs.name === m.name)
-                    return (
-                      <SelectItem key={m.id} value={m.name ?? ''}>
-                        {m.name}{f ? ` (${f.count.toLocaleString()})` : ''}
-                      </SelectItem>
-                    )
-                  }).sort((a, b) => {
-                    const aCount = facets.sponsors.find(fs => fs.name === (a.props as any).value)?.count ?? 0
-                    const bCount = facets.sponsors.find(fs => fs.name === (b.props as any).value)?.count ?? 0
-                    return bCount - aCount
-                  })}
-                </SelectContent>
-              </Select>
+            {facets.sponsors.length > 0 && (
+              <MultiSelect
+                options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
+                selected={selectedSponsors}
+                onChange={(v) => reset({ sponsors: v })}
+                placeholder="All Sponsors"
+                searchPlaceholder="Search sponsors…"
+                className="h-8 min-w-[150px]"
+              />
             )}
             <MultiSelect
               options={Object.entries(BILL_CATEGORIES).map(([key, cat]) => {
@@ -775,7 +759,7 @@ function LegislationPageInner() {
               tag: selectedTags.join(',') || undefined,
               impact: selectedImpact || undefined,
               status: selectedStatuses.join(',') || undefined,
-              sponsor: selectedSponsor || undefined,
+              sponsor: selectedSponsors.join(',') || undefined,
             }}
           />
         </div>}
@@ -835,29 +819,17 @@ function LegislationPageInner() {
               </div>
 
               {/* Sponsor */}
-              {councilMembers.length > 0 && (
+              {facets.sponsors.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sponsor</p>
-                  <Select value={selectedSponsor || '__all__'} onValueChange={(v) => reset({ sponsor: v === '__all__' ? '' : (v ?? '') })}>
-                    <SelectTrigger className="h-10 text-sm w-full" aria-label="Filter by sponsor">
-                      <SelectValue>{selectedSponsor || 'All Sponsors'}</SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__all__">All sponsors</SelectItem>
-                      {[...councilMembers].sort((a, b) => {
-                        const aCount = facets.sponsors.find(fs => fs.name === a.name)?.count ?? 0
-                        const bCount = facets.sponsors.find(fs => fs.name === b.name)?.count ?? 0
-                        return bCount - aCount
-                      }).map(m => {
-                        const f = facets.sponsors.find(fs => fs.name === m.name)
-                        return (
-                          <SelectItem key={m.id} value={m.name ?? ''}>
-                            {m.name}{f ? ` (${f.count.toLocaleString()})` : ''}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
+                  <MultiSelect
+                    options={facets.sponsors.map(s => ({ value: s.name, label: `${s.name} (${s.count.toLocaleString()})` }))}
+                    selected={selectedSponsors}
+                    onChange={(v) => reset({ sponsors: v })}
+                    placeholder="All Sponsors"
+                    searchPlaceholder="Search sponsors…"
+                    className="h-10 w-full"
+                  />
                 </div>
               )}
 

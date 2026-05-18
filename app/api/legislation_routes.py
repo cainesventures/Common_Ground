@@ -335,7 +335,8 @@ def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor,
         status_list = [s.strip() for s in status.split(',') if s.strip()]
         q_obj = q_obj.filter(Legislation.status.in_(status_list))
     if not skip_sponsor and sponsor:
-        q_obj = q_obj.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+        sponsor_list = [s.strip() for s in sponsor.split(',') if s.strip()]
+        q_obj = q_obj.filter(or_(*[Legislation.sponsor.ilike(f"%{s}%") for s in sponsor_list]))
     if year:
         q_obj = q_obj.filter(extract("year", Legislation.introduced_date) == year)
     if month:
