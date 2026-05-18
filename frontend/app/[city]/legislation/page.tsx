@@ -36,38 +36,38 @@ interface Bill {
   next_hearing_date?: string
 }
 
-function ExportButtons({ analyzed, tags, impact, statuses, sponsor, year, month }: {
+function ExportButtons({ analyzed, tags, impact, statuses, sponsor, year, month, total }: {
   analyzed?: string; tags?: string[]; impact?: string; statuses?: string[]
-  sponsor?: string; year?: number; month?: number
+  sponsor?: string; year?: number; month?: number; total: number
 }) {
-  const [loadingCsv,  setLoadingCsv]  = useState(false)
-  const [loadingJson, setLoadingJson] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  const doExport = async (format: 'csv' | 'json') => {
-    const setLoading = format === 'csv' ? setLoadingCsv : setLoadingJson
+  const hasFilters = !!(analyzed || tags?.length || impact || statuses?.length || sponsor || year || month)
+
+  const doExport = async () => {
     setLoading(true)
     try {
-      await api.exportLegislation({ format, analyzed, tag: tags?.join(','), impact, status: statuses?.join(','), sponsor, year, month })
+      await api.exportLegislation({ format: 'csv', analyzed, tag: tags?.join(','), impact, status: statuses?.join(','), sponsor, year, month })
     } catch { /* ignore */ } finally { setLoading(false) }
   }
 
+  const label = loading
+    ? '…'
+    : hasFilters
+      ? `Download ${total.toLocaleString()} bills (.csv)`
+      : 'Download all legislation (.csv)'
+
   return (
-    <div className="flex items-center gap-1.5 shrink-0">
-      <button
-        onClick={() => doExport('csv')}
-        disabled={loadingCsv}
-        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
-      >
-        {loadingCsv ? '…' : 'CSV'}
-      </button>
-      <button
-        onClick={() => doExport('json')}
-        disabled={loadingJson}
-        className="text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50"
-      >
-        {loadingJson ? '…' : 'JSON'}
-      </button>
-    </div>
+    <button
+      onClick={doExport}
+      disabled={loading}
+      className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded border hover:bg-muted transition-colors disabled:opacity-50 shrink-0 whitespace-nowrap"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      {label}
+    </button>
   )
 }
 
@@ -477,6 +477,7 @@ function LegislationPageInner() {
           sponsor={selectedSponsor}
           year={selectedYear ?? undefined}
           month={selectedMonth ?? undefined}
+          total={total}
         />
       </div>
 
