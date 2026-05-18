@@ -602,23 +602,6 @@ function LegislationPageInner() {
           </div>
         )}
 
-        {/* Month drill-down — only when a year is selected */}
-        {filtersExpanded && selectedYear && <div className="hidden sm:block">
-          <DrilldownChart
-            selectedYear={selectedYear}
-            selectedMonth={selectedMonth}
-            onYearSelect={(y) => reset({ year: y })}
-            onMonthSelect={(m) => { setSelectedMonth(m); setPage(1) }}
-            filters={{
-              q: query || undefined,
-              analyzed: analyzedOnly ? 'true' : undefined,
-              tag: selectedTags.join(',') || undefined,
-              impact: selectedImpact || undefined,
-              status: selectedStatuses.join(',') || undefined,
-              sponsor: selectedSponsors.join(',') || undefined,
-            }}
-          />
-        </div>}
 
       </div>
 
