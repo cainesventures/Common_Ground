@@ -412,10 +412,10 @@ _year_counts_cache: dict | None = None
 async def get_year_counts(
     q: str = Query('', max_length=200),
     analyzed: str = Query(""),
-    tag: str = Query("", max_length=60),
+    tag: str = Query("", max_length=500),
     impact: str = Query("", max_length=20),
-    status: str = Query("", max_length=40),
-    sponsor: str = Query("", max_length=100),
+    status: str = Query("", max_length=200),
+    sponsor: str = Query("", max_length=500),
     db: Session = Depends(get_db),
 ):
     """Return bill counts grouped by introduction year, sorted ascending."""
@@ -467,10 +467,10 @@ async def get_month_counts(
     year: int = Query(...),
     q: str = Query('', max_length=200),
     analyzed: str = Query(""),
-    tag: str = Query("", max_length=60),
+    tag: str = Query("", max_length=500),
     impact: str = Query("", max_length=20),
-    status: str = Query("", max_length=40),
-    sponsor: str = Query("", max_length=100),
+    status: str = Query("", max_length=200),
+    sponsor: str = Query("", max_length=500),
     db: Session = Depends(get_db),
 ):
     """Return bill counts grouped by month for a given year, sorted ascending."""
