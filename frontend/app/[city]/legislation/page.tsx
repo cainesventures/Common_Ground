@@ -174,7 +174,8 @@ function LegislationPageInner() {
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
     } catch (e: any) {
-      setError(e.message ?? 'Failed to load legislation')
+      const msg = typeof e?.message === 'string' ? e.message : 'Failed to load legislation'
+      setError(msg)
       setBills([])
       setTotal(0)
     } finally {
@@ -289,14 +290,14 @@ function LegislationPageInner() {
   if (selectedLevel  && selectedLevel !== 'local') filterParts.push(selectedLevel)
   if (selectedYear)   filterParts.push(String(selectedYear))
   if (selectedMonth)  filterParts.push(MONTH_NAMES_FULL[selectedMonth - 1])
-  if (selectedTags.length)     selectedTags.forEach(t => filterParts.push(t))
+  if (selectedCategories.length) selectedCategories.forEach(c => filterParts.push(BILL_CATEGORIES[c]?.label ?? c))
+  if (selectedSponsors.length) selectedSponsors.forEach(s => filterParts.push(s))
   if (selectedStatuses.length) selectedStatuses.forEach(s => filterParts.push(fmtStatus(s)))
   if (selectedImpact)  filterParts.push(`${selectedImpact} impact`)
-  if (selectedSponsors.length) selectedSponsors.forEach(s => filterParts.push(s))
+  if (selectedTags.length) selectedTags.forEach(t => filterParts.push(t))
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
   if (hasVotesOnly)         filterParts.push('has roll call')
   if (hasPerspectivesOnly)  filterParts.push('has perspectives')
-  if (selectedCategories.length) selectedCategories.forEach(c => filterParts.push(BILL_CATEGORIES[c]?.label ?? c))
   if (query)          filterParts.push(`"${query}"`)
 
   return (
