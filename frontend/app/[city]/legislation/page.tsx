@@ -126,6 +126,8 @@ function LegislationPageInner() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
   const [paginationExpanded, setPaginationExpanded] = useState(false)
+  const [paginationFixed, setPaginationFixed] = useState(true)
+  const bottomSentinelRef = useRef<HTMLDivElement>(null)
   const [facets, setFacets] = useState<{
     statuses: {value: string; count: number}[]
     sponsors: {name: string; count: number}[]
@@ -301,13 +303,21 @@ function LegislationPageInner() {
   if (hasPerspectivesOnly)  filterParts.push('has perspectives')
   if (query)          filterParts.push(`"${query}"`)
 
+  useEffect(() => {
+    const el = bottomSentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(([entry]) => setPaginationFixed(!entry.isIntersecting), { threshold: 0 })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [])
+
   const goToPage = (p: number) => {
     setPage(p)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   return (
-    <div className={`space-y-5 ${totalPages > 1 ? 'pb-14' : ''}`}>
+    <div className={`space-y-5 ${totalPages > 1 && paginationFixed ? 'pb-14' : ''}`}>
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Legislation</h1>
@@ -844,9 +854,15 @@ function LegislationPageInner() {
         </div>
       )}
 
-      {/* Fixed bottom pagination */}
+      {/* Sentinel — when visible the pagination bar docks inline above the footer */}
+      <div ref={bottomSentinelRef} className="h-px" />
+
+      {/* Pagination bar — fixed when scrolling, inline when at the bottom of the page */}
       {totalPages > 1 && (
-        <div className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur">
+        <div className={paginationFixed
+          ? 'fixed bottom-0 left-0 right-0 z-40 border-t bg-background/95 backdrop-blur'
+          : 'border-t bg-background/95'
+        }>
           <div className="max-w-5xl mx-auto px-4">
             {paginationExpanded ? (
               <div className="flex items-center justify-between gap-3 py-2">
