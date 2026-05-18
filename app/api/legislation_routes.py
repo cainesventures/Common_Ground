@@ -379,9 +379,9 @@ async def get_facets(
                .filter(Legislation.sponsor.isnot(None), Legislation.sponsor != "")
     ).group_by(Legislation.sponsor).order_by(func.count(Legislation.id).desc()).all()
 
-    # Tag + category counts — all filters except tag (in-memory parse)
+    # Tag + category counts — all active filters applied (conjunctive: counts reflect selected tags too)
     # Fetch (id, tags) so we can count distinct bills per category without double-counting.
-    tag_rows = _filter_legislation(**kw, skip_tag=True,
+    tag_rows = _filter_legislation(**kw, skip_tag=False,
         q_obj=db.query(Legislation.id, Legislation.tags)
                .filter(Legislation.tags.isnot(None), Legislation.tags != "", Legislation.tags != "[]")
     ).all()
@@ -449,7 +449,9 @@ async def get_year_counts(
         status_list = [s.strip() for s in status.split(',') if s.strip()]
         base = base.filter(Legislation.status.in_(status_list))
     if sponsor:
-        base = base.filter(Legislation.sponsor.ilike(f"%{sponsor}%"))
+        from sqlalchemy import or_
+        sponsor_list = [s.strip() for s in sponsor.split(',') if s.strip()]
+        base = base.filter(or_(*[Legislation.sponsor.ilike(f"%{s}%") for s in sponsor_list]))
 
     rows = base.group_by("year").order_by("year").all()
     result = {"years": [{"year": int(row.year), "count": row.count} for row in rows]}

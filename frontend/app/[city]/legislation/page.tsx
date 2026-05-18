@@ -206,8 +206,18 @@ function LegislationPageInner() {
   }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
 
   useEffect(() => {
-    api.getYearCounts({ analyzed: 'true' }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
-  }, [])
+    const categoryTags = selectedCategories.flatMap(cat => CATEGORY_TAGS[cat] ?? [])
+    const allTags = categoryTags.length > 0 ? [...new Set([...selectedTags, ...categoryTags])] : selectedTags
+    api.getYearCounts({
+      q: query || undefined,
+      analyzed: analyzedOnly ? 'true' : undefined,
+      tag: allTags.join(',') || undefined,
+      impact: selectedImpact || undefined,
+      status: selectedStatuses.join(',') || undefined,
+      sponsor: selectedSponsors.join(',') || undefined,
+    }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, analyzedOnly, selectedTags, selectedCategories, selectedImpact, selectedStatuses, selectedSponsors])
 
   useEffect(() => {
     if (!selectedYear) { setMonthCounts([]); return }
