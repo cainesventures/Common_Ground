@@ -14,7 +14,6 @@ import { BILL_CATEGORIES, CATEGORY_TAGS } from '@/lib/bill-categories'
 
 const PAGE_SIZE = 20
 
-const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
 interface Bill {
@@ -75,189 +74,6 @@ function ExportButtons({ analyzed, tags, impact, statuses, sponsor, year, month,
 interface YearCount  { year: number;  count: number }
 interface MonthCount { month: number; count: number }
 
-// ── Year Picker ───────────────────────────────────────────────────────────────
-// Pill-based year selector. Works at any data density (1 year or 15).
-
-function YearPicker({
-  yearCounts,
-  onYearSelect,
-}: {
-  yearCounts: YearCount[]
-  onYearSelect: (year: number) => void
-}) {
-  if (yearCounts.length === 0) return null
-  const total = yearCounts.reduce((s, y) => s + y.count, 0)
-  const max   = Math.max(...yearCounts.map(y => y.count), 1)
-
-  return (
-    <div className="rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/60 dark:bg-blue-950/30 p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <span className="text-sm font-semibold">Bill Activity</span>
-          <span className="text-xs text-muted-foreground ml-2">select a year to drill down by month</span>
-        </div>
-        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {yearCounts.map((y) => {
-          const pct = Math.round((y.count / max) * 100)
-          return (
-            <button
-              key={y.year}
-              onClick={() => onYearSelect(y.year)}
-              title={`${y.year}: ${y.count.toLocaleString()} bill${y.count !== 1 ? 's' : ''}`}
-              className="group relative flex flex-col items-center justify-center rounded-lg border border-border hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 overflow-hidden transition-colors min-w-[72px] px-4 py-3 cursor-pointer"
-            >
-              {/* Volume fill — subtle background bar rising from the bottom */}
-              <div
-                className="absolute inset-x-0 bottom-0 bg-primary/8 dark:bg-primary/15 transition-all duration-200 group-hover:bg-emerald-500/15"
-                style={{ height: `${pct}%` }}
-              />
-              <span className="relative text-sm font-bold tabular-nums group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{y.year}</span>
-              <span className="relative text-[11px] text-muted-foreground tabular-nums group-hover:text-emerald-500 transition-colors mt-0.5">
-                {y.count.toLocaleString()}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Month Bar Chart ────────────────────────────────────────────────────────────
-// Only used for the month drill-down — 12 bars always renders well.
-
-function MonthBarChart({
-  monthCounts,
-  selectedMonth,
-  onMonthSelect,
-  year,
-}: {
-  monthCounts: MonthCount[]
-  selectedMonth: number | null
-  onMonthSelect: (month: number | null) => void
-  year: number
-}) {
-  const [hoveredMonth, setHoveredMonth] = useState<number | null>(null)
-  if (monthCounts.length === 0) return null
-  const max   = Math.max(...monthCounts.map(m => m.count), 1)
-  const total = monthCounts.reduce((s, m) => s + m.count, 0)
-
-  return (
-    <div className="rounded-xl border bg-card p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <span className="text-sm font-semibold">{year}</span>
-          <span className="text-xs text-muted-foreground ml-2">click a month to filter</span>
-        </div>
-        <span className="text-xs text-muted-foreground tabular-nums">{total.toLocaleString()} bills</span>
-      </div>
-      <div className="flex items-end gap-1" style={{ height: 108 }}>
-        {monthCounts.map((m) => {
-          const isActive  = selectedMonth === m.month
-          const isHovered = hoveredMonth  === m.month
-          const barH = Math.max((m.count / max) * 72, 3)
-          const barColor = isActive ? '#10b981' : isHovered ? '#059669' : '#10b98130'
-
-          return (
-            <button
-              key={m.month}
-              onClick={() => onMonthSelect(isActive ? null : m.month)}
-              onMouseEnter={() => setHoveredMonth(m.month)}
-              onMouseLeave={() => setHoveredMonth(null)}
-              className="bar-hover flex-1 flex flex-col items-center gap-0.5 min-w-0"
-              title={`${MONTH_NAMES_FULL[m.month - 1]}: ${m.count.toLocaleString()} bill${m.count !== 1 ? 's' : ''}`}
-            >
-              <span style={{
-                fontSize: 11, fontWeight: 600, lineHeight: 1,
-                fontVariantNumeric: 'tabular-nums', color: 'currentColor',
-                opacity: isActive || isHovered ? 1 : 0,
-                transition: 'opacity 150ms ease',
-              }}>
-                {m.count}
-              </span>
-              <div className="w-full flex items-end" style={{ height: 72 }}>
-                <div
-                  className="w-full rounded-t-sm"
-                  style={{
-                    height: barH, backgroundColor: barColor,
-                    outline: isActive ? '2px solid #10b981' : 'none',
-                    outlineOffset: '1px',
-                    transition: 'background-color 150ms ease',
-                  }}
-                />
-              </div>
-              <span style={{
-                fontSize: 10, lineHeight: 1, textAlign: 'center',
-                width: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                color: isActive ? '#059669' : isHovered ? '#10b981' : '#6b7280',
-                fontWeight: isActive ? 600 : 400,
-                transition: 'color 150ms ease',
-              }}>
-                {MONTH_NAMES[m.month - 1]}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Drill-down Chart ─────────────────────────────────────────────────────────
-
-interface ChartFilters {
-  q?: string
-  analyzed?: string
-  tag?: string
-  impact?: string
-  status?: string
-  sponsor?: string
-}
-
-function DrilldownChart({
-  selectedYear,
-  selectedMonth,
-  onYearSelect,
-  onMonthSelect,
-  filters,
-}: {
-  selectedYear:  number | null
-  selectedMonth: number | null
-  onYearSelect:  (year: number | null) => void
-  onMonthSelect: (month: number | null) => void
-  filters: ChartFilters
-}) {
-  const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
-
-  useEffect(() => {
-    if (!selectedYear) { setMonthCounts([]); return }
-    api.getMonthCounts(selectedYear, filters).then((d) => setMonthCounts(d?.months ?? [])).catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedYear, filters.q, filters.analyzed, filters.tag, filters.impact, filters.status, filters.sponsor])
-
-  if (!selectedYear) return null
-
-  return (
-    <div className="space-y-2">
-      <MonthBarChart
-        monthCounts={monthCounts}
-        selectedMonth={selectedMonth}
-        onMonthSelect={onMonthSelect}
-        year={selectedYear}
-      />
-      <button
-        onClick={() => { onYearSelect(null); onMonthSelect(null) }}
-        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        ← All years
-      </button>
-    </div>
-  )
-}
-
-
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 const STATUSES = [
@@ -315,7 +131,8 @@ function LegislationPageInner() {
     tags: {tag: string; count: number}[]
     categories: {key: string; count: number}[]
   }>({ statuses: [], sponsors: [], tags: [], categories: [] })
-  const [yearCounts, setYearCounts] = useState<YearCount[]>([])
+  const [yearCounts,  setYearCounts]  = useState<YearCount[]>([])
+  const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
 
   // Sync filters → URL using history.replaceState to avoid triggering Next.js router re-renders
   useEffect(() => {
@@ -391,6 +208,19 @@ function LegislationPageInner() {
   useEffect(() => {
     api.getYearCounts({ analyzed: 'true' }).then((d) => setYearCounts(d?.years ?? [])).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (!selectedYear) { setMonthCounts([]); return }
+    api.getMonthCounts(selectedYear, {
+      q: query || undefined,
+      analyzed: analyzedOnly ? 'true' : undefined,
+      tag: [...selectedTags, ...selectedCategories.flatMap(c => CATEGORY_TAGS[c] ?? [])].join(',') || undefined,
+      impact: selectedImpact || undefined,
+      status: selectedStatuses.join(',') || undefined,
+      sponsor: selectedSponsors.join(',') || undefined,
+    }).then((d) => setMonthCounts(d?.months ?? [])).catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedYear, query, analyzedOnly, selectedTags, selectedCategories, selectedImpact, selectedStatuses, selectedSponsors])
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tags: string[]; level: string;
@@ -650,6 +480,21 @@ function LegislationPageInner() {
                 </SelectContent>
               </Select>
             )}
+            {selectedYear && (
+              <Select value={selectedMonth ? String(selectedMonth) : '__all__'} onValueChange={(v) => { setSelectedMonth(v === '__all__' ? null : Number(v)); setPage(1) }}>
+                <SelectTrigger className="h-8 text-sm w-[130px]" aria-label="Filter by month">
+                  <SelectValue>{selectedMonth ? MONTH_NAMES_FULL[selectedMonth - 1] : 'All Months'}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All months</SelectItem>
+                  {monthCounts.map(m => (
+                    <SelectItem key={m.month} value={String(m.month)}>
+                      {MONTH_NAMES_FULL[m.month - 1]} ({m.count.toLocaleString()})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* Row 3: Impact chips · toggles */}
@@ -903,6 +748,26 @@ function LegislationPageInner() {
                       {[...yearCounts].reverse().map(y => (
                         <SelectItem key={y.year} value={String(y.year)}>
                           {y.year} ({y.count.toLocaleString()})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {/* Month — only when a year is selected */}
+              {selectedYear && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Month</p>
+                  <Select value={selectedMonth ? String(selectedMonth) : '__all__'} onValueChange={(v) => { setSelectedMonth(v === '__all__' ? null : Number(v)); setPage(1) }}>
+                    <SelectTrigger className="h-10 text-sm w-full" aria-label="Filter by month">
+                      <SelectValue>{selectedMonth ? MONTH_NAMES_FULL[selectedMonth - 1] : 'All months'}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All months</SelectItem>
+                      {monthCounts.map(m => (
+                        <SelectItem key={m.month} value={String(m.month)}>
+                          {MONTH_NAMES_FULL[m.month - 1]} ({m.count.toLocaleString()})
                         </SelectItem>
                       ))}
                     </SelectContent>
