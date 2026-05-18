@@ -816,7 +816,7 @@ function LegislationPageInner() {
       {!loading && !error && bills.length > 0 && (
         <div className="space-y-2">
           {bills.map((bill) => (
-            <BillCard key={bill.id} bill={bill} query={query} tab={hasPerspectivesOnly ? 'perspectives' : undefined} citySlug={city} />
+            <BillCard key={bill.id} bill={bill} query={query} showDate tab={hasPerspectivesOnly ? 'perspectives' : undefined} citySlug={city} />
           ))}
         </div>
       )}
