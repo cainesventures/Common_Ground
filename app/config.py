@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     # Sentry error tracking (optional — leave blank to disable)
     sentry_dsn: str = ""
 
+    # Bluesky bot — shared secret for the bot's API calls (record-post endpoint)
+    bot_api_token: str = ""
+
     @model_validator(mode='after')
     def validate_production_secrets(self):
         if self.environment == 'production' and self.jwt_secret == 'change-me-in-production':

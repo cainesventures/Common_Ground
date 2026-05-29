@@ -4,9 +4,14 @@ Posts daily about notable Philadelphia City Council legislation.
 
 Post types:
   - Weekdays: daily spotlight — a randomly selected high-impact bill
-              (impact_score >= 6) from the full catalog
+              (falls back to medium-impact if the pool is thin)
   - Weekdays: recently signed bills (last 30 days), if any
   - Sunday 9am: weekly roundup (counts + active bills)
+
+Dedup: every post is recorded server-side in the `bluesky_posts` registry via
+the X-Bot-Token-authenticated /api/legislation/bluesky/record-post endpoint.
+Bill-fetch queries pass `not_posted_for=<type>` so the bot never picks a bill
+it has already posted in that post_type.
 
 Run via GitHub Actions daily at 9am ET.
 """
@@ -23,6 +28,7 @@ import urllib.error
 API_BASE = os.environ.get("API_BASE", "https://opencommonground-api-production.up.railway.app")
 BLUESKY_HANDLE = os.environ["BLUESKY_HANDLE"]
 BLUESKY_APP_PASSWORD = os.environ["BLUESKY_APP_PASSWORD"]
+BOT_API_TOKEN = os.environ.get("BOT_API_TOKEN", "")
 SITE_BASE = "https://opencommonground.com"
 
 BSKY_API = "https://bsky.social/xrpc"
@@ -57,7 +63,7 @@ def bsky_login() -> tuple[str, str]:
     return resp["accessJwt"], resp["did"]
 
 
-def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
+def bsky_post(token: str, did: str, text: str, embed: dict = None) -> dict:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     record = {
         "$type": "app.bsky.feed.post",
@@ -66,7 +72,7 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
     }
     if embed:
         record["embed"] = embed
-    http_post(
+    resp = http_post(
         f"{BSKY_API}/com.atproto.repo.createRecord",
         {
             "repo": did,
@@ -76,6 +82,28 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
         headers={"Authorization": f"Bearer {token}"},
     )
     print(f"Posted: {text[:80]}...")
+    return resp
+
+
+def record_post(bill_id: str | None, post_type: str, bsky_resp: dict) -> None:
+    """Tell the API we posted, so the bot never duplicates this bill."""
+    if not BOT_API_TOKEN:
+        print("BOT_API_TOKEN not set — skipping registry write (dedup falls back to feed lookback).")
+        return
+    try:
+        http_post(
+            f"{API_BASE}/api/legislation/bluesky/record-post",
+            {
+                "bill_id": bill_id,
+                "post_type": post_type,
+                "post_uri": bsky_resp.get("uri"),
+                "post_cid": bsky_resp.get("cid"),
+            },
+            headers={"X-Bot-Token": BOT_API_TOKEN},
+        )
+        print(f"Recorded {post_type} post for bill_id={bill_id}.")
+    except Exception as e:
+        print(f"Failed to record post (will rely on feed-lookback dedup): {e}")
 
 
 def fetch_recent_post_urls(handle: str, limit: int = 40) -> set[str]:
@@ -97,7 +125,12 @@ def fetch_recent_post_urls(handle: str, limit: int = 40) -> set[str]:
 
 
 def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
-    """Pick a random high-impact analyzed bill, excluding recently posted ones."""
+    """Pick a random high-impact analyzed bill that's never been spotlighted.
+
+    Primary dedup: server-side `not_posted_for=spotlight` filter (bluesky_posts
+    registry).  Secondary dedup: client-side filter against recent author-feed
+    URLs, in case the registry write previously failed.
+    """
     if excluded_urls is None:
         excluded_urls = set()
 
@@ -106,11 +139,17 @@ def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
         return url not in excluded_urls
 
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
+        data = http_get(
+            f"{API_BASE}/api/legislation/search"
+            f"?limit=100&level=local&analyzed=true&impact=high&not_posted_for=spotlight"
+        )
         candidates = [b for b in data.get("results", []) if not_posted(b)]
 
         if len(candidates) < 5:
-            data2 = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
+            data2 = http_get(
+                f"{API_BASE}/api/legislation/search"
+                f"?limit=100&level=local&analyzed=true&impact=medium&not_posted_for=spotlight"
+            )
             candidates += [b for b in data2.get("results", []) if not_posted(b)]
 
         if not candidates:
@@ -187,14 +226,18 @@ def post_daily_spotlight(token: str, did: str) -> bool:
         },
     }
 
-    bsky_post(token, did, text, embed=embed)
+    resp = bsky_post(token, did, text, embed=embed)
+    record_post(bill_id, "spotlight", resp)
     return True
 
 
 def fetch_recently_signed(days: int = 30) -> list:
-    """Bills signed into law within the last N days."""
+    """Bills signed into law within the last N days, never previously announced."""
     try:
-        data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&status=signed_into_law")
+        data = http_get(
+            f"{API_BASE}/api/legislation/search"
+            f"?limit=100&level=local&status=signed_into_law&not_posted_for=signed"
+        )
         bills = data.get("results", [])
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
         recent = []
@@ -244,7 +287,8 @@ def post_signed_bills(token: str, did: str) -> int:
             },
         }
 
-        bsky_post(token, did, text, embed=embed)
+        resp = bsky_post(token, did, text, embed=embed)
+        record_post(bill_id, "signed", resp)
         posted += 1
 
     return posted
@@ -281,7 +325,8 @@ def post_weekly_roundup(token: str, did: str) -> None:
             },
         }
 
-        bsky_post(token, did, text, embed=embed)
+        resp = bsky_post(token, did, text, embed=embed)
+        record_post(None, "roundup", resp)
     except Exception as e:
         print(f"Weekly roundup failed: {e}")
 

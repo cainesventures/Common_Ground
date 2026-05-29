@@ -13,8 +13,8 @@ from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
 from app.models.database import get_db
 from app.services.legislation_service import LegislationIngestionService, sync_vote_records
-from app.models import Legislation, LegislationVote, BillPerspective, BillVoteRecord
-from app.auth import require_dev_tier, get_optional_user, get_current_user
+from app.models import Legislation, LegislationVote, BillPerspective, BillVoteRecord, BlueskyPost
+from app.auth import require_dev_tier, get_optional_user, get_current_user, require_bot_token
 from app.rate_limit import limiter
 from app.services.perspectives_service import ALL_PERSPECTIVES
 
@@ -707,6 +707,7 @@ async def search_legislation(
     city: str = Query("", max_length=50, description="City slug filter (e.g. 'philadelphia', 'chicago'). Defaults to 'philadelphia' for local searches."),
     bill_type: str = Query("", max_length=30, description="Filter by bill_type: substantive, ceremonial, procedural"),
     committee: str = Query("", max_length=100, description="Filter by committee name (partial match)"),
+    not_posted_for: str = Query("", max_length=20, description="Exclude bills already posted to Bluesky with this post_type (e.g. 'spotlight', 'signed')"),
     db: Session = Depends(get_db)
 ):
     """Search for legislation with optional filters."""
@@ -727,6 +728,7 @@ async def search_legislation(
             has_votes=has_votes or None, has_perspectives=has_perspectives or None,
             missing_perspectives=missing_perspectives or None, city=effective_city or None,
             bill_type=bill_type or None, committee=committee or None,
+            not_posted_for=not_posted_for or None,
         )
         return {
             "success": True,
@@ -931,6 +933,35 @@ async def tag_all_bills(
         return {"success": True, **result}
     except Exception as e:
         logger.error(f"Error auto-tagging bills: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class BlueskyPostRecord(BaseModel):
+    bill_id: Optional[str] = None
+    post_type: str
+    post_uri: Optional[str] = None
+    post_cid: Optional[str] = None
+
+
+@router.post("/bluesky/record-post")
+async def record_bluesky_post(
+    payload: BlueskyPostRecord,
+    db: Session = Depends(get_db),
+    _bot=Depends(require_bot_token),
+):
+    """Record a Bluesky post so the bot never reposts the same bill."""
+    try:
+        row = BlueskyPost(
+            bill_id=payload.bill_id,
+            post_type=payload.post_type,
+            post_uri=payload.post_uri,
+            post_cid=payload.post_cid,
+        )
+        db.add(row)
+        db.commit()
+        return {"success": True, "id": row.id}
+    except Exception as e:
+        logger.error(f"Error recording Bluesky post: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

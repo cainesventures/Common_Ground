@@ -409,6 +409,7 @@ class LegislationIngestionService:
         city: Optional[str] = None,
         bill_type: Optional[str] = None,
         committee: Optional[str] = None,
+        not_posted_for: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract
@@ -473,6 +474,15 @@ class LegislationIngestionService:
             from app.models import BillPerspective
             base_query = base_query.filter(
                 ~_exists().where(BillPerspective.bill_id == Legislation.id)
+            )
+        if not_posted_for:
+            from sqlalchemy import exists as _exists
+            from app.models import BlueskyPost
+            base_query = base_query.filter(
+                ~_exists().where(
+                    (BlueskyPost.bill_id == Legislation.id)
+                    & (BlueskyPost.post_type == not_posted_for)
+                )
             )
         total = base_query.count()
         from sqlalchemy.orm import defer, selectinload

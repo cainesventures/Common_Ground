@@ -8,7 +8,7 @@ client as both an HttpOnly cookie (for browser sessions) and a JSON field
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
@@ -90,6 +90,26 @@ def require_dev_tier(current_user=Depends(get_current_user)):
             detail="This feature requires the developer tier. Upgrade at /pricing.",
         )
     return current_user
+
+
+def require_bot_token(x_bot_token: Optional[str] = Header(None)):
+    """FastAPI dependency: require a valid X-Bot-Token header.
+
+    Used by service-account-style integrations (e.g. the Bluesky bot) that
+    don't have a user session.  Token is configured via BOT_API_TOKEN.
+    """
+    settings = get_settings()
+    if not settings.bot_api_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Bot token authentication not configured on this server.",
+        )
+    if x_bot_token != settings.bot_api_token:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bot token.",
+        )
+    return True
 
 
 def get_optional_user(

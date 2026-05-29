@@ -314,3 +314,25 @@ class BillVoteRecord(Base):
 
     legislation    = relationship("Legislation", back_populates="vote_records")
     councilmember  = relationship("Councilmember", back_populates="vote_records")
+
+
+class BlueskyPost(Base):
+    """Registry of Bluesky posts made by the bot.
+
+    One row per post. Used to guarantee the bot never duplicates a bill within
+    a given post_type (spotlight, signed, roundup). post_uri / post_cid link
+    back to the actual Bluesky record.
+    """
+    __tablename__ = "bluesky_posts"
+
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    bill_id     = Column(String, ForeignKey("legislation.id"), nullable=True, index=True)
+    post_type   = Column(String, nullable=False)   # "spotlight" | "signed" | "roundup"
+    posted_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
+    post_uri    = Column(String, nullable=True)    # at:// URI from Bluesky
+    post_cid    = Column(String, nullable=True)    # content identifier
+
+    __table_args__ = (
+        Index("ix_bluesky_posts_bill_type", "bill_id", "post_type"),
+        Index("ix_bluesky_posts_posted_at", "posted_at"),
+    )
