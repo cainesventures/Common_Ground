@@ -1,14 +1,14 @@
 {
-  "generated_at": "2026-05-18T12:22:51.205243Z",
+  "generated_at": "2026-05-29T01:15:06.664830Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
   },
-  "total_bills": 8619,
+  "total_bills": 8623,
   "key_stats": [
     {
       "label": "Bills Introduced",
-      "value": "8,619",
+      "value": "8,623",
       "note": "2000–2026"
     },
     {
@@ -18,20 +18,20 @@
     },
     {
       "label": "Active Bills",
-      "value": "1,906",
+      "value": "1,910",
       "note": "in committee or introduced"
     },
     {
       "label": "Top Issue",
       "value": "Zoning",
-      "note": "2,577 bills"
+      "note": "2,578 bills"
     }
   ],
-  "narrative": "For nearly three decades, the City Council has churned out an astonishing 8,619 bills, a staggering number that underscores the complexity and nuance of local governance. From 2000 to 2025, this legislative body has been in constant motion, introducing and debating policies that shape the city's future. The sheer volume of legislation is a testament to the many issues facing our communities, from zoning regulations to infrastructure upgrades.\n\nThe data reveals some striking patterns. For instance, zoning laws have dominated the agenda, with 2,577 bills introduced over the years – a quarter of all legislation. This focus on land use and development reflects the city's ongoing struggle to balance growth with community needs. Another intriguing finding is the surprisingly high pass rate: an impressive 99% of closed bills have been signed into law, suggesting that the Council's deliberative process is generally effective in refining proposals. Additionally, the most active years for legislation reveal a cyclical pattern, with spikes in bill introduction during election years.\n\nThis data offers a unique window into the city's legislative history and highlights the importance of tracking policy developments. By understanding what issues receive attention and how priorities shift over time, residents can engage more effectively with their elected representatives. Open Common Ground makes it possible for citizens to navigate this vast dataset, empowering them to hold leaders accountable and advocate for change.",
+  "narrative": "Over the past quarter century, the Philadelphia City Council has introduced a staggering 8,623 bills, a testament to the city's ongoing efforts to shape its future and address pressing issues. From zoning regulations to transportation infrastructure, these proposals represent a comprehensive attempt to improve the lives of Philadelphians. This data spans from 2000 to 2026, covering two decades of Council activity, and sets the stage for an in-depth examination of the legislative process.\n\nOne notable trend is the dominance of certain issue areas, with zoning topping the list at 2,578 bills – nearly a third of all proposals. Planning, infrastructure, and housing also occupy prominent positions, while transportation and finance trail closely behind. Additionally, the data reveals significant fluctuations in bill introductions over time, with 2005, 2012, and 2018 standing out as the most active years, each with over 365 bills introduced. Conversely, the quietest years were 2020 and 2021, with a combined total of only 527 bills.\n\nAs Philadelphians delve into this data, they'll discover a 99% pass rate among closed bills – an impressive indicator of the Council's ability to collaborate and produce legislation. However, the sheer volume of bills also underscores the complexities of local governance. By exploring these numbers, citizens can gain valuable insights into how their representatives prioritize issues, identify areas for improvement, and hold elected officials accountable. Open Common Ground empowers Philadelphians with this data, fostering civic engagement, informed decision-making, and a more participatory democracy – one where every voice matters and every proposal has the potential to shape the city's future.",
   "top_issues": [
     {
       "tag": "zoning",
-      "count": 2577
+      "count": 2578
     },
     {
       "tag": "planning",
@@ -43,7 +43,7 @@
     },
     {
       "tag": "housing",
-      "count": 1256
+      "count": 1257
     },
     {
       "tag": "transportation",
@@ -73,7 +73,7 @@
     },
     {
       "name": "Councilmember Squilla",
-      "count": 631
+      "count": 632
     },
     {
       "name": "Councilmember Clarke",
