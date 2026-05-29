@@ -63,19 +63,21 @@ def main():
 
     from app.models.database import SessionLocal
     from app.models import Legislation
+    from app.services.perspectives_service import ACTIVE_STATUSES
 
     db = SessionLocal()
     try:
         bills = (
             db.query(Legislation)
             .filter(
+                Legislation.status.in_(ACTIVE_STATUSES),
                 Legislation.analyzed_at.isnot(None),
                 Legislation.lede.isnot(None),
                 Legislation.lede != "",
             )
             .all()
         )
-        print(f"Checking {len(bills)} bills with ledes...")
+        print(f"Checking {len(bills)} active bills with ledes...")
 
         mismatches = [b for b in bills if is_mismatch(b)]
         print(f"\nFound {len(mismatches)} suspected mismatches:\n")
@@ -100,6 +102,7 @@ def main():
         provider = get_ai_provider()
 
         fixed = 0
+        cleared = 0
         for b in mismatches:
             new_lede = _ai_lede(b, provider)
             if new_lede:
@@ -109,10 +112,14 @@ def main():
                 b.lede = new_lede
                 fixed += 1
             else:
-                print(f"Skipped (empty AI result): {b.plain_title or b.id}")
+                # AI returned EMPTY (or errored) — the flagged lede was bad,
+                # so clearing is strictly better than keeping the hallucination.
+                print(f"Cleared (AI said no faithful lede possible): {b.plain_title or b.id}")
+                b.lede = None
+                cleared += 1
 
         db.commit()
-        print(f"\nRegenerated {fixed}/{len(mismatches)} ledes.")
+        print(f"\nRegenerated {fixed} ledes, cleared {cleared}, total {len(mismatches)}.")
     finally:
         db.close()
 

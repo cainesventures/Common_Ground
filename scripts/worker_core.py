@@ -184,7 +184,11 @@ def process_bill(
     def steps_needed():
         needs_text = not bill.full_text
         needs_analyze = bool(bill.full_text) and not bill.analyzed_at
-        needs_headline = bool(bill.analyzed_at) and (not bill.headline or not bill.lede)
+        # Headline for all analyzed bills; lede only for active bills.
+        needs_headline = bool(bill.analyzed_at) and (
+            not bill.headline
+            or (not bill.lede and bill.status in ACTIVE_STATUSES)
+        )
         needs_metadata = is_legistar and not bill.metadata_fetched_at
         _persp_count = _perspective_count(bill, db)
         _persp_needed = _relevant_perspective_count(bill)
@@ -345,9 +349,12 @@ def _step_headline(bill, db, label: str, log) -> str:
 def _run_headline(bill, db, label: str, log):
     from app.services.legislation_service import _ai_headline, _ai_lede
     from app.services.ai_provider import get_ai_provider
+    from app.services.perspectives_service import ACTIVE_STATUSES
     provider = get_ai_provider()
     bill.headline = _ai_headline(bill, provider)
-    bill.lede = _ai_lede(bill, provider)
+    # Ledes drive the bot + bill-detail hook — only generate for live bills.
+    if bill.status in ACTIVE_STATUSES:
+        bill.lede = _ai_lede(bill, provider)
     log.info(f"{label} headline generated")
 
 

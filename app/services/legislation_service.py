@@ -79,23 +79,50 @@ def _ai_headline(bill, provider) -> str:
 
 
 def _ai_lede(bill, provider) -> str:
-    """Generate a punchy 1-2 sentence news lede for a bill."""
-    text = bill.headline or bill.plain_title or bill.title or ""
+    """Generate a punchy 1-2 sentence news lede that's strictly faithful to
+    the bill text.  Returns empty string if the bill is too thin / procedural
+    for a meaningful lede."""
+    parts = []
+    if bill.plain_title:
+        parts.append(f"Plain title: {bill.plain_title}")
+    if bill.headline:
+        parts.append(f"Headline: {bill.headline}")
+    if bill.title:
+        parts.append(f"Official title: {bill.title}")
     if bill.summary:
-        text += "\n" + bill.summary[:600]
+        parts.append(f"Summary: {bill.summary[:800]}")
     elif bill.description:
-        text += "\n" + bill.description[:600]
+        parts.append(f"Description: {bill.description[:800]}")
+    if bill.full_text:
+        parts.append(f"Bill text excerpt: {bill.full_text[:1500]}")
+    text = "\n\n".join(parts)
 
     system = (
-        "You write opening sentences for local news articles about Philadelphia city council bills. "
-        "Write 1-2 punchy sentences (max 40 words total) that hook the reader. "
-        "Use plain language, active voice, be specific about what changes and who it affects. "
-        "Do NOT start with 'This bill' or 'The bill'. No jargon, no bill numbers. "
-        "Respond with ONLY the lede text, nothing else."
+        "You write opening sentences for local news articles about Philadelphia "
+        "city council bills.\n\n"
+        "STRICT RULE — stay faithful to the SOURCE TEXT below. Do NOT invent "
+        "dollar amounts, percentages, neighborhoods, sponsors, dates, "
+        "demographics, or any specific detail that is not explicitly in the "
+        "source. Do not embellish with fictional context. If the source says "
+        "the bill authorizes a lease, write about a lease — do not turn it "
+        "into a tax story.\n\n"
+        "If the source is genuinely thin — a ceremonial naming, a routine "
+        "lease/license authorization, a technical code amendment, or anything "
+        "where there is no concrete newsworthy change you can describe "
+        "faithfully — respond with exactly the single word: EMPTY\n\n"
+        "Otherwise write 1-2 punchy sentences (max 40 words total) that hook "
+        "the reader using ONLY facts present in the source. Use plain "
+        "language, active voice. Be specific about what changes and who it "
+        "affects, but only when the source actually says so. Do not start "
+        "with 'This bill' or 'The bill'. No jargon, no bill numbers.\n\n"
+        "Respond with ONLY the lede text, or the single word EMPTY. Nothing else."
     )
     try:
         result = provider.complete(system_prompt=system, user_prompt=text)
-        return result.strip().strip('"\'').strip()[:400]
+        result = result.strip().strip('"\'').strip()
+        if result.upper() == "EMPTY" or not result:
+            return ""
+        return result[:400]
     except Exception as e:
         logger.warning(f"Lede failed for bill {bill.id}: {e}")
     return ""
@@ -503,14 +530,25 @@ class LegislationIngestionService:
         return results, total
 
     def generate_ledes(self, force: bool = False, ids: list[str] = None) -> dict:
-        """Generate punchy news ledes for analyzed bills."""
+        """Generate punchy news ledes for active analyzed bills.
+
+        Ledes are only useful for bills that may still be acted on — they drive
+        the Bluesky bot and bill-detail hooks.  Historical bills (signed,
+        vetoed, failed) keep whatever lede they already have; we don't burn
+        compute regenerating them.  Pass `ids` to override the active filter
+        for targeted regeneration.
+        """
         from app.services.ai_provider import get_ai_provider
+        from app.services.perspectives_service import ACTIVE_STATUSES
         provider = get_ai_provider()
 
         if ids:
             query = self.db.query(Legislation).filter(Legislation.id.in_(ids))
         else:
-            query = self.db.query(Legislation).filter(Legislation.analyzed_at.isnot(None))
+            query = self.db.query(Legislation).filter(
+                Legislation.status.in_(ACTIVE_STATUSES),
+                Legislation.analyzed_at.isnot(None),
+            )
             if not force:
                 query = query.filter(
                     (Legislation.lede.is_(None)) | (Legislation.lede == "")
