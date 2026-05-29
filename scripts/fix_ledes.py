@@ -1,12 +1,20 @@
-"""Detect and fix mismatched bill ledes.
+"""Detect and fix bill ledes for active bills.
 
-A mismatch is when the lede text has no keyword overlap with the bill's
-plain_title or tags — a symptom of ledes being written for the wrong bill
-during bulk generation.
+Default (no flags): heuristic dry-run report.
+  --fix             regenerate only heuristic-flagged mismatches
+  --fix --all       regenerate every active bill that has a lede
+  --workers N       parallel AI calls against Ollama (default 4)
 
-Usage (run from project root):
-  python scripts/fix_ledes.py            # dry run: print mismatch report
-  python scripts/fix_ledes.py --fix      # regenerate ledes for mismatched bills
+A mismatch is when the lede text shares no keyword overlap with the bill's
+plain_title or tags — a symptom of ledes being written for the wrong bill.
+But the heuristic has false negatives, so --all is the safer rebuild after
+a prompt change.
+
+Active-bill scope: only bills with status in introduced or in_committee.
+Ledes for historical bills aren't useful (the bot only posts live bills)
+and we don't burn compute regenerating them.
+
+Run from project root.
 """
 import sys
 import os
@@ -15,6 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import re
 import json
 import argparse
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 STOPWORDS = {
     "this", "that", "with", "from", "have", "been", "would", "could", "will",
@@ -26,39 +36,37 @@ STOPWORDS = {
     "help", "make", "take", "come", "work", "time", "like", "know", "want",
     "look", "well", "first", "long", "even", "back", "good", "much", "most",
     "need", "said", "says", "should", "must", "many", "each", "last", "next",
-    "only", "than", "those", "these", "there", "their", "through", "toward",
-    "between", "public", "percent", "million", "billion", "measure", "legislation",
+    "only", "those", "these", "there", "through", "toward", "between", "public",
+    "percent", "million", "billion", "measure", "legislation",
 }
 
 
-def content_words(text: str) -> set[str]:
-    words = re.findall(r"[a-z]{4,}", text.lower())
+def content_words(text: str) -> set:
+    words = re.findall(r"[a-z]{4,}", (text or "").lower())
     return {w for w in words if w not in STOPWORDS}
 
 
 def is_mismatch(bill) -> bool:
     lede = bill.lede or ""
     plain_title = bill.plain_title or bill.title or ""
-
     try:
         tags_raw = bill.tags or ""
         tags = json.loads(tags_raw) if tags_raw.startswith("[") else []
     except Exception:
         tags = []
-
     lede_words = content_words(lede)
     if len(lede_words) < 5:
-        return False  # Too short to judge reliably
-
-    bill_text = plain_title + " " + " ".join(tags)
-    bill_words = content_words(bill_text)
-
+        return False
+    bill_words = content_words(plain_title + " " + " ".join(tags))
     return len(lede_words & bill_words) == 0
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Detect and fix mismatched bill ledes.")
-    parser.add_argument("--fix", action="store_true", help="Regenerate ledes for mismatched bills")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--fix", action="store_true", help="Regenerate ledes (otherwise dry run)")
+    parser.add_argument("--all", action="store_true", help="Regenerate every active bill (not just flagged)")
+    parser.add_argument("--workers", type=int, default=4, help="Parallel AI calls (default 4)")
+    parser.add_argument("--commit-every", type=int, default=50, help="DB commit batch size (default 50)")
     args = parser.parse_args()
 
     from app.models.database import SessionLocal
@@ -77,49 +85,73 @@ def main():
             )
             .all()
         )
-        print(f"Checking {len(bills)} active bills with ledes...")
+        print(f"Loaded {len(bills)} active bills with ledes.")
 
-        mismatches = [b for b in bills if is_mismatch(b)]
-        print(f"\nFound {len(mismatches)} suspected mismatches:\n")
-
-        for b in mismatches:
-            lede_preview = (b.lede or "")[:120].replace("\n", " ")
-            print(f"  [{b.id}] {b.plain_title or b.title}")
-            print(f"  Lede: {lede_preview}")
-            print()
+        if args.all:
+            targets = bills
+            print(f"--all: regenerating all {len(targets)} ledes.")
+        else:
+            targets = [b for b in bills if is_mismatch(b)]
+            print(f"Heuristic flagged {len(targets)} suspected mismatches.")
 
         if not args.fix:
-            if mismatches:
-                print(f"Run with --fix to regenerate ledes for these {len(mismatches)} bills.")
+            print(f"\nDry run. Use --fix to regenerate.")
             return
 
-        if not mismatches:
-            print("Nothing to fix.")
+        if not targets:
+            print("Nothing to regenerate.")
             return
 
         from app.services.legislation_service import _ai_lede
         from app.services.ai_provider import get_ai_provider
         provider = get_ai_provider()
+        print(f"Using {args.workers} parallel workers against shared Ollama connection pool.")
 
-        fixed = 0
-        cleared = 0
-        for b in mismatches:
-            new_lede = _ai_lede(b, provider)
+        # Worker function: pure AI call, no DB access.  Reads pre-loaded
+        # attributes off the Legislation instance (safe — eager columns).
+        def regen(bill):
+            try:
+                return bill.id, _ai_lede(bill, provider), None
+            except Exception as e:
+                return bill.id, "", str(e)
+
+        results: dict = {}  # bill_id -> new lede ("" means clear)
+        errors = 0
+        start = time.time()
+
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            futures = [ex.submit(regen, b) for b in targets]
+            for i, fut in enumerate(as_completed(futures), 1):
+                bid, new_lede, err = fut.result()
+                if err:
+                    errors += 1
+                    if errors <= 3:
+                        print(f"  ERROR on {bid}: {err}")
+                results[bid] = new_lede
+                if i % 25 == 0 or i == len(targets):
+                    elapsed = time.time() - start
+                    rate = i / elapsed if elapsed else 0
+                    eta = (len(targets) - i) / rate if rate else 0
+                    print(f"  [{i}/{len(targets)}]  {rate:.1f} bills/sec  ETA {eta/60:.1f} min  errors={errors}")
+
+        # Apply results — single-threaded, batched commits
+        bill_by_id = {b.id: b for b in targets}
+        fixed = cleared = 0
+        for i, (bid, new_lede) in enumerate(results.items(), 1):
+            bill = bill_by_id.get(bid)
+            if not bill:
+                continue
             if new_lede:
-                print(f"Fixed: {b.plain_title or b.id}")
-                print(f"  Old: {(b.lede or '')[:80]}")
-                print(f"  New: {new_lede[:80]}")
-                b.lede = new_lede
+                bill.lede = new_lede
                 fixed += 1
             else:
-                # AI returned EMPTY (or errored) — the flagged lede was bad,
-                # so clearing is strictly better than keeping the hallucination.
-                print(f"Cleared (AI said no faithful lede possible): {b.plain_title or b.id}")
-                b.lede = None
+                bill.lede = None
                 cleared += 1
+            if i % args.commit_every == 0:
+                db.commit()
 
         db.commit()
-        print(f"\nRegenerated {fixed} ledes, cleared {cleared}, total {len(mismatches)}.")
+        print(f"\nDone in {(time.time() - start)/60:.1f} min.  Fixed {fixed}, cleared {cleared}, errors {errors}.")
     finally:
         db.close()
 
