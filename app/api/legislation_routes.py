@@ -943,6 +943,13 @@ class BlueskyPostRecord(BaseModel):
     post_cid: Optional[str] = None
 
 
+class EngagementUpdate(BaseModel):
+    id: int
+    like_count: int = 0
+    repost_count: int = 0
+    reply_count: int = 0
+
+
 @router.post("/bluesky/record-post")
 async def record_bluesky_post(
     payload: BlueskyPostRecord,
@@ -963,6 +970,54 @@ async def record_bluesky_post(
     except Exception as e:
         logger.error(f"Error recording Bluesky post: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/bluesky/posts-to-track")
+async def list_posts_to_track(
+    days: int = Query(14, ge=1, le=90),
+    db: Session = Depends(get_db),
+    _bot=Depends(require_bot_token),
+):
+    """Return Bluesky posts within the engagement-tracking window.
+
+    The engagement worker calls this to know which posts to fetch metrics for.
+    Default window is 14 days — engagement plateaus by then on Bluesky.
+    """
+    from datetime import datetime as _dt, timedelta as _td
+    cutoff = _dt.utcnow() - _td(days=days)
+    rows = (
+        db.query(BlueskyPost)
+        .filter(BlueskyPost.posted_at >= cutoff, BlueskyPost.post_uri.isnot(None))
+        .all()
+    )
+    return {
+        "posts": [
+            {"id": r.id, "post_uri": r.post_uri, "posted_at": r.posted_at.isoformat()}
+            for r in rows
+        ]
+    }
+
+
+@router.post("/bluesky/update-engagement")
+async def update_bluesky_engagement(
+    payload: list[EngagementUpdate],
+    db: Session = Depends(get_db),
+    _bot=Depends(require_bot_token),
+):
+    """Bulk-update like / repost / reply counts on bluesky_posts rows."""
+    from datetime import datetime as _dt
+    now = _dt.utcnow()
+    updated = 0
+    for item in payload:
+        row = db.query(BlueskyPost).get(item.id)
+        if row:
+            row.like_count = item.like_count
+            row.repost_count = item.repost_count
+            row.reply_count = item.reply_count
+            row.engagement_checked_at = now
+            updated += 1
+    db.commit()
+    return {"success": True, "updated": updated, "total": len(payload)}
 
 
 @router.post("/generate-ledes")

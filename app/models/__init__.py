@@ -332,6 +332,12 @@ class BlueskyPost(Base):
     post_uri    = Column(String, nullable=True)    # at:// URI from Bluesky
     post_cid    = Column(String, nullable=True)    # content identifier
 
+    # Engagement metrics — refreshed by workers/bluesky_engagement.py for ~14 days post-publication
+    like_count             = Column(Integer, nullable=True)
+    repost_count           = Column(Integer, nullable=True)
+    reply_count            = Column(Integer, nullable=True)
+    engagement_checked_at  = Column(DateTime, nullable=True)
+
     __table_args__ = (
         Index("ix_bluesky_posts_bill_type", "bill_id", "post_type"),
         Index("ix_bluesky_posts_posted_at", "posted_at"),
