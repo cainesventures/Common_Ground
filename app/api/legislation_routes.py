@@ -937,13 +937,15 @@ async def tag_all_bills(
 @router.post("/generate-ledes")
 async def generate_ledes(
     force: bool = Query(False),
+    ids: str = Query(None, description="Comma-separated bill IDs to regenerate"),
     db: Session = Depends(get_db),
     _user=Depends(require_dev_tier),
 ):
     """Generate punchy news ledes for analyzed bills."""
     try:
         service = LegislationIngestionService(db)
-        result = service.generate_ledes(force=force)
+        id_list = [i.strip() for i in ids.split(",") if i.strip()] if ids else None
+        result = service.generate_ledes(force=force, ids=id_list)
         return {"success": True, **result}
     except Exception as e:
         logger.error(f"Error generating ledes: {e}")

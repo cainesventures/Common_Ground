@@ -15,6 +15,7 @@ import os
 import json
 import random
 import sys
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 import urllib.request
 import urllib.error
@@ -77,27 +78,44 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> None:
     print(f"Posted: {text[:80]}...")
 
 
-def fetch_spotlight_bill() -> dict | None:
-    """Pick a random high-impact analyzed bill from the current or prior year."""
-    cutoff_year = datetime.now(timezone.utc).year - 1  # e.g. 2025 when running in 2026
+def fetch_recent_post_urls(handle: str, limit: int = 40) -> set[str]:
+    """Return bill URLs posted by the bot recently, to avoid repeats."""
+    try:
+        actor = urllib.parse.quote(handle)
+        data = http_get(f"{BSKY_API}/app.bsky.feed.getAuthorFeed?actor={actor}&limit={limit}")
+        urls = set()
+        for item in data.get("feed", []):
+            embed = item.get("post", {}).get("record", {}).get("embed", {})
+            if embed.get("$type") == "app.bsky.embed.external":
+                uri = embed.get("external", {}).get("uri", "")
+                if uri:
+                    urls.add(uri)
+        return urls
+    except Exception as e:
+        print(f"Failed to fetch recent post URLs (deduplication skipped): {e}")
+        return set()
 
-    def is_recent(bill: dict) -> bool:
-        raw = bill.get("introduced_date") or ""
-        try:
-            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
-            return dt.year >= cutoff_year
-        except Exception:
-            return False
+
+def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
+    """Pick a random high-impact analyzed bill, excluding recently posted ones."""
+    if excluded_urls is None:
+        excluded_urls = set()
+
+    def not_posted(bill: dict) -> bool:
+        url = f"{SITE_BASE}/philadelphia/legislation/{bill.get('id', '')}"
+        return url not in excluded_urls
 
     try:
         data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=high")
-        bills = data.get("results", [])
-        candidates = [b for b in bills if (b.get("impact_score") or 0) >= 6 and is_recent(b)]
-        if not candidates:
-            data = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
-            candidates = [b for b in data.get("results", []) if is_recent(b)]
+        candidates = [b for b in data.get("results", []) if not_posted(b)]
+
+        if len(candidates) < 5:
+            data2 = http_get(f"{API_BASE}/api/legislation/search?limit=100&level=local&analyzed=true&impact=medium")
+            candidates += [b for b in data2.get("results", []) if not_posted(b)]
+
         if not candidates:
             return None
+
         with_lede = [b for b in candidates if b.get("lede")]
         return random.choice(with_lede) if with_lede else random.choice(candidates)
     except Exception as e:
@@ -106,7 +124,9 @@ def fetch_spotlight_bill() -> dict | None:
 
 
 def post_daily_spotlight(token: str, did: str) -> bool:
-    bill = fetch_spotlight_bill()
+    recent_urls = fetch_recent_post_urls(BLUESKY_HANDLE)
+    print(f"Found {len(recent_urls)} recently posted URLs to exclude.")
+    bill = fetch_spotlight_bill(excluded_urls=recent_urls)
     if not bill:
         print("No spotlight bill found.")
         return False

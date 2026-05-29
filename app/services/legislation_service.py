@@ -492,16 +492,19 @@ class LegislationIngestionService:
         )
         return results, total
 
-    def generate_ledes(self, force: bool = False) -> dict:
+    def generate_ledes(self, force: bool = False, ids: list[str] = None) -> dict:
         """Generate punchy news ledes for analyzed bills."""
         from app.services.ai_provider import get_ai_provider
         provider = get_ai_provider()
 
-        query = self.db.query(Legislation).filter(Legislation.analyzed_at.isnot(None))
-        if not force:
-            query = query.filter(
-                (Legislation.lede.is_(None)) | (Legislation.lede == "")
-            )
+        if ids:
+            query = self.db.query(Legislation).filter(Legislation.id.in_(ids))
+        else:
+            query = self.db.query(Legislation).filter(Legislation.analyzed_at.isnot(None))
+            if not force:
+                query = query.filter(
+                    (Legislation.lede.is_(None)) | (Legislation.lede == "")
+                )
         bills = query.all()
 
         if not bills:
