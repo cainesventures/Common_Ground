@@ -36,14 +36,15 @@ BSKY_API = "https://bsky.social/xrpc"
 # Tags we believe drive Bluesky engagement — bills carrying any of these get
 # a weighting boost in candidate selection.  "Budget" validated by 2 likes
 # on the May 28 budget post; "traffic" is hypothesis from user intuition.
+# Tag forms below match how they're actually stored in the DB (hyphenated,
+# not spaced — confirmed against ~23k tag-occurrences across 8.6k bills).
 PRIORITY_TAGS = {
     # Budget / fiscal — validated
-    "budget", "finance", "taxation", "fees", "funding", "revenue",
+    "finance", "taxation", "budget",
     # Transportation / traffic enforcement — hypothesis
-    "transportation", "public transportation", "traffic",
-    "parking", "parking regulations", "street improvements",
+    "transportation", "traffic", "parking",
     # Public safety — adjacent (speed cams, school zones)
-    "public safety",
+    "public-safety",
 }
 
 
