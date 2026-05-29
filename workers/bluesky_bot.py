@@ -33,6 +33,31 @@ SITE_BASE = "https://opencommonground.com"
 
 BSKY_API = "https://bsky.social/xrpc"
 
+# Tags we believe drive Bluesky engagement — bills carrying any of these get
+# a weighting boost in candidate selection.  "Budget" validated by 2 likes
+# on the May 28 budget post; "traffic" is hypothesis from user intuition.
+PRIORITY_TAGS = {
+    # Budget / fiscal — validated
+    "budget", "finance", "taxation", "fees", "funding", "revenue",
+    # Transportation / traffic enforcement — hypothesis
+    "transportation", "public transportation", "traffic",
+    "parking", "parking regulations", "street improvements",
+    # Public safety — adjacent (speed cams, school zones)
+    "public safety",
+}
+
+
+def _priority_weight(bill: dict) -> int:
+    """Weight = 1 + 2 per matching PRIORITY_TAGS tag.  Bill with no matches = 1,
+    one match = 3, two matches = 5.  Used for weighted random selection."""
+    tags_raw = bill.get("tags") or ""
+    try:
+        tags = json.loads(tags_raw) if tags_raw.startswith("[") else []
+    except Exception:
+        tags = []
+    matches = sum(1 for t in tags if t in PRIORITY_TAGS)
+    return 1 + 2 * matches
+
 
 def http_post(url: str, data: dict, headers: dict = {}) -> dict:
     body = json.dumps(data).encode()
@@ -155,8 +180,9 @@ def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
         if not candidates:
             return None
 
-        with_lede = [b for b in candidates if b.get("lede")]
-        return random.choice(with_lede) if with_lede else random.choice(candidates)
+        pool = [b for b in candidates if b.get("lede")] or candidates
+        weights = [_priority_weight(b) for b in pool]
+        return random.choices(pool, weights=weights, k=1)[0]
     except Exception as e:
         print(f"Failed to fetch spotlight bill: {e}")
         return None
