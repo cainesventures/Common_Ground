@@ -100,15 +100,31 @@ def bsky_post(token: str, did: str, text: str, embed: dict = None) -> dict:
     }
     if embed:
         record["embed"] = embed
-    resp = http_post(
-        f"{BSKY_API}/com.atproto.repo.createRecord",
-        {
-            "repo": did,
-            "collection": "app.bsky.feed.post",
-            "record": record,
-        },
-        headers={"Authorization": f"Bearer {token}"},
-    )
+    try:
+        resp = http_post(
+            f"{BSKY_API}/com.atproto.repo.createRecord",
+            {
+                "repo": did,
+                "collection": "app.bsky.feed.post",
+                "record": record,
+            },
+            headers={"Authorization": f"Bearer {token}"},
+        )
+    except urllib.error.HTTPError as e:
+        # Surface what Bluesky actually complained about and which fields
+        # were in the record — most 400s are length / format issues.
+        try:
+            body = e.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = "<unable to read response body>"
+        print(f"Bluesky createRecord failed (HTTP {e.code}): {body[:500]}")
+        print(f"  text ({len(text)} chars): {text!r}")
+        if embed:
+            ext = embed.get("external", {})
+            print(f"  embed.uri: {ext.get('uri')!r}")
+            print(f"  embed.title ({len(ext.get('title') or '')} chars): {ext.get('title')!r}")
+            print(f"  embed.description ({len(ext.get('description') or '')} chars): {ext.get('description')!r}")
+        raise
     print(f"Posted: {text[:80]}...")
     return resp
 
@@ -274,12 +290,16 @@ def post_daily_spotlight(token: str, did: str) -> bool:
         if tag_str and len(text) + len(tag_str) + 1 <= 300:
             text += f"\n{tag_str}"
 
+    # Bluesky enforces ~300 char title and ~1000 char description on embeds —
+    # raw bill titles can be much longer (legalese), so truncate defensively.
+    embed_title = (plain_title or "Philadelphia City Council legislation")[:280]
+    embed_description = (headline or lede or "Philadelphia City Council legislation")[:980]
     embed = {
         "$type": "app.bsky.embed.external",
         "external": {
             "uri": url,
-            "title": plain_title,
-            "description": headline or lede or "Philadelphia City Council legislation",
+            "title": embed_title,
+            "description": embed_description,
         },
     }
 
