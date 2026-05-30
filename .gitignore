@@ -66,3 +66,8 @@ dump.rdb
 
 # Claude Code internal files
 .claude/scheduled_tasks.lock
+
+# Local state & source assets
+.last_publish
+*.source.png
+Open Common Ground Logo*.png
