@@ -210,6 +210,8 @@ async def dev_login(db: Session = Depends(get_db)):
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)):
     """Return the currently authenticated user's profile."""
+    from app.auth import _is_admin_email
+    is_admin = current_user.subscription_tier == "dev" or _is_admin_email(current_user.email)
     return {
         "success": True,
         "user": {
@@ -218,6 +220,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
             "display_name": current_user.display_name,
             "avatar_url": current_user.avatar_url,
             "subscription_tier": current_user.subscription_tier,
+            "is_admin": is_admin,
             "digest_enabled": current_user.digest_enabled,
             "created_at": current_user.created_at.isoformat() if current_user.created_at else None,
         },
