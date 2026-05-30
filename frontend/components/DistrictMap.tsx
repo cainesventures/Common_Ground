@@ -73,6 +73,11 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
         doubleClickZoom: false,
         boxZoom: false,
         keyboard: false,
+        // Disable animations so a pending zoom-transition callback can't fire
+        // after React unmounts the map (would throw _leaflet_pos undefined).
+        zoomAnimation: false,
+        fadeAnimation: false,
+        markerZoomAnimation: false,
       })
       mapRef.current = map
 
@@ -136,6 +141,9 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
     return () => {
       mounted = false
       if (mapRef.current) {
+        // stop() cancels any in-flight animations / queued callbacks before
+        // remove() tears down the panes — prevents the _leaflet_pos crash.
+        try { mapRef.current.stop() } catch { /* ignore */ }
         try { mapRef.current.remove() } catch { /* DOM already detached */ }
         mapRef.current = null
       }
