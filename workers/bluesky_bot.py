@@ -150,33 +150,56 @@ def fetch_recent_post_urls(handle: str, limit: int = 40) -> set[str]:
         return set()
 
 
+# Philadelphia City Council terms are 4 years long.  Members elected in
+# November of odd years (2019, 2023, 2027, ...) take office the first Monday
+# of the following January, so term-start years are 2020, 2024, 2028, ...
+# The bot only spotlights bills introduced during the current term so posts
+# reflect the council that's actually in office today.
+def _current_term_start_year() -> int:
+    year = datetime.now(timezone.utc).year
+    # Snap back to the most recent term-start year (2020, 2024, 2028, ...).
+    return year - ((year - 2020) % 4)
+
+
+def _in_current_term(bill: dict) -> bool:
+    raw = bill.get("introduced_date") or ""
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        return dt.year >= _current_term_start_year()
+    except Exception:
+        return False
+
+
 def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
     """Pick a random high-impact analyzed bill that's never been spotlighted.
 
     Primary dedup: server-side `not_posted_for=spotlight` filter (bluesky_posts
     registry).  Secondary dedup: client-side filter against recent author-feed
     URLs, in case the registry write previously failed.
+
+    Scoped to the current council term (see _current_term_start_year) so the
+    bot doesn't post old bills as if they were current news.
     """
     if excluded_urls is None:
         excluded_urls = set()
 
-    def not_posted(bill: dict) -> bool:
+    def eligible(bill: dict) -> bool:
         url = f"{SITE_BASE}/philadelphia/legislation/{bill.get('id', '')}"
-        return url not in excluded_urls
+        return url not in excluded_urls and _in_current_term(bill)
 
     try:
         data = http_get(
             f"{API_BASE}/api/legislation/search"
             f"?limit=100&level=local&analyzed=true&impact=high&not_posted_for=spotlight"
         )
-        candidates = [b for b in data.get("results", []) if not_posted(b)]
+        candidates = [b for b in data.get("results", []) if eligible(b)]
 
         if len(candidates) < 5:
             data2 = http_get(
                 f"{API_BASE}/api/legislation/search"
                 f"?limit=100&level=local&analyzed=true&impact=medium&not_posted_for=spotlight"
             )
-            candidates += [b for b in data2.get("results", []) if not_posted(b)]
+            candidates += [b for b in data2.get("results", []) if eligible(b)]
 
         if not candidates:
             return None
