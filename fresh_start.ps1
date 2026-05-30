@@ -1,4 +1,12 @@
 # fresh_start.ps1 - Stop everything, wipe DB, reseed, restart backend + frontend
+#
+# NOTE (post DB-split): the dev environment now has two SQLite files:
+#   common_ground_test.db  - content (bills, perspectives, etc.)
+#   users.db               - user accounts, votes, tracking, bot post registry
+#
+# If fresh_start.py only wipes common_ground_test.db, your dev user account
+# in users.db survives across resets — that's usually what you want.  Delete
+# users.db manually if you need a fully clean slate.
 
 $ProjectRoot = "C:\Projects\Common_Ground"
 $FrontendDir = "$ProjectRoot\frontend"

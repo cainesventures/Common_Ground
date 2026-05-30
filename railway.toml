@@ -3,7 +3,23 @@
   dockerfilePath = "Dockerfile"
 
 [deploy]
-  startCommand = "sh -c 'STORED=$(cat /data/.restore_version 2>/dev/null || echo \"\"); TARGET=\"${DB_RESTORE_VERSION:-}\"; if [ -n \"$TARGET\" ] && [ \"$STORED\" != \"$TARGET\" ]; then rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && echo \"$TARGET\" > /data/.restore_version; elif [ ! -f /data/common_ground.db ]; then litestream restore -config /app/litestream.railway.yml /data/common_ground.db; fi && uvicorn main:app --host 0.0.0.0 --port $PORT'"
+  # Startup logic (see also app/models/database.py:init_db for the schema side):
+  #
+  #   content.db — dev source of truth.
+  #     * On DB_RESTORE_VERSION change: wipe and restore from B2.
+  #     * On missing file: restore from B2.
+  #
+  #   users.db   — prod source of truth.
+  #     * Never wiped.  Only restored if missing (fresh deploy / lost volume).
+  #     * On first split-aware deploy the file won't exist on prod yet AND B2
+  #       won't have a backup yet; restore fails silently and the app's
+  #       init_db creates the schema + copies any legacy user rows out of
+  #       content.db (one-shot, idempotent).
+  #
+  # Then `litestream replicate -exec` runs uvicorn as a child process while
+  # litestream continuously backs up BOTH databases to their respective B2
+  # paths.  This is the safety net that protects accumulated prod user data.
+  startCommand = "sh -c 'STORED=$(cat /data/.restore_version 2>/dev/null || echo \"\"); TARGET=\"${DB_RESTORE_VERSION:-}\"; if [ -n \"$TARGET\" ] && [ \"$STORED\" != \"$TARGET\" ]; then rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && echo \"$TARGET\" > /data/.restore_version; elif [ ! -f /data/common_ground.db ]; then litestream restore -config /app/litestream.railway.yml /data/common_ground.db; fi; if [ ! -f /data/users.db ]; then litestream restore -config /app/litestream.railway.yml /data/users.db 2>/dev/null || echo \"(no users.db backup yet — will be created by init_db)\"; fi; exec litestream replicate -config /app/litestream.railway.yml -exec \"uvicorn main:app --host 0.0.0.0 --port $PORT\"'"
   healthcheckPath = "/health"
   healthcheckTimeout = 120
   restartPolicyType = "ON_FAILURE"

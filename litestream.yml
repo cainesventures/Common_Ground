@@ -1,3 +1,8 @@
+# Local litestream — used by publish.ps1 to push the content DB to B2.
+#
+# Local dev does NOT replicate users.db.  Production is the source of truth
+# for user data; we never want to overwrite prod's accumulated user state
+# with a dev snapshot.  See app/models/__init__.py for the split rationale.
 dbs:
   - path: C:\Projects\Common_Ground\common_ground_test.db
     replicas:

@@ -1,9 +1,22 @@
+# Production litestream — runs continuously alongside uvicorn so user-side
+# state (accounts, votes, tracking, bot post registry) gets backed up.
+#
+# content.db: published from dev, restored on version-bump.
+# users.db:   prod is source of truth, continuously replicated as safety net.
 dbs:
   - path: /data/common_ground.db
     replicas:
       - type: s3
         bucket: opencommonground-db
         path: db
+        endpoint: s3.us-east-005.backblazeb2.com
+        access-key-id: $B2_APPLICATION_KEY_ID
+        secret-access-key: $B2_APPLICATION_KEY
+  - path: /data/users.db
+    replicas:
+      - type: s3
+        bucket: opencommonground-db
+        path: users
         endpoint: s3.us-east-005.backblazeb2.com
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY

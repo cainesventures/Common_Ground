@@ -1,4 +1,38 @@
-"""Database models for Common Ground application."""
+"""Database models for Common Ground application.
+
+Two-database layout (see docs/db-split or commit message for rationale):
+
+  CONTENT (ContentBase, in content.db)
+    - Dev machine is source of truth.
+    - Wiped + restored from Backblaze B2 on every publish.
+    - Cheap to rebuild; covers bills, scraped roll calls, AI analysis, etc.
+
+  USER (UserBase, in users.db)
+    - Production is source of truth.
+    - NEVER wiped by publish; replicated to B2 continuously as safety net.
+    - Covers accounts, opinion votes, tracking, donations, bot post history.
+
+Cross-database foreign keys can't be enforced by SQLite (FK constraints don't
+span attached DBs), so user-tables that reference content tables (e.g.
+bill_tracking.bill_id -> legislation.id) carry the column without a FK
+declaration.  The app validates existence at write time and degrades
+gracefully on read.
+
+Cross-bind SQLAlchemy relationships are also not declared on the model
+classes (SQLAlchemy can't resolve a string class name across two declarative
+bases).  Code that needs to traverse a user-side row back to its bill /
+councilmember performs the lookup as an explicit query — no .relationship
+shortcut.
+
+CONTENT TABLES                        USER TABLES
+- legislation                         - users
+- bill_perspectives                   - bill_tracking
+- councilmembers                      - legislation_votes
+- candidates                          - councilmember_votes
+- candidate_vote_predictions          - bluesky_posts
+- bill_vote_records                   - donations
+- aggregated_data_cache
+"""
 
 from datetime import datetime
 from typing import Optional, List
@@ -6,7 +40,9 @@ from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Float, Intege
 from sqlalchemy.orm import declarative_base, relationship
 from enum import Enum as PyEnum
 
-Base = declarative_base()
+# Two declarative bases — one per physical database.
+ContentBase = declarative_base()
+UserBase = declarative_base()
 
 
 class LegislationSource(str, PyEnum):
@@ -26,7 +62,12 @@ class LegislationStatus(str, PyEnum):
     FAILED = "failed"
 
 
-class Legislation(Base):
+# =============================================================================
+# CONTENT MODELS — content.db
+# =============================================================================
+
+
+class Legislation(ContentBase):
     """Model for bills and legislation."""
     __tablename__ = "legislation"
 
@@ -81,10 +122,9 @@ class Legislation(Base):
     next_hearing_location = Column(String, nullable=True)
     next_hearing_url      = Column(String, nullable=True)
 
-    # Relationships
-    votes = relationship("LegislationVote", back_populates="legislation", cascade="all, delete-orphan")
+    # Same-bind relationships only.  Cross-bind (votes, tracked_by, bluesky_posts)
+    # are queried explicitly in app code — see module docstring.
     perspectives = relationship("BillPerspective", back_populates="legislation", cascade="all, delete-orphan")
-    tracked_by = relationship("BillTracking", back_populates="legislation", cascade="all, delete-orphan")
     vote_records = relationship("BillVoteRecord", back_populates="legislation", cascade="all, delete-orphan")
 
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -101,7 +141,7 @@ class Legislation(Base):
     )
 
 
-class BillPerspective(Base):
+class BillPerspective(ContentBase):
     """AI-generated perspective on a bill from one of 17 viewpoints."""
     __tablename__ = "bill_perspectives"
 
@@ -121,7 +161,7 @@ class BillPerspective(Base):
     legislation = relationship("Legislation", back_populates="perspectives")
 
 
-class Councilmember(Base):
+class Councilmember(ContentBase):
     """Philadelphia City Council member."""
     __tablename__ = "councilmembers"
 
@@ -140,38 +180,11 @@ class Councilmember(Base):
     term_start = Column(Integer, nullable=True)   # Year first took office, e.g. 2012
     updated_at = Column(DateTime, default=datetime.utcnow)
 
-    votes = relationship("CouncilmemberVote", back_populates="councilmember", cascade="all, delete-orphan")
+    # Cross-bind relationship to CouncilmemberVote omitted — queried explicitly.
     vote_records = relationship("BillVoteRecord", back_populates="councilmember")
 
 
-class BillTracking(Base):
-    """User tracking (saving) a bill to follow updates."""
-    __tablename__ = "bill_tracking"
-
-    id = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    bill_id = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
-    tracked_at = Column(DateTime, default=datetime.utcnow)
-
-    __table_args__ = (UniqueConstraint("user_id", "bill_id", name="uq_tracking_per_user"),)
-
-    user = relationship("User", back_populates="tracked_bills")
-    legislation = relationship("Legislation", back_populates="tracked_by")
-
-
-class Donation(Base):
-    """Stripe donation record."""
-    __tablename__ = "donations"
-
-    id = Column(String, primary_key=True)
-    amount = Column(Float)
-    donor_email = Column(String)
-    donation_type = Column(String)          # one-time / monthly
-    stripe_payment_id = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class AggregatedDataCache(Base):
+class AggregatedDataCache(ContentBase):
     """Cache for external data (OpenDataPhilly, etc.)."""
     __tablename__ = "aggregated_data_cache"
 
@@ -184,72 +197,7 @@ class AggregatedDataCache(Base):
     __table_args__ = (UniqueConstraint("source", "key", name="uq_cache_source_key"),)
 
 
-class User(Base):
-    """Authenticated human user (Google OAuth)."""
-    __tablename__ = "users"
-
-    id           = Column(String, primary_key=True)                          # "user_{uuid12}"
-    google_id    = Column(String, unique=True, nullable=False, index=True)
-    email        = Column(String, unique=True, nullable=False)
-    display_name = Column(String)
-    avatar_url   = Column(String)                                            # Google profile photo URL
-    subscription_tier  = Column(String, default="free", nullable=False)      # "free" | "paid" | "dev"
-    digest_enabled     = Column(Boolean, default=False, nullable=False)       # weekly email digest opt-in
-    digest_frequency   = Column(String, default="weekly", nullable=False)    # "daily" | "weekly" | "never"
-    digest_min_impact  = Column(String, default="low", nullable=False)       # "low" | "medium" | "high"
-    created_at         = Column(DateTime, default=datetime.utcnow)
-    last_login         = Column(DateTime)
-
-    votes          = relationship("LegislationVote", back_populates="user")
-    tracked_bills  = relationship("BillTracking", back_populates="user", cascade="all, delete-orphan")
-
-
-class LegislationVote(Base):
-    """Anonymous or authenticated human vote on a piece of legislation.
-
-    Deduplicated per (legislation_id, voter_token).  Clients generate a UUID
-    once and store it in localStorage; the server allows one vote per token
-    per legislation item (upsert on conflict).  When a user is logged in,
-    user_id is also stored for vote history.
-    """
-    __tablename__ = "legislation_votes"
-
-    id             = Column(String, primary_key=True)
-    legislation_id = Column(String, ForeignKey("legislation.id"), nullable=False, index=True)
-    user_id        = Column(String, ForeignKey("users.id"), nullable=True, index=True)
-    vote           = Column(String, nullable=False)   # "support" | "oppose" | "neutral"
-    voter_token    = Column(String, nullable=False)   # client-generated UUID
-    created_at     = Column(DateTime, default=datetime.utcnow)
-    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    __table_args__ = (UniqueConstraint("legislation_id", "voter_token", name="uq_vote_per_voter"),)
-
-    legislation = relationship("Legislation", back_populates="votes")
-    user        = relationship("User", back_populates="votes")
-
-
-class CouncilmemberVote(Base):
-    """Anonymous or authenticated citizen approval vote on a council member.
-
-    Deduplicated per (councilmember_id, voter_token).  One vote per token;
-    casting again updates the existing record (upsert).
-    """
-    __tablename__ = "councilmember_votes"
-
-    id                = Column(String, primary_key=True)
-    councilmember_id  = Column(String, ForeignKey("councilmembers.id"), nullable=False, index=True)
-    user_id           = Column(String, ForeignKey("users.id"), nullable=True, index=True)
-    vote              = Column(String, nullable=False)   # "support" | "oppose"
-    voter_token       = Column(String, nullable=False)
-    created_at        = Column(DateTime, default=datetime.utcnow)
-    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    __table_args__ = (UniqueConstraint("councilmember_id", "voter_token", name="uq_cm_vote_per_voter"),)
-
-    councilmember = relationship("Councilmember", back_populates="votes")
-
-
-class Candidate(Base):
+class Candidate(ContentBase):
     """Philadelphia City Council election candidate."""
     __tablename__ = "candidates"
 
@@ -270,7 +218,7 @@ class Candidate(Base):
     predictions = relationship("CandidateVotePrediction", back_populates="candidate", cascade="all, delete-orphan")
 
 
-class CandidateVotePrediction(Base):
+class CandidateVotePrediction(ContentBase):
     """Cached AI-generated vote prediction for a candidate on a specific bill."""
     __tablename__ = "candidate_vote_predictions"
 
@@ -289,7 +237,7 @@ class CandidateVotePrediction(Base):
     legislation = relationship("Legislation")
 
 
-class BillVoteRecord(Base):
+class BillVoteRecord(ContentBase):
     """Official roll call vote cast by a Philadelphia City Council member on a bill.
 
     Populated by fetching Legistar EventItem vote records via the Legistar Web API.
@@ -316,17 +264,109 @@ class BillVoteRecord(Base):
     councilmember  = relationship("Councilmember", back_populates="vote_records")
 
 
-class BlueskyPost(Base):
+# =============================================================================
+# USER MODELS — users.db
+# =============================================================================
+
+
+class User(UserBase):
+    """Authenticated human user (Google OAuth)."""
+    __tablename__ = "users"
+
+    id           = Column(String, primary_key=True)                          # "user_{uuid12}"
+    google_id    = Column(String, unique=True, nullable=False, index=True)
+    email        = Column(String, unique=True, nullable=False)
+    display_name = Column(String)
+    avatar_url   = Column(String)                                            # Google profile photo URL
+    subscription_tier  = Column(String, default="free", nullable=False)      # "free" | "paid" | "dev"
+    digest_enabled     = Column(Boolean, default=False, nullable=False)       # weekly email digest opt-in
+    digest_frequency   = Column(String, default="weekly", nullable=False)    # "daily" | "weekly" | "never"
+    digest_min_impact  = Column(String, default="low", nullable=False)       # "low" | "medium" | "high"
+    created_at         = Column(DateTime, default=datetime.utcnow)
+    last_login         = Column(DateTime)
+
+    # Same-bind relationships — both in UserBase.
+    votes          = relationship("LegislationVote", back_populates="user")
+    tracked_bills  = relationship("BillTracking", back_populates="user", cascade="all, delete-orphan")
+
+
+class BillTracking(UserBase):
+    """User tracking (saving) a bill to follow updates.
+
+    bill_id is a logical reference to legislation.id in content.db — no FK
+    constraint because SQLite doesn't enforce FKs across attached databases.
+    """
+    __tablename__ = "bill_tracking"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    bill_id = Column(String, nullable=False, index=True)  # logical ref -> legislation.id (content.db)
+    tracked_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("user_id", "bill_id", name="uq_tracking_per_user"),)
+
+    user = relationship("User", back_populates="tracked_bills")
+
+
+class LegislationVote(UserBase):
+    """Anonymous or authenticated human vote on a piece of legislation.
+
+    Deduplicated per (legislation_id, voter_token).  Clients generate a UUID
+    once and store it in localStorage; the server allows one vote per token
+    per legislation item (upsert on conflict).  When a user is logged in,
+    user_id is also stored for vote history.
+
+    legislation_id is a logical reference to legislation.id in content.db.
+    """
+    __tablename__ = "legislation_votes"
+
+    id             = Column(String, primary_key=True)
+    legislation_id = Column(String, nullable=False, index=True)  # logical ref -> legislation.id
+    user_id        = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    vote           = Column(String, nullable=False)   # "support" | "oppose" | "neutral"
+    voter_token    = Column(String, nullable=False)   # client-generated UUID
+    created_at     = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("legislation_id", "voter_token", name="uq_vote_per_voter"),)
+
+    user = relationship("User", back_populates="votes")
+
+
+class CouncilmemberVote(UserBase):
+    """Anonymous or authenticated citizen approval vote on a council member.
+
+    Deduplicated per (councilmember_id, voter_token).  One vote per token;
+    casting again updates the existing record (upsert).
+
+    councilmember_id is a logical reference to councilmembers.id in content.db.
+    """
+    __tablename__ = "councilmember_votes"
+
+    id                = Column(String, primary_key=True)
+    councilmember_id  = Column(String, nullable=False, index=True)  # logical ref -> councilmembers.id
+    user_id           = Column(String, ForeignKey("users.id"), nullable=True, index=True)
+    vote              = Column(String, nullable=False)   # "support" | "oppose"
+    voter_token       = Column(String, nullable=False)
+    created_at        = Column(DateTime, default=datetime.utcnow)
+    updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("councilmember_id", "voter_token", name="uq_cm_vote_per_voter"),)
+
+
+class BlueskyPost(UserBase):
     """Registry of Bluesky posts made by the bot.
 
     One row per post. Used to guarantee the bot never duplicates a bill within
     a given post_type (spotlight, signed, roundup). post_uri / post_cid link
     back to the actual Bluesky record.
+
+    bill_id is a logical reference to legislation.id in content.db.
     """
     __tablename__ = "bluesky_posts"
 
     id          = Column(Integer, primary_key=True, autoincrement=True)
-    bill_id     = Column(String, ForeignKey("legislation.id"), nullable=True, index=True)
+    bill_id     = Column(String, nullable=True, index=True)  # logical ref -> legislation.id
     post_type   = Column(String, nullable=False)   # "spotlight" | "signed" | "roundup"
     posted_at   = Column(DateTime, default=datetime.utcnow, nullable=False)
     post_uri    = Column(String, nullable=True)    # at:// URI from Bluesky
@@ -342,3 +382,28 @@ class BlueskyPost(Base):
         Index("ix_bluesky_posts_bill_type", "bill_id", "post_type"),
         Index("ix_bluesky_posts_posted_at", "posted_at"),
     )
+
+
+class Donation(UserBase):
+    """Stripe donation record."""
+    __tablename__ = "donations"
+
+    id = Column(String, primary_key=True)
+    amount = Column(Float)
+    donor_email = Column(String)
+    donation_type = Column(String)          # one-time / monthly
+    stripe_payment_id = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# =============================================================================
+# Backwards-compatible aliases
+# =============================================================================
+# `Base` is kept as an alias so existing importers (alembic/env.py,
+# tests/conftest.py, scripts/fetch_bills.py) keep working with minimal change.
+# It points to ContentBase because all content-table autogeneration / schema
+# bootstrapping was historically what callers needed.  Helper `ALL_METADATA`
+# below exposes both metadatas for code that needs everything in one place
+# (tests, dev seed scripts).
+Base = ContentBase
+ALL_METADATA = (ContentBase.metadata, UserBase.metadata)

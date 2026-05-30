@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import Base, Legislation
+from app.models import ContentBase, UserBase, Legislation
 from app.models.database import get_db
 
 
@@ -28,7 +28,10 @@ def test_db():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
-    Base.metadata.create_all(bind=engine)
+    # Tests use a single in-memory DB for both content and user tables —
+    # bind routing isn't needed because the metadata creates all tables here.
+    ContentBase.metadata.create_all(bind=engine)
+    UserBase.metadata.create_all(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:

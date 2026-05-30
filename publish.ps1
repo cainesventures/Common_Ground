@@ -18,9 +18,14 @@
 #  2. scripts/worker.py               - Ollama enrichment (full_text, analyze, headline, metadata, perspectives)
 #  3. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
 #  4. scripts/generate_sitemap.py     - regenerate static sitemap.xml
-#  5. litestream replicate            - upload DB snapshot to Backblaze B2
+#  5. litestream replicate            - upload CONTENT DB snapshot to Backblaze B2 (path "db")
 #  6. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
-#  7. railway redeploy                - Railway restores DB from B2 and restarts (~3 min)
+#  7. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
+#
+# NOTE: Step 5 only touches content.db.  Users.db (accounts, votes, tracking,
+# bluesky_posts, donations) lives on production and is continuously backed up
+# by the Railway-side Litestream process to B2 path "users".  publish.ps1
+# never overwrites prod user data.  See app/models/__init__.py for the split.
 
 param(
     [switch]$SkipFetch,

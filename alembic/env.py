@@ -12,7 +12,8 @@ from alembic import context
 
 # Import settings and all models so autogenerate can detect them
 from app.config import get_settings
-from app.models import Base  # noqa: F401 — side-effect: registers all ORM classes
+from app.models import ContentBase  # noqa: F401 — side-effect: registers content ORM classes
+import app.models  # noqa: F401 — registers user-side models too (autogenerate ignores them)
 
 # Alembic Config object (access to alembic.ini values)
 config = context.config
@@ -21,8 +22,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Metadata for autogenerate support
-target_metadata = Base.metadata
+# Alembic only manages the content database.  User-side schema is bootstrapped
+# via UserBase.metadata.create_all in app/models/database.py:init_db — see
+# the model module docstring for the rationale.
+target_metadata = ContentBase.metadata
 
 
 def get_url() -> str:
