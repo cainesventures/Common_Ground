@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback, RefObject } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { startGoogleSignIn } from '@/lib/auth'
 import { BillCard, type BillCardBill } from '@/components/BillCard'
 
 function useInView(ref: RefObject<HTMLElement | null>, threshold = 0.15) {
@@ -563,12 +564,12 @@ export default function LandingPage() {
           Open Common Ground is a free, independent civic tool with no ads, no corporate backing, and no political agenda. We just want Philly residents to know what their council is doing.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            href="/login"
+          <button
+            onClick={startGoogleSignIn}
             className="px-7 py-3.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-base transition-colors shadow-md hover:shadow-lg"
           >
             Join free →
-          </Link>
+          </button>
           <Link
             href="/donate"
             className="px-6 py-3 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 font-medium text-base hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"

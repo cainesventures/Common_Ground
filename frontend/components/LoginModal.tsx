@@ -1,5 +1,7 @@
 'use client'
 
+import { startGoogleSignIn } from '@/lib/auth'
+
 interface LoginModalProps {
   onClose: () => void
   reason?: string
@@ -17,12 +19,12 @@ export function LoginModal({ onClose, reason = 'Sign in to continue' }: LoginMod
           <p className="text-sm text-muted-foreground">{reason}</p>
         </div>
 
-        <a
-          href="/login"
+        <button
+          onClick={startGoogleSignIn}
           className="flex items-center justify-center w-full py-2.5 px-4 rounded-lg border bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
         >
-          Sign in
-        </a>
+          Sign in with Google
+        </button>
 
         <button
           onClick={onClose}

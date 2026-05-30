@@ -26,3 +26,17 @@ export function getUserHint(): string {
 export function setUserHint(email: string): void {
   localStorage.setItem(HINT_KEY, email)
 }
+
+/**
+ * Kick off the Google OAuth flow directly — skips the /login intermediate
+ * page.  Includes the stored user hint (if any) so Google can preselect the
+ * account when the user has multiple Google sessions.
+ */
+export function startGoogleSignIn(): void {
+  if (typeof window === 'undefined') return
+  const hint = getUserHint()
+  const url = hint
+    ? `/api/auth/google?hint=${encodeURIComponent(hint)}`
+    : '/api/auth/google'
+  window.location.href = url
+}

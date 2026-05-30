@@ -7,7 +7,7 @@ import { getCityConfig } from '@/lib/city'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { api } from '@/lib/api'
-import { getToken, clearToken } from '@/lib/auth'
+import { getToken, clearToken, startGoogleSignIn } from '@/lib/auth'
 import { useAdminMode } from '@/lib/admin-mode'
 
 interface User {
@@ -161,12 +161,12 @@ export function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-2">
-                <Link
-                  href="/login"
+                <button
+                  onClick={startGoogleSignIn}
                   className="inline-flex items-center justify-center rounded-lg px-3 h-8 text-sm font-medium border hover:bg-muted transition-colors"
                 >
                   Sign in
-                </Link>
+                </button>
                 {isDev && (
                   <button
                     onClick={handleDevLogin}
@@ -249,12 +249,12 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Link
-                  href="/login"
-                  className="block px-3 py-2 rounded-md text-sm font-medium border text-center hover:bg-muted transition-colors"
+                <button
+                  onClick={startGoogleSignIn}
+                  className="block w-full px-3 py-2 rounded-md text-sm font-medium border text-center hover:bg-muted transition-colors"
                 >
                   Sign in
-                </Link>
+                </button>
                 {isDev && (
                   <button
                     onClick={handleDevLogin}
