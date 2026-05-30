@@ -36,7 +36,8 @@ def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
 @router.get("/health")
 async def get_system_health(db: Session = Depends(get_db)):
     """Return system status: DB connectivity and current AI provider config."""
-    from app.config import settings
+    from app.config import get_settings
+    settings = get_settings()
 
     try:
         db.execute(text("SELECT 1"))
