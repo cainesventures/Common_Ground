@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     # Bluesky bot — shared secret for the bot's API calls (record-post endpoint)
     bot_api_token: str = ""
 
+    # Comma-separated emails that are auto-granted admin (dev tier) access.
+    # Survives DB resets — checked alongside subscription_tier == "dev" in
+    # auth.require_dev_tier.
+    admin_emails: str = ""
+
     @model_validator(mode='after')
     def validate_production_secrets(self):
         if self.environment == 'production' and self.jwt_secret == 'change-me-in-production':

@@ -82,14 +82,25 @@ def require_paid_tier(current_user=Depends(get_current_user)):
     return current_user
 
 
+def _is_admin_email(email: str) -> bool:
+    """True if email is in the configured ADMIN_EMAILS allowlist."""
+    if not email:
+        return False
+    settings = get_settings()
+    if not settings.admin_emails:
+        return False
+    allowed = {e.strip().lower() for e in settings.admin_emails.split(",") if e.strip()}
+    return email.lower() in allowed
+
+
 def require_dev_tier(current_user=Depends(get_current_user)):
-    """FastAPI dependency: require dev tier, else 403."""
-    if current_user.subscription_tier != "dev":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This feature requires the developer tier. Upgrade at /pricing.",
-        )
-    return current_user
+    """FastAPI dependency: require dev tier OR admin-email allowlist, else 403."""
+    if current_user.subscription_tier == "dev" or _is_admin_email(current_user.email):
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="This feature requires the developer tier. Upgrade at /pricing.",
+    )
 
 
 def require_bot_token(x_bot_token: Optional[str] = Header(None)):

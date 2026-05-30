@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.database import init_db, get_db
 from app.rate_limit import limiter
-from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes, insights_routes
+from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes, insights_routes, admin_routes
 
 settings = get_settings()
 
@@ -89,6 +89,7 @@ app.include_router(donation_routes.router)
 app.include_router(hearings_routes.router)
 app.include_router(election_routes.router)
 app.include_router(insights_routes.router)
+app.include_router(admin_routes.router)
 
 
 @app.get("/")

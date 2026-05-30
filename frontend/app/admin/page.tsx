@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
+import { getAdminMode } from '@/lib/admin-mode'
 import { usePipeline } from '@/app/contexts/pipeline-context'
 
 // ── SSE streaming hook ────────────────────────────────────────────────────────
@@ -188,9 +189,13 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isLoggedIn()) { router.replace('/'); return }
+    // If admin chose "user mode" in the nav toggle, bounce — they wanted the
+    // regular-user experience.  Direct-typing /admin is treated the same way.
+    if (getAdminMode() === 'user') { router.replace('/'); return }
     api.getMe()
       .then((data) => {
-        if (data?.user?.subscription_tier === 'dev') setAuthorized(true)
+        // is_admin = subscription_tier === "dev" OR email in ADMIN_EMAILS allowlist
+        if (data?.user?.is_admin || data?.user?.subscription_tier === 'dev') setAuthorized(true)
         else router.replace('/')
       })
       .catch(() => router.replace('/'))
@@ -213,7 +218,7 @@ export default function AdminPage() {
     }
   }
 
-  const [adminTab, setAdminTab] = useState<'active' | 'archive' | 'data' | 'comms'>('active')
+  const [adminTab, setAdminTab] = useState<'active' | 'archive' | 'data' | 'comms' | 'users'>('active')
 
   if (loading) return <div className="h-64 bg-muted animate-pulse rounded-lg" />
   if (!authorized) return null
@@ -223,6 +228,7 @@ export default function AdminPage() {
     { key: 'archive',  label: 'Archive' },
     { key: 'data',     label: 'Data' },
     { key: 'comms',    label: 'Comms' },
+    { key: 'users',    label: 'Users' },
   ]
 
   return (
@@ -364,6 +370,124 @@ export default function AdminPage() {
           <CandidateManagementSection />
         </div>
       )}
+
+      {/* ── Tab 5: Users ── */}
+      {adminTab === 'users' && (
+        <div className="space-y-4">
+          <UsersSection />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Users ─────────────────────────────────────────────────────────────────────
+function UsersSection() {
+  const [stats, setStats] = useState<any>(null)
+  const [users, setUsers] = useState<any[]>([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.allSettled([api.adminStats(), api.adminUsers({ limit: 200, sort: 'created_at', order: 'desc' })])
+      .then(([s, u]) => {
+        if (cancelled) return
+        if (s.status === 'fulfilled') setStats(s.value)
+        if (u.status === 'fulfilled') {
+          setUsers(u.value?.users ?? [])
+          setTotal(u.value?.total ?? 0)
+        } else {
+          setErr(u.reason?.message ?? 'Failed to load users')
+        }
+      })
+      .finally(() => !cancelled && setLoading(false))
+    return () => { cancelled = true }
+  }, [])
+
+  if (loading) return <div className="h-32 bg-muted animate-pulse rounded-lg" />
+  if (err) return <div className="text-sm text-destructive">{err}</div>
+
+  const tier = stats?.users?.by_tier ?? {}
+  const eng = stats?.engagement ?? {}
+  const ops = stats?.operations ?? {}
+
+  return (
+    <div className="space-y-6">
+      {/* Stat strip */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard label="Total users" value={stats.users.total} />
+          <StatCard label="Active (30d)" value={stats.users.active_30d} />
+          <StatCard label="New (7d)" value={stats.users.signups_7d} />
+          <StatCard label="New (30d)" value={stats.users.signups_30d} />
+          <StatCard label="Tracked bills" value={eng.tracked_bills ?? 0} />
+          <StatCard label="Bill votes" value={eng.bill_votes ?? 0} />
+          <StatCard label="Bluesky posts" value={ops.bluesky_posts ?? 0} />
+          <StatCard label="Donations" value={ops.donations ?? 0} />
+        </div>
+      )}
+
+      {/* Tier breakdown */}
+      {Object.keys(tier).length > 0 && (
+        <div className="text-xs text-muted-foreground">
+          Tiers: {Object.entries(tier).map(([k, v]) => `${k}=${v}`).join('  ·  ')}
+        </div>
+      )}
+
+      {/* Users table */}
+      <div className="border rounded-lg overflow-hidden">
+        <div className="px-4 py-2 border-b bg-muted/30 flex items-center justify-between">
+          <h3 className="font-semibold text-sm">Users ({users.length} of {total})</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-muted-foreground bg-muted/20">
+              <tr>
+                <th className="text-left px-3 py-2">Email</th>
+                <th className="text-left px-3 py-2">Name</th>
+                <th className="text-left px-3 py-2">Tier</th>
+                <th className="text-right px-3 py-2">Tracked</th>
+                <th className="text-right px-3 py-2">Votes</th>
+                <th className="text-left px-3 py-2">Joined</th>
+                <th className="text-left px-3 py-2">Last login</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id} className="border-t">
+                  <td className="px-3 py-2">
+                    {u.email}
+                    {u.is_admin_via_allowlist && (
+                      <span className="ml-2 inline-block text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">admin</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">{u.display_name || '—'}</td>
+                  <td className="px-3 py-2">{u.subscription_tier}</td>
+                  <td className="px-3 py-2 text-right">{u.tracked_bills_count}</td>
+                  <td className="px-3 py-2 text-right">{u.bill_votes_count}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{u.last_login ? new Date(u.last_login).toLocaleDateString() : 'never'}</td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">No users yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border rounded-lg px-3 py-2">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-xl font-semibold tabular-nums">{value.toLocaleString()}</div>
     </div>
   )
 }

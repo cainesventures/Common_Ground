@@ -407,6 +407,20 @@ export const api = {
   clearPerspectives: (id: string) =>
     apiFetch(`/api/legislation/${id}/perspectives`, { method: 'DELETE' }),
 
+  // ── Admin ────────────────────────────────────────────────────────────────
+  adminStats: () =>
+    apiFetch('/api/admin/stats'),
+
+  adminUsers: (params?: { limit?: number; offset?: number; sort?: string; order?: 'asc' | 'desc' }) => {
+    const p = new URLSearchParams()
+    if (params?.limit !== undefined)  p.set('limit', String(params.limit))
+    if (params?.offset !== undefined) p.set('offset', String(params.offset))
+    if (params?.sort)                 p.set('sort', params.sort)
+    if (params?.order)                p.set('order', params.order)
+    const qs = p.toString()
+    return apiFetch(`/api/admin/users${qs ? `?${qs}` : ''}`)
+  },
+
   getCouncilmemberVoteHistory: (memberId: string, page = 1, pageSize = 20) =>
     apiFetch(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
 }

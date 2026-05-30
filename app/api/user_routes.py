@@ -19,6 +19,8 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 @router.get("/me")
 async def get_my_profile(current_user: User = Depends(get_current_user)):
     """Return the authenticated user's profile."""
+    from app.auth import _is_admin_email
+    is_admin = current_user.subscription_tier == "dev" or _is_admin_email(current_user.email)
     return {
         "success": True,
         "user": {
@@ -27,6 +29,7 @@ async def get_my_profile(current_user: User = Depends(get_current_user)):
             "display_name": current_user.display_name,
             "avatar_url": current_user.avatar_url,
             "subscription_tier": current_user.subscription_tier,
+            "is_admin": is_admin,
             "digest_enabled": current_user.digest_enabled,
             "digest_frequency": current_user.digest_frequency or "weekly",
             "digest_min_impact": current_user.digest_min_impact or "low",

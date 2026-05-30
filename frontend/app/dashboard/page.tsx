@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
+import { getAdminMode } from '@/lib/admin-mode'
 
 interface Metrics {
   bills: {
@@ -49,9 +50,11 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // Respect the navbar admin-mode toggle: in user mode, dashboard is hidden.
+    if (getAdminMode() === 'user') { router.replace('/'); return }
     api.getMe()
       .then((data) => {
-        if (data?.user?.subscription_tier === 'dev') return api.getMetrics()
+        if (data?.user?.is_admin || data?.user?.subscription_tier === 'dev') return api.getMetrics()
         router.replace('/')
         return null
       })

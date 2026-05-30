@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { api } from '@/lib/api'
 import { getToken, clearToken } from '@/lib/auth'
+import { useAdminMode } from '@/lib/admin-mode'
 
 interface User {
   id: string
@@ -15,6 +16,7 @@ interface User {
   avatar_url: string | null
   email: string
   subscription_tier?: string
+  is_admin?: boolean
 }
 
 function avatarSrc(user: User): string {
@@ -27,6 +29,7 @@ export function Navbar() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [adminMode, setAdminMode] = useAdminMode()
   const pathname = usePathname()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -87,13 +90,18 @@ export function Navbar() {
   const cityConfig = getCityConfig(citySlug)
   const p = cityConfig ? `/${citySlug}` : ''
 
+  // Admin tools only show when the user has admin rights AND is in admin mode.
+  // Toggle (button further down) flips between modes — lets admins see the
+  // regular-user experience without losing their auth.
+  const showAdminTools = Boolean(user?.is_admin) && adminMode === 'admin'
+
   const navLinks = [
     { href: `${p}/legislation`, label: 'Legislation' },
     { href: `${p}/councilmembers`, label: 'Council' },
     { href: `${p}/insights`, label: 'Insights' },
     ...(user ? [{ href: `${p}/my-bills`, label: 'My Bills' }] : []),
-    ...(user?.subscription_tier === 'dev' ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
-    ...(user?.subscription_tier === 'dev' ? [{ href: '/admin', label: 'Admin' }] : []),
+    ...(showAdminTools ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
+    ...(showAdminTools ? [{ href: '/admin', label: 'Admin' }] : []),
   ]
 
   return (
@@ -129,6 +137,19 @@ export function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {loading ? null : user ? (
               <>
+                {user.is_admin && (
+                  <button
+                    onClick={() => setAdminMode(adminMode === 'admin' ? 'user' : 'admin')}
+                    className={`text-[11px] uppercase tracking-wider font-medium px-2 py-1 rounded border transition-colors ${
+                      adminMode === 'admin'
+                        ? 'border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
+                        : 'border-muted-foreground/30 text-muted-foreground hover:bg-muted'
+                    }`}
+                    title={adminMode === 'admin' ? 'Switch to user mode (hide admin tools)' : 'Switch to admin mode (show admin tools)'}
+                  >
+                    {adminMode === 'admin' ? 'Admin' : 'User'}
+                  </button>
+                )}
                 <Link href="/profile" className={`flex items-center gap-2 hover:opacity-80 transition-opacity ${pathname === '/profile' ? 'opacity-100' : ''}`}>
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
@@ -202,16 +223,30 @@ export function Navbar() {
           </Link>
           <div className="pt-2 border-t mt-2">
             {loading ? null : user ? (
-              <div className="flex items-center justify-between px-3 py-2">
-                <Link href="/profile" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
-                  <Avatar className="h-7 w-7 shrink-0">
-                    <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
-                    <AvatarFallback>{user.display_name?.[0] ?? 'U'}</AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm truncate max-w-[150px]">{user.display_name}</span>
-                </Link>
-                <button onClick={handleSignOut} className="text-sm text-muted-foreground hover:text-foreground shrink-0 ml-2">Sign out</button>
-              </div>
+              <>
+                <div className="flex items-center justify-between px-3 py-2">
+                  <Link href="/profile" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
+                    <Avatar className="h-7 w-7 shrink-0">
+                      <AvatarImage src={avatarSrc(user)} alt={user.display_name} />
+                      <AvatarFallback>{user.display_name?.[0] ?? 'U'}</AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm truncate max-w-[150px]">{user.display_name}</span>
+                  </Link>
+                  <button onClick={handleSignOut} className="text-sm text-muted-foreground hover:text-foreground shrink-0 ml-2">Sign out</button>
+                </div>
+                {user.is_admin && (
+                  <button
+                    onClick={() => setAdminMode(adminMode === 'admin' ? 'user' : 'admin')}
+                    className={`w-full text-left px-3 py-2 rounded-md text-xs uppercase tracking-wider font-medium border transition-colors ${
+                      adminMode === 'admin'
+                        ? 'border-amber-300 text-amber-800 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200'
+                        : 'border-muted-foreground/30 text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    {adminMode === 'admin' ? 'Admin mode — tap to switch to user view' : 'User mode — tap to switch back to admin'}
+                  </button>
+                )}
+              </>
             ) : (
               <>
                 <Link
