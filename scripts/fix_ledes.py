@@ -1,8 +1,8 @@
-"""Detect and fix bill ledes for active bills.
+"""Detect and fix bill ledes for current-term bills.
 
 Default (no flags): heuristic dry-run report.
   --fix             regenerate only heuristic-flagged mismatches
-  --fix --all       regenerate every active bill that has a lede
+  --fix --all       regenerate every current-term bill that has a lede
   --workers N       parallel AI calls against Ollama (default 4)
 
 A mismatch is when the lede text shares no keyword overlap with the bill's
@@ -10,9 +10,10 @@ plain_title or tags — a symptom of ledes being written for the wrong bill.
 But the heuristic has false negatives, so --all is the safer rebuild after
 a prompt change.
 
-Active-bill scope: only bills with status in introduced or in_committee.
-Ledes for historical bills aren't useful (the bot only posts live bills)
-and we don't burn compute regenerating them.
+Scope: bills introduced during the current Philadelphia City Council term
+(2020 / 2024 / 2028 / ...) regardless of status.  The bot posts any current-
+term bill, so we need accurate ledes for all of them — not just the active-
+status subset.
 
 Run from project root.
 """
@@ -69,23 +70,31 @@ def main():
     parser.add_argument("--commit-every", type=int, default=50, help="DB commit batch size (default 50)")
     args = parser.parse_args()
 
+    from datetime import datetime, timezone
+    from sqlalchemy import extract
     from app.models.database import SessionLocal
     from app.models import Legislation
-    from app.services.perspectives_service import ACTIVE_STATUSES
+
+    # Scope: current Philadelphia City Council term.  Members serve 4-year
+    # terms starting in 2020, 2024, 2028 ...  The bot only spotlights bills
+    # from this window, so we only need accurate ledes for the same window.
+    # (See workers/bluesky_bot.py for the matching formula.)
+    current_year = datetime.now(timezone.utc).year
+    term_start_year = current_year - ((current_year - 2020) % 4)
 
     db = SessionLocal()
     try:
         bills = (
             db.query(Legislation)
             .filter(
-                Legislation.status.in_(ACTIVE_STATUSES),
+                extract("year", Legislation.introduced_date) >= term_start_year,
                 Legislation.analyzed_at.isnot(None),
                 Legislation.lede.isnot(None),
                 Legislation.lede != "",
             )
             .all()
         )
-        print(f"Loaded {len(bills)} active bills with ledes.")
+        print(f"Loaded {len(bills)} current-term bills with ledes (since {term_start_year}).")
 
         if args.all:
             targets = bills
