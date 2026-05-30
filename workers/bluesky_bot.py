@@ -3,10 +3,12 @@
 Posts daily about notable Philadelphia City Council legislation.
 
 Post types:
-  - Weekdays: daily spotlight — a randomly selected high-impact bill
-              (falls back to medium-impact if the pool is thin)
-  - Weekdays: recently signed bills (last 30 days), if any
-  - Sunday 9am: weekly roundup (counts + active bills)
+  - Weekdays: daily spotlight — a randomly selected high-impact bill from
+              the current council term that is STILL ACTIVE (status in
+              introduced / in_committee).  Closed bills — signed_into_law,
+              failed, vetoed — are never posted; they're not current news.
+              Falls back to medium-impact if the high-impact pool is thin.
+  - Sunday 9am: weekly roundup (counts + active bills).
 
 Dedup: every post is recorded server-side in the `bluesky_posts` registry via
 the X-Bot-Token-authenticated /api/legislation/bluesky/record-post endpoint.
@@ -187,17 +189,22 @@ def fetch_spotlight_bill(excluded_urls: set[str] = None) -> dict | None:
         url = f"{SITE_BASE}/philadelphia/legislation/{bill.get('id', '')}"
         return url not in excluded_urls and _in_current_term(bill)
 
+    # Only bills that are still in play — never closed/signed/failed/vetoed.
+    active_status = "introduced,in_committee"
+
     try:
         data = http_get(
             f"{API_BASE}/api/legislation/search"
-            f"?limit=100&level=local&analyzed=true&impact=high&not_posted_for=spotlight"
+            f"?limit=100&level=local&analyzed=true&impact=high"
+            f"&status={active_status}&not_posted_for=spotlight"
         )
         candidates = [b for b in data.get("results", []) if eligible(b)]
 
         if len(candidates) < 5:
             data2 = http_get(
                 f"{API_BASE}/api/legislation/search"
-                f"?limit=100&level=local&analyzed=true&impact=medium&not_posted_for=spotlight"
+                f"?limit=100&level=local&analyzed=true&impact=medium"
+                f"&status={active_status}&not_posted_for=spotlight"
             )
             candidates += [b for b in data2.get("results", []) if eligible(b)]
 
@@ -281,69 +288,6 @@ def post_daily_spotlight(token: str, did: str) -> bool:
     return True
 
 
-def fetch_recently_signed(days: int = 30) -> list:
-    """Bills signed into law within the last N days, never previously announced."""
-    try:
-        data = http_get(
-            f"{API_BASE}/api/legislation/search"
-            f"?limit=100&level=local&status=signed_into_law&not_posted_for=signed"
-        )
-        bills = data.get("results", [])
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        recent = []
-        for b in bills:
-            date_str = b.get("introduced_date") or b.get("created_at")
-            if not date_str:
-                continue
-            try:
-                dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                if dt >= cutoff:
-                    recent.append(b)
-            except Exception:
-                continue
-        return recent
-    except Exception as e:
-        print(f"Failed to fetch signed bills: {e}")
-        return []
-
-
-def post_signed_bills(token: str, did: str) -> int:
-    signed = fetch_recently_signed(days=30)
-    if not signed:
-        print("No bills signed into law in the last 30 days.")
-        return 0
-
-    posted = 0
-    for bill in signed[:2]:
-        plain_title = (bill.get("plain_title") or bill.get("title") or "A bill").strip()
-        lede = (bill.get("lede") or "").strip()
-        bill_id = bill.get("id", "")
-        url = f"{SITE_BASE}/philadelphia/legislation/{bill_id}"
-
-        if lede:
-            text = f"Just signed into law in Philadelphia: {plain_title}\n\n{lede}"
-        else:
-            text = f"Just signed into law in Philadelphia: {plain_title}"
-
-        if len(text) > 300:
-            text = text[:297] + "..."
-
-        embed = {
-            "$type": "app.bsky.embed.external",
-            "external": {
-                "uri": url,
-                "title": plain_title,
-                "description": lede or "Philadelphia City Council legislation",
-            },
-        }
-
-        resp = bsky_post(token, did, text, embed=embed)
-        record_post(bill_id, "signed", resp)
-        posted += 1
-
-    return posted
-
-
 def post_weekly_roundup(token: str, did: str) -> None:
     try:
         data = http_get(f"{API_BASE}/api/insights/summary")
@@ -415,10 +359,6 @@ def main():
         print("Posting daily spotlight...")
         posted = post_daily_spotlight(token, did)
         print(f"Spotlight posted: {posted}")
-
-        print("Checking for recently signed bills...")
-        n = post_signed_bills(token, did)
-        print(f"Posted {n} signed bill(s).")
 
     print("Done.")
 
