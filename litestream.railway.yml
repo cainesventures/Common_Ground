@@ -1,8 +1,14 @@
-# Production litestream — runs continuously alongside uvicorn so user-side
-# state (accounts, votes, tracking, bot post registry) gets backed up.
+# Production litestream — both DBs are listed so railway.toml can `litestream
+# restore` them on boot, but sync-intervals are tuned for Backblaze's free
+# tier (Class C cap = 2,500 metadata calls/day).
 #
-# content.db: published from dev, restored on version-bump.
-# users.db:   prod is source of truth, continuously replicated as safety net.
+# content.db:  dev is source of truth; prod-side writes are rare (admin
+#              dashboard actions only).  10-minute sync is plenty — if those
+#              writes are ever lost on restart, just re-run from dev.
+# users.db:    prod is source of truth (accounts, votes, tracking).  60-second
+#              sync window means up to 60s of user writes could be lost if
+#              Railway's volume dies between syncs — acceptable since volume
+#              loss is rare and 60s of lost state beats losing all of it.
 dbs:
   - path: /data/common_ground.db
     replicas:
@@ -12,6 +18,7 @@ dbs:
         endpoint: s3.us-east-005.backblazeb2.com
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY
+        sync-interval: 10m
   - path: /data/users.db
     replicas:
       - type: s3
@@ -20,3 +27,4 @@ dbs:
         endpoint: s3.us-east-005.backblazeb2.com
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY
+        sync-interval: 60s
