@@ -1,6 +1,21 @@
 [build]
   builder = "DOCKERFILE"
   dockerfilePath = "Dockerfile"
+  # Only rebuild + redeploy when backend-relevant files change.  Frontend
+  # commits (frontend/**), workflow updates (.github/**), scripts run only
+  # on dev (scripts/**), and docs don't need a Railway restart — every
+  # restart costs ~40 Backblaze Class C calls and there's no behavioral
+  # change to deploy anyway.
+  watchPatterns = [
+    "app/**",
+    "main.py",
+    "requirements.txt",
+    "Dockerfile",
+    "alembic/**",
+    "alembic.ini",
+    "litestream*.yml",
+    "railway.toml",
+  ]
 
 [deploy]
   # Startup logic (see also app/models/database.py:init_db for the schema side):

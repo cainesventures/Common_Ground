@@ -1,14 +1,19 @@
 # Production litestream — both DBs are listed so railway.toml can `litestream
-# restore` them on boot, but sync-intervals are tuned for Backblaze's free
-# tier (Class C cap = 2,500 metadata calls/day).
+# restore` them on boot.  All intervals are tuned for Backblaze's free tier
+# (Class C cap = 2,500 metadata calls/day).
 #
 # content.db:  dev is source of truth; prod-side writes are rare (admin
-#              dashboard actions only).  10-minute sync is plenty — if those
+#              dashboard actions only).  10-min sync is plenty — if those
 #              writes are ever lost on restart, just re-run from dev.
-# users.db:    prod is source of truth (accounts, votes, tracking).  60-second
-#              sync window means up to 60s of user writes could be lost if
+# users.db:    prod is source of truth (accounts, votes, tracking).  5-min
+#              sync window means up to 5min of user writes could be lost if
 #              Railway's volume dies between syncs — acceptable since volume
-#              loss is rare and 60s of lost state beats losing all of it.
+#              loss is rare and 5min of lost state beats losing all of it.
+#
+# snapshot-interval: 168h (7 days) instead of the 24h default — full
+# snapshots are the most expensive Class C event; weekly is plenty for an
+# app at this scale.  Retention is kept generous (3 weeks) so we always
+# have multiple snapshot points to restore from.
 dbs:
   - path: /data/common_ground.db
     replicas:
@@ -19,6 +24,8 @@ dbs:
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY
         sync-interval: 10m
+        snapshot-interval: 168h
+        retention: 504h
   - path: /data/users.db
     replicas:
       - type: s3
@@ -27,4 +34,6 @@ dbs:
         endpoint: s3.us-east-005.backblazeb2.com
         access-key-id: $B2_APPLICATION_KEY_ID
         secret-access-key: $B2_APPLICATION_KEY
-        sync-interval: 60s
+        sync-interval: 5m
+        snapshot-interval: 168h
+        retention: 504h
