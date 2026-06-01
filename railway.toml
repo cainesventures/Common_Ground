@@ -31,10 +31,16 @@
   #       init_db creates the schema + copies any legacy user rows out of
   #       content.db (one-shot, idempotent).
   #
-  # Then `litestream replicate -exec` runs uvicorn as a child process while
-  # litestream continuously backs up BOTH databases to their respective B2
-  # paths.  This is the safety net that protects accumulated prod user data.
-  startCommand = "sh -c 'STORED=$(cat /data/.restore_version 2>/dev/null || echo \"\"); TARGET=\"${DB_RESTORE_VERSION:-}\"; if [ -n \"$TARGET\" ] && [ \"$STORED\" != \"$TARGET\" ]; then rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && echo \"$TARGET\" > /data/.restore_version; elif [ ! -f /data/common_ground.db ]; then litestream restore -config /app/litestream.railway.yml /data/common_ground.db; fi; if [ ! -f /data/users.db ]; then litestream restore -config /app/litestream.railway.yml /data/users.db 2>/dev/null || echo \"(no users.db backup yet — will be created by init_db)\"; fi; exec litestream replicate -config /app/litestream.railway.yml -exec \"uvicorn main:app --host 0.0.0.0 --port $PORT\"'"
+  # NOTE: Continuous `litestream replicate` is intentionally NOT run here.
+  # Litestream v0.5's internal L0 retention enforcement loop makes ~15s
+  # ListObjectsV2 calls regardless of sync-interval settings, which torches
+  # Backblaze's free-tier Class C cap (2,500/day) in a few hours.  Trade-off:
+  # ongoing prod writes to users.db are not backed up between deploys; if
+  # Railway's volume dies, user data is lost.  Acceptable for current scale.
+  # When we want backups back, do it via a periodic backup job (e.g. nightly
+  # one-shot litestream replicate triggered by GitHub Actions or cron) so we
+  # control the cadence instead of letting Litestream poll continuously.
+  startCommand = "sh -c 'STORED=$(cat /data/.restore_version 2>/dev/null || echo \"\"); TARGET=\"${DB_RESTORE_VERSION:-}\"; if [ -n \"$TARGET\" ] && [ \"$STORED\" != \"$TARGET\" ]; then rm -f /data/common_ground.db && litestream restore -config /app/litestream.railway.yml /data/common_ground.db && echo \"$TARGET\" > /data/.restore_version; elif [ ! -f /data/common_ground.db ]; then litestream restore -config /app/litestream.railway.yml /data/common_ground.db; fi; if [ ! -f /data/users.db ]; then litestream restore -config /app/litestream.railway.yml /data/users.db 2>/dev/null || echo \"(no users.db backup yet — will be created by init_db)\"; fi; exec uvicorn main:app --host 0.0.0.0 --port $PORT'"
   healthcheckPath = "/health"
   healthcheckTimeout = 120
   restartPolicyType = "ON_FAILURE"
