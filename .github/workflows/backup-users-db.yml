@@ -1,0 +1,47 @@
+name: Nightly users.db backup
+
+# Daily one-shot Litestream snapshot of /data/users.db on Railway to Backblaze B2.
+# Replaces the continuous `litestream replicate -exec` we removed from
+# railway.toml — that was making ~15s ListObjectsV2 calls that blew through
+# B2's free Class C cap (2,500/day) in a few hours.
+#
+# This workflow runs once a day on a controlled cadence — total daily B2
+# cost is ~50-100 Class C calls (1 list/upload cycle), well under the cap.
+#
+# Trade-off: up to 24h of user writes could be lost if Railway's volume dies
+# between backups.  Acceptable at current scale; bump the schedule when
+# user count justifies tighter recovery windows.
+
+on:
+  schedule:
+    - cron: '0 8 * * *'  # 4am ET / 8am UTC daily
+  workflow_dispatch:       # allow manual trigger from GitHub Actions tab
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger users.db backup on Railway
+        run: |
+          set -e
+          response=$(curl -sf -w "\n%{http_code}" -X POST \
+            -H "X-Bot-Token: $BOT_API_TOKEN" \
+            "$API_BASE/api/admin/trigger-backup")
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "HTTP $status"
+          echo "$body"
+          if [ "$status" != "200" ]; then
+            echo "::error::backup endpoint returned HTTP $status"
+            exit 1
+          fi
+          # The endpoint returns success=true/false in the JSON.  Check it.
+          if echo "$body" | grep -q '"success":true'; then
+            echo "::notice::Backup succeeded"
+          else
+            echo "::error::Backup reported success=false"
+            exit 1
+          fi
+        env:
+          API_BASE: https://opencommonground-api-production.up.railway.app
+          BOT_API_TOKEN: ${{ secrets.BOT_API_TOKEN }}

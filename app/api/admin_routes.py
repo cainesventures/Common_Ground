@@ -8,6 +8,8 @@ The allowlist survives DB resets so admins always have access.
 """
 
 import logging
+import os
+import subprocess
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
@@ -15,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.models.database import get_db
 from app.models import User, BillTracking, LegislationVote, CouncilmemberVote, BlueskyPost, Donation
-from app.auth import require_dev_tier, _is_admin_email
+from app.auth import require_dev_tier, _is_admin_email, require_bot_token
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +133,63 @@ async def admin_users(
         "offset": offset,
         "users": rows,
     }
+
+
+@router.post("/trigger-backup")
+async def trigger_backup(_bot=Depends(require_bot_token)):
+    """Run a one-shot Litestream snapshot of users.db to Backblaze B2.
+
+    Triggered by the nightly GitHub Actions workflow.  Uses bot-token auth
+    (X-Bot-Token header) so the same secret we already share with the bot
+    works here too.
+
+    Why this exists: we removed continuous `litestream replicate -exec`
+    from railway.toml because its 15s L0-retention loop blew through
+    Backblaze's free Class C cap.  Instead, we trigger backups on a
+    controlled cadence (daily) and own the cost budget that way.
+
+    Only users.db is backed up — content.db's source of truth is dev,
+    and is restored from B2 via publish.ps1, so there's nothing useful
+    to back up on the prod side.
+    """
+    config_path = "/app/litestream.railway.yml"
+    db_path = "/data/users.db"
+
+    if not os.path.exists(config_path):
+        raise HTTPException(status_code=503, detail=f"Litestream config not found at {config_path}")
+    if not os.path.exists(db_path):
+        raise HTTPException(status_code=404, detail=f"users.db not found at {db_path}")
+
+    started_at = datetime.utcnow()
+    try:
+        result = subprocess.run(
+            [
+                "litestream", "replicate",
+                "-config", config_path,
+                "-once",
+                "-force-snapshot",
+                db_path,
+            ],
+            timeout=300,  # 5 min ceiling — users.db is tiny, should finish in seconds
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise HTTPException(status_code=503, detail="litestream binary not on PATH")
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=504, detail="litestream replicate timed out (>5min)")
+
+    elapsed = (datetime.utcnow() - started_at).total_seconds()
+    ok = result.returncode == 0
+    payload = {
+        "success": ok,
+        "elapsed_sec": round(elapsed, 2),
+        "exit_code": result.returncode,
+        "stdout_tail": (result.stdout or "")[-800:],
+        "stderr_tail": (result.stderr or "")[-800:],
+    }
+    if ok:
+        logger.info(f"users.db backup completed in {elapsed:.1f}s")
+    else:
+        logger.warning(f"users.db backup failed (exit {result.returncode}): {result.stderr[:300]}")
+    return payload
