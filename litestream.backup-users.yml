@@ -1,0 +1,14 @@
+# Litestream config used ONLY by the nightly users.db backup job.
+#
+# Separate from litestream.railway.yml so the trigger-backup endpoint can
+# replicate just users.db without accidentally pushing content.db (which is
+# dev-sourced and lives at the same B2 path the publish workflow writes to).
+dbs:
+  - path: /data/users.db
+    replicas:
+      - type: s3
+        bucket: opencommonground-db
+        path: users
+        endpoint: s3.us-east-005.backblazeb2.com
+        access-key-id: $B2_APPLICATION_KEY_ID
+        secret-access-key: $B2_APPLICATION_KEY

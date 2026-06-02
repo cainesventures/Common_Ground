@@ -152,7 +152,10 @@ async def trigger_backup(_bot=Depends(require_bot_token)):
     and is restored from B2 via publish.ps1, so there's nothing useful
     to back up on the prod side.
     """
-    config_path = "/app/litestream.railway.yml"
+    # Dedicated single-DB config — see litestream.backup-users.yml for the
+    # rationale.  Litestream v0.5's CLI doesn't accept `-config FILE PATH`
+    # together (positional path triggers "direct" mode which wants a URL).
+    config_path = "/app/litestream.backup-users.yml"
     db_path = "/data/users.db"
 
     if not os.path.exists(config_path):
@@ -168,7 +171,6 @@ async def trigger_backup(_bot=Depends(require_bot_token)):
                 "-config", config_path,
                 "-once",
                 "-force-snapshot",
-                db_path,
             ],
             timeout=300,  # 5 min ceiling — users.db is tiny, should finish in seconds
             capture_output=True,
