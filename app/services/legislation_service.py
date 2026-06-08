@@ -503,14 +503,21 @@ class LegislationIngestionService:
                 ~_exists().where(BillPerspective.bill_id == Legislation.id)
             )
         if not_posted_for:
-            from sqlalchemy import exists as _exists
             from app.models import BlueskyPost
-            base_query = base_query.filter(
-                ~_exists().where(
-                    (BlueskyPost.bill_id == Legislation.id)
-                    & (BlueskyPost.post_type == not_posted_for)
-                )
+            # bluesky_posts lives in users.db, legislation in content.db —
+            # SQLite can't join across the two binds (would 500 with
+            # "no such table: bluesky_posts").  Fetch the posted bill_ids
+            # from users.db first, then filter the content-side query
+            # in-Python.  Small set (a few dozen) so the IN list is cheap.
+            posted_rows = (
+                self.db.query(BlueskyPost.bill_id)
+                .filter(BlueskyPost.post_type == not_posted_for)
+                .filter(BlueskyPost.bill_id.isnot(None))
+                .all()
             )
+            posted_ids = {r[0] for r in posted_rows}
+            if posted_ids:
+                base_query = base_query.filter(~Legislation.id.in_(posted_ids))
         total = base_query.count()
         from sqlalchemy.orm import defer, selectinload
         results = (
