@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-10T16:27:35.137053Z",
+  "generated_at": "2026-06-10T19:24:26.525407Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
@@ -27,7 +27,7 @@
       "note": "2,578 bills"
     }
   ],
-  "narrative": "Over the past 27 years, Philadelphia City Council has churned out an astonishing 8,623 bills, with an average of 319 introduced each year. This treasure trove of data spans from 2000 to 2026, a period that has seen its fair share of legislative highs and lows. With a staggering 99% pass rate, it's clear that Council President Clarke and his colleagues have been highly effective in getting their proposed laws signed into law.\n\nAs we dig through the summaries, we notice some intriguing trends. Zoning has been a consistent top issue area throughout the years, with 2,578 bills introduced – more than any other category. Planning was another dominant force, accounting for over 1,900 bills. Interestingly, while zoning has remained a priority, its share of contested votes has declined over time. In fact, between 2000 and 2026, there were only 361 bills that drew at least one Nay vote across all years combined – every other roll call was unanimous.\n\nWhat can we learn from this data? Tracking legislation matters because it helps us understand the priorities of our elected officials and the issues that affect our city. With over 1,900 active bills still pending, there's much work to be done. By staying informed about the laws being proposed and debated, Philadelphians can engage with their council members, hold them accountable, and advocate for policies that matter to them.",
+  "narrative": "Over the past 27 years, a staggering 8,623 bills have been introduced to the City Council in Philadelphia, an average of 319 per year. This data tells a story of legislative activity that spans multiple administrations and civic priorities, making it a treasure trove for anyone seeking to understand the inner workings of city governance. From zoning to planning, infrastructure to housing, these numbers paint a picture of what has captivated the attention of Council members over time.\n\nAs we delve into the data, several trends emerge. Zoning, a perennial favorite, dominated the agenda in 19 out of 27 years, with a whopping 2,578 bills introduced on this topic alone. Planning was a close second, with 1,938 bills, while infrastructure and housing also consistently ranked high on the Council's radar. The 99% pass rate for signed legislation suggests that the Council has been remarkably effective at passing their proposed laws, often with broad support. Meanwhile, contested votes were relatively rare, occurring in only 361 out of all roll calls combined.\n\nThis data is not merely a fascinating curiosity; it holds significant value for civic engagement and informed participation. By tracking legislative activity, Philadelphians can better understand how the Council's priorities align (or diverge) from their own. With this information, citizens can make more informed choices about who to support in elections, what issues to prioritize in community discussions, and how to hold elected officials accountable for their actions. Ultimately, by staying up-to-date on City Council activity, residents can become more engaged, active participants in shaping the future of Philadelphia.",
   "top_issues": [
     {
       "tag": "zoning",
@@ -88,12 +88,12 @@
     {
       "year": 2000,
       "is_partial": false,
-      "headline": "Council's Busy Year: 232 Laws Signed",
-      "narrative": "Philadelphia City Council introduced an impressive 294 bills in 2000, with a remarkable 99% of them becoming law. The median days from introduction to becoming law was just 49. Planning and infrastructure dominated the agenda, with 77 and 72 bills respectively, marking significant increases over the prior year. Housing and finance also saw notable growth, with 45 and 41 bills respectively. Councilmember DiCicco led the charge with 63 bills introduced, followed closely by Councilmembers Clarke and Blackwell.\n\nThe contentious votes reveal a mix of party lines and individual stances on issues like campaign contribution limits, zoning appeals, and public utility pole cleanup. Bill 000505's narrow passage, despite opposition from several council members, highlights the ongoing struggle for reform in city elections. The data also shows that certain groups, such as low-income homeowners and small businesses, will face significant changes under new laws.",
+      "headline": "Council Tackles Planning, Infrastructure in Record-Breaking Year",
+      "narrative": "Philadelphia City Council introduced a record 294 bills in 2000, with 232 becoming law and only three vetoed by the mayor. The top issue areas for the year were planning, infrastructure, zoning, housing, finance, business, with planning seeing a significant surge of +77 new bills compared to the prior year. Infrastructure and zoning also saw major increases, with +72 and +70 respectively. Councilmember DiCicco led the pack with 63 sponsored bills, followed closely by Clarke and Blackwell.\n\nThe council's focus on planning and infrastructure is clear, but what about the controversy surrounding certain votes? Five bills drew dissenting opinions from at least five council members, including proposals to limit campaign contributions, mandate exposed faces in public places, and change zoning decision appeals processes.",
       "key_themes": [
-        "Planning Dominates Agenda",
-        "Laws Passed at Record Pace",
-        "Low-Income Homeowners Affected"
+        "Planning Dominates Council Agenda",
+        "Infrastructure Takes Center Stage",
+        "Zoning Reform Efforts Continue"
       ],
       "stats": {
         "year": 2000,
@@ -102,6 +102,8 @@
         "signed": 232,
         "failed": 0,
         "vetoed": 3,
+        "died_in_committee": 59,
+        "still_pending": 0,
         "pass_rate": 0.987,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -323,17 +325,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:20:09.111507Z"
+      "generated_at": "2026-06-10T19:14:06.349137Z"
     },
     {
       "year": 2001,
       "is_partial": false,
-      "headline": "Council's Fast-Paced Year: 291 Bills Introduced in 2001",
-      "narrative": "Philadelphia City Council members introduced a record number of bills in 2001, with 291 measures brought to the table. The most dominant issue areas were zoning (88), infrastructure (78), planning (62), and business (47). In contrast, issues like public-safety (-11) and taxation (-7) declined compared to the previous year. Contested votes reveal a mix of party-line splits and bipartisan opposition, with several high-profile bills being passed by narrow margins.\n\nThe median days from introduction to becoming law was 56, indicating that Council members were able to move quickly on many initiatives. A notable exception was Bill 010015, which targeted gun manufacturers and faced some opposition before ultimately passing into law. The six-year capital plan, valued at nearly four billion dollars, received widespread support and will have a significant impact on the city's infrastructure.",
+      "headline": "City Council Logs Record Number of Bills in 2001",
+      "narrative": "The Philadelphia City Council was busy in 2001, introducing a record number of bills - 291, to be exact. Zoning and infrastructure dominated the agenda, with a whopping 88 and 78 bills respectively. Compared to the previous year, parking, zoning, transportation, and traffic issues all saw significant increases in attention. On the other hand, planning, public-safety, procurement, and taxation issues took a backseat.\n\n Contested votes revealed some interesting dynamics within the council. Several high-profile bills drew sharp divides, including measures on budgeting, police recruitment, and stadium development. Council President Verna was among those who opposed redrawing district lines, while others like DiCicco voted against lease agreements for stadium parking. The data shows that even with a strong majority, Council President Verna's leadership wasn't always decisive.",
       "key_themes": [
-        "Zoning Dominates Council Agenda",
-        "Infrastructure Spending Soars",
-        "Gun Control Measure Passes"
+        "Zoning dominates council agenda",
+        "Infrastructure tops legislative output",
+        "Council politics reveal divisions"
       ],
       "stats": {
         "year": 2001,
@@ -342,6 +344,8 @@
         "signed": 233,
         "failed": 0,
         "vetoed": 4,
+        "died_in_committee": 54,
+        "still_pending": 0,
         "pass_rate": 0.983,
         "median_days_to_passage": 56,
         "top_tags": [
@@ -587,17 +591,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:20:19.158250Z"
+      "generated_at": "2026-06-10T19:14:28.807558Z"
     },
     {
       "year": 2002,
       "is_partial": false,
-      "headline": "Council's 2002 Agenda Packed with Planning, Parking, and Budgets",
-      "narrative": "The Philadelphia City Council had a busy year in 2002, introducing a record number of bills - 347 - up from the previous year. The majority of these bills focused on planning, zoning, infrastructure, parking, transportation, and finance. In fact, three issue areas saw significant growth: parking (+30), planning (+27), and transportation (+25). This shift in priorities is evident in the top-impact legislation, including a $1.4 billion capital budget plan for Philadelphia's future growth. The city's new mayor will inherit a record-breaking $3 billion budget that includes significant increases in funding for schools, public safety, and street repairs.\n\nContested votes on key bills reveal ongoing debates within Council. For instance, the School Taxes Frozen at 2002 Levels law passed with a narrow margin of 6-11, indicating divisions among Council members. Similarly, the Property Owners Face Tax Hike Cap bill narrowly passed with an 8-8 vote. These close calls suggest that Council is grappling with complex issues like taxation and budgeting.",
+      "headline": "City Council Scores Big in 2002 with Historic Budget",
+      "narrative": "Philadelphia's City Council saw a significant increase in legislative activity, introducing 347 bills - 56 more than the previous year. Planning and zoning remained top issue areas, but parking, transportation, and taxation showed notable gains, rising by +30, +25, and +21 respectively. In contrast, business, telecommunications, sports, and zoning declined by -16, -16, -6, and -5 points. The council's $1.4 billion capital budget plan for city parks and recreation centers was a major highlight, while the record-breaking $3 billion budget also made headlines. However, not all votes were unanimous: 19 bills drew at least one dissenting voice, with some contentious issues including tax freezes and rate reductions. \n\n Contested votes often revealed party lines or ideological differences within council. For instance, Councilmember Goode voted against several tax-related bills, while Council President Verna opposed a bill to freeze property taxes. The absence of vetoes is notable, with all but 69 bills becoming law.",
       "key_themes": [
-        "Planning Dominates Council Agenda",
-        "Budgets Take Center Stage",
-        "Parking and Transportation on Rise"
+        "Increased legislative activity",
+        "Budget highlights",
+        "Contested votes highlight party divisions"
       ],
       "stats": {
         "year": 2002,
@@ -606,6 +610,8 @@
         "signed": 278,
         "failed": 0,
         "vetoed": 0,
+        "died_in_committee": 69,
+        "still_pending": 0,
         "pass_rate": 1.0,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -662,11 +668,11 @@
         ],
         "falling_tags": [
           {
-            "tag": "telecommunications",
+            "tag": "business",
             "delta": -16
           },
           {
-            "tag": "business",
+            "tag": "telecommunications",
             "delta": -16
           },
           {
@@ -859,17 +865,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:20:30.497214Z"
+      "generated_at": "2026-06-10T19:14:53.174392Z"
     },
     {
       "year": 2003,
       "is_partial": false,
-      "headline": "City Council's Busiest Year Yet: 319 Bills Introduced",
-      "narrative": "In 2003, Philadelphia City Council saw a significant decrease in introduced bills, down to 319 from 347 the previous year. Despite this drop, the council managed to sign into law an impressive 241 bills, with only four vetoed and no failures. The median days from introduction to becoming law was 42, showing a relatively speedy legislative process.\n\nThe top issue areas for the year were zoning (90), planning (89), infrastructure (75), housing (56), finance (51), and land-use (45). Compared to the previous year, procurement (+10) and public-safety (+9) issues saw notable increases. On the other hand, parking (-59) and transportation (-45) concerns declined sharply.\n\nContested votes reveal interesting dynamics within the council. Bills like 030251, which proposed a cap on school tax hikes, and 030710, which aimed to block campaign cash from businesses with city contracts, demonstrate that while some proposals passed with only one Nay vote, others sparked more contentious debates.",
+      "headline": "Council Keeps Busy with 319 Bills in '03",
+      "narrative": "In 2003, Philadelphia City Council introduced a total of 319 bills, down from the previous year's tally by 28. The top issues on their agenda included zoning (90), planning (89), and infrastructure (75). Notably, business, procurement, public-safety, and zoning all saw significant increases in attention compared to the prior year, with some rising as much as +10 in activity.\n\nA closer look at the contested votes reveals a few areas of contention. While most bills passed without opposition, several drew dissenting voices from Councilmembers like Blackwell and Clarke. The passage of Bill 030251, which capped school tax hikes, was particularly contentious, passing with an 8-8 vote after several hours of debate.\n\nOverall, the City Council's 2003 legislative activity reflects a focus on issues related to zoning and infrastructure, with significant attention devoted to addressing pressing concerns like public safety. The number of bills signed into law reached 241, while only four were vetoed, demonstrating the council's commitment to passing meaningful legislation.",
       "key_themes": [
-        "Busy Legislative Session",
         "Zoning Dominates Agenda",
-        "Public Safety Rises"
+        "Infrastructure Focus Grows",
+        "Public Safety Takes Center Stage"
       ],
       "stats": {
         "year": 2003,
@@ -878,6 +884,8 @@
         "signed": 241,
         "failed": 0,
         "vetoed": 4,
+        "died_in_committee": 74,
+        "still_pending": 0,
         "pass_rate": 0.984,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -916,11 +924,11 @@
         ],
         "rising_tags": [
           {
-            "tag": "procurement",
+            "tag": "business",
             "delta": 10
           },
           {
-            "tag": "business",
+            "tag": "procurement",
             "delta": 10
           },
           {
@@ -1121,17 +1129,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:20:41.838083Z"
+      "generated_at": "2026-06-10T19:15:20.783113Z"
     },
     {
       "year": 2004,
       "is_partial": false,
-      "headline": "Philly Council Hits Record High with 355 Bills in 2004",
-      "narrative": "The Philadelphia City Council had a busy year in 2004, introducing a record-breaking 355 bills. Most of these bills focused on planning (87), zoning (85), infrastructure (75), business (62), and finance (48) issues. In comparison to the previous year, issues like business (+21), transportation (+15), civil-service (+15), and government (+13) gained traction, while housing (-10), land-use (-7), public-health (-6), and zoning (-5) saw a decline.\n\nThe council's contested votes reveal a deeper divide on economic policies. For example, the bill to slash business privilege tax rates (passed 9-8) was opposed by Councilmember Blackwell, Clarke, Cohen, Goode, and Mariano, indicating some members' concerns about reducing revenue. Similarly, the Time Warner Cable takeover of Philly Area II TV franchise passed with a single Nay vote from Council President Verna, highlighting potential disagreements over privatization.",
+      "headline": "Council Dominates with Zoning and Planning in '04",
+      "narrative": "Philadelphia City Council was dominated by planning, zoning, infrastructure, business, finance, housing, civil-service, transportation, and government issues in 2004. Compared to the prior year, business and government issues rose significantly, while housing, land-use, public-health, and zoning issues saw declines.\n\nContested votes reveal a divide among council members, with several high-profile bills passing by thin margins or receiving widespread dissenting votes. For example, Bill 040767 slashing business privilege tax rates passed 9-8, and Bill 041071 transferring the TV franchise from Urban Cable Works to Time Warner Cable was opposed by Council President Verna and four other council members. Despite controversy, a remarkable 99% of bills that reached a final vote became law.",
       "key_themes": [
-        "Record number of bills",
-        "Shift to business issues",
-        "Divided council on economy"
+        "Zoning dominates the agenda",
+        "Business issues on the rise",
+        "Council divided on key votes"
       ],
       "stats": {
         "year": 2004,
@@ -1140,6 +1148,8 @@
         "signed": 254,
         "failed": 0,
         "vetoed": 2,
+        "died_in_committee": 99,
+        "still_pending": 0,
         "pass_rate": 0.992,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -1182,11 +1192,11 @@
             "delta": 21
           },
           {
-            "tag": "transportation",
+            "tag": "civil-service",
             "delta": 15
           },
           {
-            "tag": "civil-service",
+            "tag": "transportation",
             "delta": 15
           },
           {
@@ -1400,17 +1410,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:20:52.825482Z"
+      "generated_at": "2026-06-10T19:15:42.619906Z"
     },
     {
       "year": 2005,
       "is_partial": false,
-      "headline": "Council's Busy Year Sees Record Bills, Sweeping Reforms",
-      "narrative": "Philadelphia City Council had a busy year in 2005, introducing a record number of bills - 379, up from 355 the previous year. The top issue areas that dominated the agenda included planning, zoning, infrastructure, finance, and government. While some issues saw a decline, such as business, public safety, civil service, and infrastructure, others rose in importance, like parking, government, finance, traffic, and housing.\n\nThe year's contested votes reveal interesting dynamics within City Council. For example, on Bill 051023, requiring contractors to disclose campaign ties, the vote ended in a tie-breaking decision, with some council members opposing transparency in the bidding process. On other key bills like smoking bans and infrastructure overhauls, dissenting voices were clear, indicating divisions on these critical issues.",
+      "headline": "Council's Busy Year: 379 Bills Introduced in 2005",
+      "narrative": "Philadelphia City Council had a record year, introducing 24 more bills than the previous year, for a total of 379. Planning and zoning dominated the agenda, with 90 and 84 bills respectively. Meanwhile, parking and finance issues rose significantly, increasing by 47 and 17 respectively from 2004. This is in contrast to public-safety and civil-service issues, which saw declines of 15 and 13 respectively.\n\nThe council's legislative activity was not without controversy, however. Contested votes were more common than ever before, with 16 bills drawing at least one dissenting vote. Councilmembers Blackwell, Clarke, and Goode were particularly vocal in their disagreements, voting Nay on several high-impact proposals.",
       "key_themes": [
-        "Record Legislation Introduced",
-        "Infrastructure Overhaul Underway",
-        "Sweeping Reforms Enacted"
+        "Planning Dominates Agenda",
+        "Bills Skyrocket to Record Number",
+        "Contested Votes Increase"
       ],
       "stats": {
         "year": 2005,
@@ -1419,6 +1429,8 @@
         "signed": 277,
         "failed": 0,
         "vetoed": 3,
+        "died_in_committee": 99,
+        "still_pending": 0,
         "pass_rate": 0.989,
         "median_days_to_passage": 63,
         "top_tags": [
@@ -1461,11 +1473,11 @@
             "delta": 47
           },
           {
-            "tag": "government",
+            "tag": "finance",
             "delta": 17
           },
           {
-            "tag": "finance",
+            "tag": "government",
             "delta": 17
           },
           {
@@ -1664,17 +1676,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:02.572264Z"
+      "generated_at": "2026-06-10T19:16:04.010157Z"
     },
     {
       "year": 2006,
       "is_partial": false,
-      "headline": "Council Delivers on Big Plans in '06, 100% Success Rate",
-      "narrative": "Philadelphia City Council saw a flurry of activity in 2006, introducing 333 bills that resulted in a remarkable 100% success rate. The majority of bills focused on zoning (103), planning (96), and infrastructure (67). This year also saw increased attention to public-safety (+12) and civil-service (+5) issues, with fewer concerns around parking (-43), government (-32), and taxation (-18). One notable trend is the growth in median days from introduction to becoming law, increasing to 49. The council's top sponsors were Councilmember DiCicco (57 bills), Councilmember Clarke (54 bills), and Councilmember Blackwell (39 bills).",
+      "headline": "Council Passes Record Number of Bills in 2006",
+      "narrative": "The Philadelphia City Council saw a flurry of activity in 2006, with a total of 333 bills introduced and 265 signed into law. Zoning and planning dominated the agenda, with 103 and 96 bills respectively. This marks an increase from previous years, with zoning up 19% and public-safety up 12%. In contrast, parking and government saw significant declines in bill introductions. One area of agreement was on contentious issues like smoking in public spaces and a massive infrastructure plan that includes upgrades to roads and water mains.\n\nContested votes reveal divisions within the council, particularly around economic development measures. For example, a 4-11 vote against lowering business tax rates highlighted concerns among some council members about spurring growth. Another area of debate was property safety regulations, with a narrow passage of a bill requiring rental owners to provide certificates proving rentals meet standards.",
       "key_themes": [
-        "Zoning leads legislative pack",
-        "Public Safety on the rise",
-        "Council sees record success"
+        "Zoning and Planning Dominate",
+        "Economic Development Spars",
+        "Public Safety Improvements"
       ],
       "stats": {
         "year": 2006,
@@ -1683,6 +1695,8 @@
         "signed": 265,
         "failed": 0,
         "vetoed": 0,
+        "died_in_committee": 68,
+        "still_pending": 0,
         "pass_rate": 1.0,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -1747,11 +1761,11 @@
             "delta": -32
           },
           {
-            "tag": "traffic",
+            "tag": "taxation",
             "delta": -18
           },
           {
-            "tag": "taxation",
+            "tag": "traffic",
             "delta": -18
           }
         ],
@@ -1923,18 +1937,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:11.356847Z"
+      "generated_at": "2026-06-10T19:16:26.899865Z"
     },
     {
       "year": 2007,
       "is_partial": false,
-      "headline": "Council's Busy Year Sees Budgets, Infrastructure Top Agenda",
-      "narrative": "Philadelphia City Council saw a record-breaking number of bills introduced in 2007, with 363 new proposals on everything from zoning to infrastructure. The median days from introduction to becoming law was a relatively quick 37 days, with 99% of closed bills making it into law. The top issue areas for the year were zoning, planning, and infrastructure, but public-safety and business issues saw significant growth compared to the previous year. Zoning shot up by 11 issues, while public-safety and business each rose by 14.\n\nContested votes reveal interesting divides on Council, with some councilmembers consistently dissenting from others on contentious issues like affordable housing and large-scale development projects. The introduction of high-impact bills like the $3 billion operating budget and the $2 billion capital spending plan highlight the city's financial priorities for the year.",
+      "headline": "Council's Busy Year: Zoning, Budgets Dominate",
+      "narrative": "Philadelphia City Council had a record-breaking year in 2007 with 363 bills introduced, a 30-bill increase from the previous year. Zoning and planning dominated the agenda, accounting for over 20% of all legislation. Other prominent issues included public safety, business, and infrastructure. In contrast to last year, concerns about housing, land-use, and pensions decreased, while public-safety, business, and zoning bills increased by double-digit percentages.\n\nThe contentious votes reveal a council divided on issues like affordable housing and zoning changes in South Philly's waterfront area. Councilmembers took opposing stances on the city's budget plans, with some voting against proposals to reallocate loan funds for municipal upgrades.",
       "key_themes": [
-        "Increased Zoning Regulations",
-        "Budgets Dominate Agenda",
-        "Public-Safety Measures",
-        "Business Growth Focus"
+        "Record-Breaking Legislative Year",
+        "Zoning and Planning Dominate",
+        "Public Safety on the Rise"
       ],
       "stats": {
         "year": 2007,
@@ -1943,6 +1956,8 @@
         "signed": 262,
         "failed": 0,
         "vetoed": 3,
+        "died_in_committee": 98,
+        "still_pending": 0,
         "pass_rate": 0.989,
         "median_days_to_passage": 37,
         "top_tags": [
@@ -1981,11 +1996,11 @@
         ],
         "rising_tags": [
           {
-            "tag": "business",
+            "tag": "public-safety",
             "delta": 14
           },
           {
-            "tag": "public-safety",
+            "tag": "business",
             "delta": 14
           },
           {
@@ -1993,7 +2008,7 @@
             "delta": 11
           },
           {
-            "tag": "environment",
+            "tag": "neighborhood",
             "delta": 10
           }
         ],
@@ -2165,17 +2180,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:21.117513Z"
+      "generated_at": "2026-06-10T19:16:48.011801Z"
     },
     {
       "year": 2008,
       "is_partial": false,
-      "headline": "Philadelphia City Council Sees Record Number of Bills Signed",
-      "narrative": "In 2008, Philadelphia City Council passed a record-breaking number of bills into law, with 266 signed by the mayor out of 359 introduced. Zoning laws dominated the agenda, making up nearly a third of all bills, but their numbers actually decreased from the previous year. On the other hand, taxation, civil-service, housing, and government issues saw significant increases in attention, jumping 17-24% compared to 2007.\n\nThe City Council's legislative activity also revealed shifting priorities within its own ranks. Councilmember Clarke introduced a whopping 52 bills, while Krajewski trailed closely behind with 51. In contentious votes, several proposals met strong opposition from council members who ultimately voted Nay.",
+      "headline": "City Council's Busy Year: Laws Signed, Debated",
+      "narrative": "Philadelphia City Council saw a decline in bills introduced this year, down to 359 from 363 in 2007. Zoning and infrastructure issues still dominated the agenda, but with a significant drop in zoning-related legislation (-24). Taxation, civil-service, housing, and infrastructure issues actually rose compared to last year. The median number of days for bills to become law was 49, showing a relatively efficient legislative process. Contested votes reveal some interesting divisions: Councilmembers Blackwell and Miller were the most frequent dissenters. A total of 13 bills drew at least one Nay vote, with only one passing with a single opposing vote.\n\nThe year's notable legislation includes new laws on handgun purchases, assault weapons, minimum wage for city workers, and paid sick leave. The $2.46 billion Capital Budget also passed, impacting major city projects. While some of these bills sparked debate, they ultimately became law.",
       "key_themes": [
-        "Zoning Dominates Council Agenda",
-        "Taxation on the Rise",
-        "Record Number of Signed Bills"
+        "Declining zoning legislation",
+        "Rising taxation issues",
+        "Paid Sick Leave"
       ],
       "stats": {
         "year": 2008,
@@ -2184,6 +2199,8 @@
         "signed": 266,
         "failed": 3,
         "vetoed": 0,
+        "died_in_committee": 90,
+        "still_pending": 0,
         "pass_rate": 0.989,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -2234,7 +2251,7 @@
             "delta": 8
           },
           {
-            "tag": "government",
+            "tag": "infrastructure",
             "delta": 7
           }
         ],
@@ -2415,17 +2432,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:29.826499Z"
+      "generated_at": "2026-06-10T19:17:11.742863Z"
     },
     {
       "year": 2009,
       "is_partial": false,
-      "headline": "City Council Delivers on Ambitious Agenda",
-      "narrative": "A total of 337 bills were introduced to Philadelphia City Council in 2009, with a focus on zoning (96), planning (65), infrastructure (62), and business (62). In contrast to the prior year, neighborhood issues saw a significant increase (+16) while public-safety (-15) and civil-service (-14) declined. The median days from introduction to becoming law was 56, and an impressive 97% of closed bills became law. The most active sponsors were Councilmember DiCicco (73 bills), Councilmember Clarke (48 bills), and Councilmember Tasco (43 bills). Among the highest-impact bills were proposals to hike the wage tax by 1%, prohibit smoking in public housing, and fund aging sewer system upgrades through higher water rates. Contested votes revealed areas of disagreement among council members, such as the implementation of eco-friendly checkout bags and the creation of a new office to set property values.\n\nOne notable trend was the rise of issues like business (+14) and procurement (+12), indicating growing concerns about economic development and government efficiency.",
+      "headline": "Council Cracks Down on City Issues in 2009 Legislative Year",
+      "narrative": "Philadelphia City Council had a busy year, introducing 337 bills with many focused on zoning and planning. The median number of days from introduction to becoming law was 56. In contrast to the prior year, neighborhood issues saw a significant increase (+16) while infrastructure concerns declined (-19). Contested votes highlight disagreements among council members, such as Bill 090074's eco-friendly checkout bags, which passed 6-10 after dissenting votes from five council members.\n\nThe city council also prioritized major plans and proposals, with bills like the $2.5 billion capital spending plan and the ambitious seven billion dollar infrastructure revitalization plan dominating headlines. These high-impact bills show a focus on addressing aging infrastructure and making significant investments in the city's future.",
       "key_themes": [
-        "Zoning Dominates Council Agenda",
-        "Infrastructure Revitalization Efforts",
-        "Business on the Rise"
+        "Zoning Dominates Legislative Agenda",
+        "Infrastructure Revitalization Plans",
+        "Council Cracks Down on Taxes"
       ],
       "stats": {
         "year": 2009,
@@ -2434,6 +2451,8 @@
         "signed": 256,
         "failed": 7,
         "vetoed": 0,
+        "died_in_committee": 74,
+        "still_pending": 0,
         "pass_rate": 0.973,
         "median_days_to_passage": 56,
         "top_tags": [
@@ -2484,7 +2503,7 @@
             "delta": 12
           },
           {
-            "tag": "parking",
+            "tag": "environment",
             "delta": 9
           }
         ],
@@ -2652,17 +2671,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:40.871612Z"
+      "generated_at": "2026-06-10T19:17:33.330162Z"
     },
     {
       "year": 2010,
       "is_partial": false,
-      "headline": "Council Makes Mark with Record-Breaking Capital Budget",
-      "narrative": "Philadelphia City Council's legislative activity in 2010 saw a significant decline in introduced bills, down to 289 from 337 the previous year. Despite this, a record-breaking $2.313 billion capital budget plan was passed, setting the stage for major construction and upgrades across the city.\n\nThe council's focus shifted towards issues like housing, ethics, elections, and land-use, which saw significant increases in bill introduction compared to the prior year. Zoning, however, declined by 17 bills from the previous year. Contested votes revealed divisions among council members on key issues, including a proposed tax hike on hotels that drew opposition from small business owners.\n\nThe high-impact bills signed into law had a significant impact on city operations and residents' lives. The measures included protection for crime witnesses, a record-breaking capital budget plan, and a multi-billion dollar spending plan for fiscal year 2011 operations.",
+      "headline": "Council's Record-Breaking Year in Numbers",
+      "narrative": "The Philadelphia City Council had a busy year, with 289 bills introduced and 231 signed into law. The median number of days from introduction to becoming law was 42, a relatively quick turnaround for legislation. Zoning dominated the agenda, with 79 bills related to land use, but it's worth noting that zoning actually saw a decline in attention compared to the previous year (-17). Housing and ethics issues rose in prominence (+9 and +8 respectively). The council also tackled high-profile issues like crime witness protection, property taxes, and affordable housing. Contested votes reveal some areas of disagreement: for example, the towing industry licensing overhaul was passed 10-7, with several members opposing it. Overall, the year saw a significant shift towards increased attention on housing, ethics, and elections.",
       "key_themes": [
-        "Record-Breaking Capital Budget",
-        "Housing and Ethics Top Agenda",
-        "Divided Council Takes Stands"
+        "Record-Breaking Legislation",
+        "Housing Takes Center Stage",
+        "Tougher Ethics Measures"
       ],
       "stats": {
         "year": 2010,
@@ -2671,6 +2690,8 @@
         "signed": 231,
         "failed": 1,
         "vetoed": 0,
+        "died_in_committee": 57,
+        "still_pending": 0,
         "pass_rate": 0.996,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -2903,17 +2924,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:21:50.880415Z"
+      "generated_at": "2026-06-10T19:17:53.671804Z"
     },
     {
       "year": 2011,
       "is_partial": false,
-      "headline": "Council Cracks Down on Parking, Infrastructure in Record Year",
-      "narrative": "Philadelphia City Council made significant strides in addressing pressing issues in 2011, with a whopping 347 bills introduced - 58 more than the previous year. Zoning, infrastructure, parking, planning, and government were the top areas of focus, dominating 70% of all legislation. Notably, parking emerged as a major concern, increasing by 56 issues from the prior year, followed closely by transportation (+34) and traffic (+29). In contrast, housing (-13), civil-service (-10), finance (-7), and elections (-5) saw significant declines. This legislative activity resulted in an impressive 97% of closed bills becoming law, with a median time to passage of just 35 days. The Council's commitment to addressing pressing issues is evident in the high-impact legislation that made it through, including major infrastructure and zoning overhauls.\n\nThe contentious votes this year offer a glimpse into the complex politics at play. Bills like the parking tax rate decrease (Bill 110181-AA) and digital billboards (Bill 110563) sparked debate among Council members, with some dissenting voices arguing against the proposed changes.",
+      "headline": "Council Cracks Down on Parking, Infrastructure in 2011",
+      "narrative": "Philadelphia City Council was busy in 2011, introducing a record 347 bills and passing 271 into law. Zoning dominated the agenda with 92 bills, followed closely by infrastructure (72), parking (69), and planning (69). In comparison to the previous year, parking and transportation issues gained momentum (+56 and +34 respectively), while housing, civil-service, finance, and elections declined (-13, -10, -7, and -5). Contested votes reveal divisions on taxes and development. Councilmember DiCicco led with 69 bills introduced, followed by Clarke (51) and Verna (42). The median days from introduction to becoming law was 35.\n\nA few high-impact bills stand out: a massive $3.01 billion capital budget plan, a six-year infrastructure plan, and protections against discrimination in the workplace and public spaces were all signed into law.",
       "key_themes": [
-        "Parking Overhaul",
-        "Infrastructure Investment",
-        "Government Action"
+        "Parking and transportation take center stage",
+        "Record legislative activity in 2011",
+        "Infrastructure and zoning priorities"
       ],
       "stats": {
         "year": 2011,
@@ -2922,6 +2943,8 @@
         "signed": 271,
         "failed": 4,
         "vetoed": 5,
+        "died_in_committee": 67,
+        "still_pending": 0,
         "pass_rate": 0.968,
         "median_days_to_passage": 35,
         "top_tags": [
@@ -3156,17 +3179,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:02.087444Z"
+      "generated_at": "2026-06-10T19:18:17.594560Z"
     },
     {
       "year": 2012,
       "is_partial": false,
-      "headline": "Council's Busy Year: 367 Bills Passed in 2012",
-      "narrative": "Philadelphia City Council made significant strides in 2012, introducing a record-breaking 367 bills and passing 279 into law. The median days from introduction to becoming law was 42, with a remarkable 97% of closed bills becoming law. Zoning dominated the agenda, accounting for 96 bills, followed closely by planning with 82 proposals. Notable issues on the rise include housing (+15), planning (+13), and finance (+13). Conversely, infrastructure (-18), business (-15), government (-10), and parking (-7) saw a decline in attention compared to the previous year. Contested votes revealed tensions around tax reforms and financial priorities.",
+      "headline": "City Council: Year of Change in Philly",
+      "narrative": "Philadelphia City Council introduced 367 bills in 2012, a 20-bill increase from the previous year. Zoning and planning dominated the agenda, with 96 and 82 bills respectively. Housing, finance, and taxation saw significant increases in legislation, up 15, 13, and 12 issues respectively. In contrast, infrastructure, business, and government issues declined by 18, 15, and 10 respectively.\n\nContested votes reveal deep divisions on key issues. Council votes down proposals to cut tax breaks for big developers and scraps a tax refund program for low-income earners. On the other hand, measures like requiring cost-benefit analysis for capital projects and stricter regulations on construction near waterways won unanimous approval. With 97% of bills that reached a final vote becoming law, City Council's legislative pace remained strong in 2012.",
       "key_themes": [
-        "Zoning Dominates Agenda",
-        "97% Bills Become Law",
-        "Financial Reforms Advance"
+        "Zoning and Planning Dominant",
+        "Housing and Finance Rise",
+        "Divided Council Votes"
       ],
       "stats": {
         "year": 2012,
@@ -3175,6 +3198,8 @@
         "signed": 279,
         "failed": 6,
         "vetoed": 2,
+        "died_in_committee": 80,
+        "still_pending": 0,
         "pass_rate": 0.972,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -3412,17 +3437,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:10.468895Z"
+      "generated_at": "2026-06-10T19:18:41.259921Z"
     },
     {
       "year": 2013,
       "is_partial": false,
-      "headline": "Council Sees Record Low Bills, High-Impact Laws in '13",
-      "narrative": "Philadelphia City Council's legislative activity saw a decrease in introduced bills by 22 compared to the previous year, totaling 345. This decline was offset by a 98% success rate for signed laws, with 258 new regulations taking effect. Median days from introduction to law averaged 49 days. Zoning dominated issue areas, accounting for 99 bills, followed closely by business and planning.\n\nWhile issues like transportation and finance saw no significant change in numbers, issues on the rise included business (+15), elections (+6), zoning (+3), and housing (+3). Conversely, planning (-25) and parking (-21) declined. Contested votes revealed concerns over funding cuts, LGBTQ protections, and community group power.\n\nCouncil President Clarke led sponsors with 67 bills, while Councilmember Jones trailed behind with 28. Notable high-impact laws included new infrastructure spending plans, littering fines increases, firefighter raises, and landmark bills protecting LGBTQ Philadelphians from discrimination.",
+      "headline": "Council's Busy Year: 345 Bills Introduced, Many Signed into Law",
+      "narrative": "Philadelphia City Council dominated its agenda with zoning and business-related bills in 2013. A total of 345 bills were introduced, a decrease from the previous year. Of these, 258 became law, with a median passage time of 49 days. Business and housing issues saw increases, while planning and transportation concerns declined. Contested votes on contentious issues like paid sick leave, tax rates, and LGBTQ protections highlighted the council's willingness to tackle complex topics. Despite concerns over funding cuts in the operating budget, several significant bills were signed into law, including an infrastructure spending plan and a landmark bill protecting LGBTQ Philadelphians from discrimination.",
       "key_themes": [
         "Zoning Dominates Council Agenda",
-        "98% of Bills Become Law",
-        "Business on the Rise"
+        "Business Issues on the Rise",
+        "Landmark Legislation Signed"
       ],
       "stats": {
         "year": 2013,
@@ -3431,6 +3456,8 @@
         "signed": 258,
         "failed": 5,
         "vetoed": 1,
+        "died_in_committee": 81,
+        "still_pending": 0,
         "pass_rate": 0.977,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -3477,11 +3504,11 @@
             "delta": 6
           },
           {
-            "tag": "zoning",
+            "tag": "housing",
             "delta": 3
           },
           {
-            "tag": "housing",
+            "tag": "zoning",
             "delta": 3
           }
         ],
@@ -3664,17 +3691,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:21.045473Z"
+      "generated_at": "2026-06-10T19:19:00.121473Z"
     },
     {
       "year": 2014,
       "is_partial": false,
-      "headline": "Council Focuses on Zoning, Planning in Record-Breaking Year",
-      "narrative": "Zoning and land-use dominated the agenda in 2014 with 113 zoning bills introduced, a 14% increase from the prior year. Land-use saw an even larger spike, rising by 36% to 69 bills. This shift was mirrored in public health, which increased by 9%. On the other hand, transportation, parking, and finance issues all declined compared to 2013. The most active sponsors were Council President Clarke, Councilmember Squilla, and Councilmember Johnson, with Clarke introducing 71 bills alone.\n\n Contested votes reveal areas of disagreement among council members, including a 13-3 vote against expanding digital display options in public spaces and a 14-3 vote to decriminalize marijuana possession. These divisions suggest ongoing debates over urban development, community engagement, and social policy.",
+      "headline": "Council's Busy Year Sees Zoning, Planning Dominate",
+      "narrative": "Philadelphia City Council introduced 333 bills in 2014, with a significant focus on zoning (113), planning (71), and land-use (69). These issue areas saw notable increases compared to the prior year: land-use (+36), zoning (+14), and planning (+14). In contrast, transportation (-31), parking (-20), finance (-13), and business (-12) saw declines. The median days from introduction to becoming law was 42, with 100% of bills that reached a final vote being signed into law. Contested votes highlighted concerns around specific issues: expanding digital displays (Bill 140906-A), decriminalizing marijuana possession (Bill 140377-A), and implementing paid leave options (Bill 141026). These debates suggest ongoing tensions between Council's priorities and community needs.\n\nThe year also saw significant legislation, including the adoption of a $3 billion budget (Bill 140146-A) and a new sales tax (Bill 140489). While these changes may have far-reaching impacts, they were largely uncontested. The Council President led with an impressive 71 bill introductions, followed by Councilmembers Squilla and Johnson.",
       "key_themes": [
-        "Zoning Dominates Council Agenda",
-        "Land-use Issues on the Rise",
-        "Council Debates Urban Development"
+        "Zoning dominates legislative agenda",
+        "Land-use issues on the rise",
+        "Paid leave mandate approved"
       ],
       "stats": {
         "year": 2014,
@@ -3683,6 +3710,8 @@
         "signed": 266,
         "failed": 1,
         "vetoed": 0,
+        "died_in_committee": 66,
+        "still_pending": 0,
         "pass_rate": 0.996,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -3733,7 +3762,7 @@
             "delta": 14
           },
           {
-            "tag": "public-health",
+            "tag": "housing",
             "delta": 9
           }
         ],
@@ -3909,17 +3938,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:30.448969Z"
+      "generated_at": "2026-06-10T19:19:27.617196Z"
     },
     {
       "year": 2015,
       "is_partial": false,
-      "headline": "Council's Busy 2015: 335 Bills Signed Into Law",
-      "narrative": "Philadelphia City Council members were productive in 2015, introducing and passing a record number of bills into law. The top issue areas for the year included zoning, planning, infrastructure, housing, land-use, and transportation, with infrastructure rising by 24 issues compared to the previous year. Public health issues declined, however, with 13 fewer issues addressed. Councilmember Squilla led the pack with 63 introduced bills, followed closely by Council President Clarke with 55. The council's focus on growth and development was evident in several high-impact bills, including a $3.8 billion budget plan and a record-breaking capital budget of $2.7 billion.\n\nContested votes revealed some interesting divisions within the council. For example, while most members voted to hike school property taxes by 25%, Councilmember Squilla opposed it. The debate over parking rates also sparked disagreement, with Councilmembers Johnson, Oh, Quiñones Sánchez, and Squilla voting against a tax increase.",
+      "headline": "City Council Brings Home Record Number of Bills in 2015",
+      "narrative": "Philadelphia City Council ended 2015 with a bang, introducing 335 bills and passing an unprecedented number into law. With a median of just 42 days from introduction to becoming law, the council's efficiency has improved significantly. Zoning and planning dominated the agenda, with infrastructure and transportation also gaining traction. In fact, issues like infrastructure and environment saw significant increases in attention compared to the previous year. On the other hand, public health, land-use, and economic development seemed to fall out of favor. Despite some contentious votes, most bills that made it to a final vote were signed into law, with no vetoes recorded. The council's ability to work together on pressing issues was evident in several high-impact bills, including the adoption of a record-breaking $2.7 billion capital budget plan and a six-year roadmap for major infrastructure projects.\n\nThe year also saw some tense votes as Councilmembers debated taxes, school property values, and parking rates. While some dissenting voices emerged, most measures ultimately passed with significant margins.",
       "key_themes": [
-        "Record Number of Bills",
-        "Infrastructure on the Rise",
-        "Growth and Development Focus"
+        "Record-Breaking Legislative Activity",
+        "Zoning Dominates Agenda",
+        "Infrastructure on the Rise"
       ],
       "stats": {
         "year": 2015,
@@ -3928,6 +3957,8 @@
         "signed": 256,
         "failed": 0,
         "vetoed": 1,
+        "died_in_committee": 78,
+        "still_pending": 0,
         "pass_rate": 0.996,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -4156,16 +4187,16 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:40.669989Z"
+      "generated_at": "2026-06-10T19:19:53.388363Z"
     },
     {
       "year": 2016,
       "is_partial": false,
-      "headline": "Philadelphia City Council: Busy Year with Big Budgets",
-      "narrative": "In 2016, Philadelphia City Council saw a steady stream of legislative activity, introducing 335 bills and passing 251 into law - a 97% success rate. Zoning and planning issues dominated the agenda, making up over 40% of all bills introduced. However, some areas saw a decline in attention compared to previous years: infrastructure (-23), environment (-15), zoning (-13), and housing (-11) issues all decreased. In contrast, procurement (+9), economic development (+8), civil service (+7), and public health (+6) gained more traction.",
+      "headline": "Council Busy in '16: 335 Bills Introduced, 251 Signed",
+      "narrative": "Zoning and planning dominated the City Council's agenda in 2016, with 107 bills related to zoning introduced and a median of 49 days from introduction to becoming law. However, some key issue areas saw significant declines compared to the previous year, including infrastructure (-23) and environment (-15). On the rise were procurement (+9), economic development (+8), civil service (+7), and public health (+6).\n\nThe council's most active sponsors were Council President Clarke (70 bills) and Councilmember Squilla (57 bills). Contested votes reveal a mix of partisan and non-partisan priorities, with several bills passing with significant dissent. For example, the sugary drink tax bill passed 13-4, while the parking ticket amnesty program bill passed 14-3.",
       "key_themes": [
-        "Zoning and Planning Dominate",
-        "Budgets Take Center Stage",
+        "Zoning Dominates Agenda",
+        "Bills Move Quickly to Law",
         "New Priorities Emerge"
       ],
       "stats": {
@@ -4175,6 +4206,8 @@
         "signed": 251,
         "failed": 7,
         "vetoed": 0,
+        "died_in_committee": 77,
+        "still_pending": 0,
         "pass_rate": 0.973,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -4402,17 +4435,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:48.390616Z"
+      "generated_at": "2026-06-10T19:20:15.848995Z"
     },
     {
       "year": 2017,
       "is_partial": false,
-      "headline": "Philadelphia City Council Sees Record Legislation in 2017",
-      "narrative": "The Philadelphia City Council saw a significant increase in legislative activity in 2017, introducing 352 bills - 17 more than the previous year. Zoning and planning issues dominated the agenda, with 127 zoning-related bills and 87 planning-related bills introduced. These issue areas also showed notable growth compared to prior years, with zoning up 20%, infrastructure up 22%, and transportation up 17%. In contrast, land-use decreased by 9% and taxation by 6%. The median number of days from introduction to becoming law was 56, indicating a relatively swift legislative process. Contested votes revealed tensions over issues like parking in Center City and minimum police oversight funding.",
+      "headline": "Council's Busy Year: 352 Bills Introduced, 287 Signed into Law",
+      "narrative": "Philadelphia City Council was busy in 2017, introducing 352 bills and signing 287 into law. Zoning, planning, infrastructure, transportation, land-use, and housing dominated the agenda, with zoning seeing a significant spike of 20 more bills than the previous year. On the other hand, land-use issues declined by 9, while civil-service and economic-development also saw decreases. The median time from introduction to becoming law was 56 days. Contested votes reveal that some council members were hesitant to increase police oversight funding, implement stricter restaurant rules, or license street sellers. These debates highlight the complexities of balancing competing interests in city governance.",
       "key_themes": [
-        "Record Legislative Activity",
+        "Busy Council Year",
         "Zoning Dominates Agenda",
-        "Infrastructure Growth"
+        "Infrastructure on the Rise"
       ],
       "stats": {
         "year": 2017,
@@ -4421,6 +4454,8 @@
         "signed": 287,
         "failed": 3,
         "vetoed": 0,
+        "died_in_committee": 62,
+        "still_pending": 0,
         "pass_rate": 0.99,
         "median_days_to_passage": 56,
         "top_tags": [
@@ -4646,17 +4681,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:22:56.593564Z"
+      "generated_at": "2026-06-10T19:20:35.259760Z"
     },
     {
       "year": 2018,
       "is_partial": false,
-      "headline": "City Council: A Year of Growth and Controversy",
-      "narrative": "Philadelphia City Council saw a significant increase in introduced bills, with 366 passed in 2018 - 14 more than the previous year. The median days from introduction to becoming law also decreased, with most bills being signed into law within 49 days. Zoning and planning dominated the agenda, with 127 zoning-related bills and 78 planning-focused ones. Notable issues on the rise include parking (+12), traffic (+7), government (+7), and housing (+7). On the other hand, neighborhood (-14), planning (-9), leasing (-9), and infrastructure (-6) saw a decline in legislative attention.\n\nContested votes reveal divisions within Council. Bills with dissenting opinions often dealt with contentious issues like taxation (Bill 180351-A: Philadelphia Imposes Construction Tax to Fund Affordable Housing and Homeownership Programs Citywide, passed 9-8) or property rights (Bill 180430: Philadelphia Council Proposes Toughest Ever Laws to Boot Thieves and Squatters from Private Property Now, passed 11-6). Despite the debates, a high percentage of bills became law - 99% of closed bills were signed into law.",
+      "headline": "Council's Busy Year: 366 Bills Introduced in 2018",
+      "narrative": "Philadelphia City Council was at its busiest in 2018, introducing 366 bills - a 14-bill increase from the previous year. Zoning and planning dominated the agenda, with 127 and 78 bills introduced respectively. Meanwhile, issues like parking, housing, and government saw significant increases compared to 2017. In fact, parking-related bills rose by 12, while housing and traffic issues gained 7 new bills each. On the other hand, neighborhood development, planning, leasing, and infrastructure issues all saw declines.\n\nContested votes revealed some of the council's most contentious debates. Five bills drew opposition from at least four members, with Council President Clarke leading the charge against one measure to strengthen laws against criminal trespassers.",
       "key_themes": [
-        "Increased Legislative Activity",
-        "Zoning Dominates Agenda",
-        "Controversial Taxation Measures"
+        "Zoning tops agenda",
+        "Bills on the rise",
+        "Council at odds"
       ],
       "stats": {
         "year": 2018,
@@ -4665,6 +4700,8 @@
         "signed": 296,
         "failed": 4,
         "vetoed": 0,
+        "died_in_committee": 66,
+        "still_pending": 0,
         "pass_rate": 0.987,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -4707,15 +4744,15 @@
             "delta": 12
           },
           {
+            "tag": "housing",
+            "delta": 7
+          },
+          {
             "tag": "traffic",
             "delta": 7
           },
           {
             "tag": "government",
-            "delta": 7
-          },
-          {
-            "tag": "housing",
             "delta": 7
           }
         ],
@@ -4907,17 +4944,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:07.938802Z"
+      "generated_at": "2026-06-10T19:20:55.825165Z"
     },
     {
       "year": 2019,
       "is_partial": false,
-      "headline": "City Council Sees Fewer Laws, But Big Spending Proposals",
-      "narrative": "In 2019, Philadelphia City Council introduced 361 bills, a decrease from the previous year. Despite this drop in legislation, many significant proposals made it into law, including a record-breaking $2.74 billion capital budget and a plan to pump $10.8 billion into infrastructure over six years. The top issue areas remained largely consistent with prior years, but there were notable shifts: neighborhood concerns rose by 10%, while public safety issues declined by 16%. Contested votes revealed some common ground among council members, as several bills passed with only one or two dissenting voices. Despite these trends, the overall impact of city legislation remains unclear.",
+      "headline": "Council Dominates with Zoning, Planning Bills in '19",
+      "narrative": "In 2019, City Council legislative activity focused on zoning and planning issues, with a total of 361 bills introduced, down slightly from the previous year. The top issue areas for Council were zoning (114), planning (77), housing (55), land-use (52), parking (51), and infrastructure (50). This is in contrast to the prior year, where public-safety concerns dominated the agenda, but saw a significant decline by 2019 with -16 fewer bills. Neighborhood issues also gained traction, increasing by +10 from last year.\n\nContested votes offer insight into Council's priorities. The most notable dissent came on bills addressing consumer bag fees, city budget allocations, and market street vendors, where one or more council members opposed measures that passed 15-2 to 16-1. This data reveals a Council focused on economic development, public safety, and community issues.",
       "key_themes": [
-        "Infrastructure spending",
-        "Fewer laws but big proposals",
-        "Neighborhood concerns rise"
+        "Zoning Dominates Legislative Agenda",
+        "Neighborhood Issues Gain Traction",
+        "Economic Development Focus"
       ],
       "stats": {
         "year": 2019,
@@ -4926,6 +4963,8 @@
         "signed": 271,
         "failed": 1,
         "vetoed": 6,
+        "died_in_committee": 83,
+        "still_pending": 0,
         "pass_rate": 0.975,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -4976,7 +5015,7 @@
             "delta": 6
           },
           {
-            "tag": "economic-development",
+            "tag": "taxation",
             "delta": 5
           }
         ],
@@ -5146,17 +5185,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:16.086738Z"
+      "generated_at": "2026-06-10T19:21:20.244373Z"
     },
     {
       "year": 2020,
       "is_partial": false,
-      "headline": "Council Passes Record Number of Laws in Chaotic 2020",
-      "narrative": "Philadelphia City Council passed a record number of laws in 2020, with 194 bills signed into law and only three failing to make it out of committee. The top issue areas for the year included zoning, planning, infrastructure, finance, transportation, and housing, but some issues saw significant declines, such as zoning (-54) and land-use (-31). Meanwhile, public-safety (+9), public-health (+3), and COVID-19 response (+3) emerged as major concerns.\n\nThe council's 2020 agenda was marked by controversy, with several contested votes on issues like tax abatements and police tactics. Despite these challenges, Council President Clarke and other sponsors pushed forward a range of significant legislation, including the $4.8 billion operating budget for Fiscal Year 2021.",
+      "headline": "Council Sees Record Decline in Zoning Bills Amid Pandemic",
+      "narrative": "Philadelphia City Council introduced 261 bills in 2020, down from the year before. Despite the drop, council members remained busy, with Council President Clarke introducing a record 58 bills and finance emerging as one of the top issue areas. Median days from introduction to becoming law held steady at 55.\n\nThe pandemic marked a turning point for many issues. Public-safety concerns rose by nine spots, while zoning, land-use, planning, and parking saw significant declines. COVID-19 response efforts also gained traction. Contested votes highlighted the council's ability to pass contentious legislation: 14 bills drew at least one Nay vote, with six bills passing with only a narrow margin.",
       "key_themes": [
-        "Record lawmaking pace",
-        "Public safety dominates",
-        "Budget battles"
+        "Decline in Zoning Bills",
+        "COVID-19 Response Grows",
+        "Council Productivity Holds Steady"
       ],
       "stats": {
         "year": 2020,
@@ -5165,6 +5204,8 @@
         "signed": 194,
         "failed": 3,
         "vetoed": 1,
+        "died_in_committee": 63,
+        "still_pending": 0,
         "pass_rate": 0.98,
         "median_days_to_passage": 55,
         "top_tags": [
@@ -5207,11 +5248,11 @@
             "delta": 9
           },
           {
-            "tag": "public-health",
+            "tag": "covid-19-response",
             "delta": 3
           },
           {
-            "tag": "covid-19-response",
+            "tag": "public-health",
             "delta": 3
           }
         ],
@@ -5389,17 +5430,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:25.109600Z"
+      "generated_at": "2026-06-10T19:21:41.450796Z"
     },
     {
       "year": 2021,
       "is_partial": false,
-      "headline": "City Council Shifts Gears in 2021 with Record Bill Count",
-      "narrative": "In 2021, Philadelphia City Council's legislative agenda saw a significant increase in bill introductions, with 266 bills proposed - five more than the previous year. This surge was driven by top issue areas such as zoning (87), transportation (63), and parking (61). Notably, parking issues rose by 34% from the prior year, while transportation concerns grew by 30%. These trends suggest that Council prioritized infrastructure development and public services in response to growing city needs.\n\nThe passing of significant bills like Bill 210320's infrastructure plan, allocating $9.4 billion for upgrades, and Bill 210321's record-breaking capital budget, demonstrate Council's commitment to addressing pressing issues. However, contested votes on measures like the Wage Tax Rate Overhaul reveal potential divisions among members on key policies.",
+      "headline": "Council Tackles Infrastructure, Zoning in Record-Breaking Year",
+      "narrative": "Philadelphia City Council made significant strides in 2021, introducing a record 266 bills and signing 222 into law. The median days from introduction to becoming law was 49, with the top issue areas being zoning, transportation, parking, planning, infrastructure, and housing. Notably, issues related to parking and transportation saw significant increases of +34 and +30 respectively, while finance, taxation, economic development, and public health declined by -9, -8, -8, and -7 respectively.\n\nThe year's legislative activity also revealed a shift in priorities, with the most active sponsors being Council President Clarke (52 bills), Councilmember Squilla (40 bills), and Councilmember Jones (25 bills). The highest-impact bills included infrastructure upgrades, record-breaking budgets for capital projects, and new allocations for city departments. Contested votes on issues like wage tax rates and police oversight demonstrate ongoing debates within the council.",
       "key_themes": [
-        "Increased bill introductions",
-        "Infrastructure development focus",
-        "Growing parking concerns"
+        "Infrastructure Upgrades",
+        "Record-Breaking Legislation",
+        "Transportation and Parking"
       ],
       "stats": {
         "year": 2021,
@@ -5408,6 +5449,8 @@
         "signed": 222,
         "failed": 0,
         "vetoed": 0,
+        "died_in_committee": 44,
+        "still_pending": 0,
         "pass_rate": 1.0,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -5631,17 +5674,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:34.344299Z"
+      "generated_at": "2026-06-10T19:22:06.297841Z"
     },
     {
       "year": 2022,
       "is_partial": false,
-      "headline": "City Council Fills Agenda with Zoning, Planning, and Infrastructure",
-      "narrative": "The Philadelphia City Council's legislative activity in 2022 saw a record number of bills introduced, with 285 new proposals. A staggering 98% of these bills became law, with a median time from introduction to signing of just 49 days. Zoning and planning dominated the agenda, accounting for 66 and 60 respective bills. However, there were notable shifts in issue areas: infrastructure saw a significant increase (+22), while parking declined (-21) compared to the previous year. The most active sponsors were Council President Clarke, Councilmember Jones, and Councilmember Johnson, each with multiple bills to their name.\n\nThe contentious votes offer insight into the council's priorities. Bills related to taxation (e.g., Bill 220578) drew opposition, while others (like Bill 220051-A) garnered support from a majority of members but with notable dissenting voices.",
+      "headline": "Council Hits Record Pace with 285 New Bills in 2022",
+      "narrative": "Philadelphia City Council saw a surge in legislative activity in 2022, introducing a record-breaking 285 bills - 19 more than the year before. The top issue areas that dominated the agenda were zoning (66), planning (60), infrastructure (58), transportation (55), and parking (40). Compared to the prior year, infrastructure issues saw a significant increase (+22), while parking and zoning issues declined (-21) each. Council President Clarke led the charge with 72 bills sponsored, followed by Councilmember Jones and Johnson. The most impactful bills included a record-breaking $5 billion operating budget, a $3.567 billion capital budget for infrastructure upgrades, and plans to ban single-use plastics in restaurants by 2025. Contested votes revealed some divisions within the council, with proposals like additional paid sick leave, tax relief, and a tax overhaul drawing opposition from some members.\n\nDespite these disputes, 98% of bills that reached a final vote became law, showing a high level of agreement among Council members on key issues. The median days from introduction to becoming law was 49, indicating a relatively swift legislative process.",
       "key_themes": [
-        "Zoning and planning dominate",
-        "Infrastructure takes center stage",
-        "Taxation sparks controversy"
+        "Record-Breaking Bills Introduced",
+        "Infrastructure Dominates Agenda",
+        "Council Divided on Key Issues"
       ],
       "stats": {
         "year": 2022,
@@ -5650,6 +5693,8 @@
         "signed": 228,
         "failed": 1,
         "vetoed": 3,
+        "died_in_committee": 53,
+        "still_pending": 0,
         "pass_rate": 0.983,
         "median_days_to_passage": 49,
         "top_tags": [
@@ -5874,17 +5919,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:43.990011Z"
+      "generated_at": "2026-06-10T19:22:34.676797Z"
     },
     {
       "year": 2023,
       "is_partial": false,
-      "headline": "City Council Sees Record Legislation, Shifts in Focus",
-      "narrative": "In 2023, Philadelphia City Council introduced 271 bills, a decrease of 14 from the previous year, but still a significant number. The most pressing issues were zoning (96), planning (61), parking (50), infrastructure (48), and transportation (46). Notably, zoning emerged as a top issue area for the first time, with 30 more bills introduced on this topic compared to the prior year. Other areas seeing growth include business (20) and land-use (16). Conversely, taxation (-18), environment (-13), and infrastructure (-10) saw declines in legislative attention.\n\nThe high-profile bills that became law, such as raising the minimum wage for service industry workers and banning face masks in public spaces, demonstrate the council's focus on addressing pressing social and economic concerns. The median days from introduction to becoming law was 42, indicating a relatively swift legislative process. Contested votes highlight areas of disagreement, with several bills passed by wide margins but still drawing dissenting voices.",
+      "headline": "Council Sees Record Bills, Tumultuous Sessions in 2023",
+      "narrative": "Philadelphia City Council members introduced 271 bills in 2023, down from the previous year but still a significant workload. The top issue areas remained largely unchanged from prior years, with zoning and planning dominating the agenda. However, some issues saw notable shifts: zoning increased by 30% compared to last year, while taxation decreased by 18%. Contested votes reveal that Councilmembers Brooks, Gauthier, O'Neill, Driscoll each opposed at least one bill that passed with a large margin of support (13-2 or 14-1). The median days from introduction to becoming law was 42, indicating a relatively efficient legislative process. Notable bills that became law included the FY24 Operating Budget and the $163 million in federal disaster relief funds addition to the city budget.\n\nThe most active sponsors were Council President Clarke (65 bills), Councilmember Jones (39 bills), and Councilmember Squilla (34 bills). The impact of some bills, such as those addressing face masks in public spaces or expanding affordable housing options, was high. Overall, 231 bills became law, while only one failed to pass and two were vetoed.",
       "key_themes": [
-        "Zoning Dominates Legislative Agenda",
-        "Shifts in Focus from Environment",
-        "Increased Attention on Business"
+        "Zoning dominates City Council agenda",
+        "Contested votes reveal legislative divides",
+        "Most bills passed with broad support"
       ],
       "stats": {
         "year": 2023,
@@ -5893,6 +5938,8 @@
         "signed": 231,
         "failed": 1,
         "vetoed": 2,
+        "died_in_committee": 37,
+        "still_pending": 0,
         "pass_rate": 0.987,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -6109,17 +6156,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:23:54.420660Z"
+      "generated_at": "2026-06-10T19:23:02.978683Z"
     },
     {
       "year": 2024,
       "is_partial": false,
-      "headline": "Council Concludes Record-Breaking Year with Sweeping Changes",
-      "narrative": "The Philadelphia City Council wrapped up a record-breaking year with a flurry of legislation, introducing 273 bills in 2024, two more than the previous year. A whopping 99% of these closed bills became law, with the median days from introduction to becoming law averaging just 42. Zoning and planning dominated the agenda, making up over half of all introduced bills. Public safety emerged as a rising concern, increasing by 16 issues compared to last year. Notably, Council President Johnson sponsored an unprecedented 63 bills, cementing their position at the forefront of legislative activity.\n\n Contested votes revealed some tension among council members. In five cases, votes were split along party lines, with a small group of dissenters opposing proposals. While no major veto threats emerged, these divisions hint at deeper policy debates brewing beneath the surface.",
+      "headline": "Council's Legislative Pace Picks Up in '24",
+      "narrative": "Philadelphia City Council saw a surge in legislative activity in 2024, with 273 bills introduced - two more than last year. Zoning dominated the agenda, accounting for 105 bills. Public-safety and business issues also gained traction, rising by 16 and 15 bills respectively from 2023. The median days from introduction to becoming law was 42, a relatively swift pace. Not all proposals were popular, however - five bills drew at least one Nay vote in the Council chambers.\n\nThe passage of several high-impact bills highlights the Council's focus on infrastructure and funding. A budget plan for next year's city spending passed with an impact score of 10/10, alongside a bill investing in city infrastructure over the next six years. These proposals come with potential drawbacks, such as increased property taxes for Philadelphia residents.",
       "key_themes": [
-        "Zoning Dominates Legislative Agenda",
-        "Public Safety Concerns Grow",
-        "Council President Sets Sponsorship Record"
+        "Zoning leads legislative agenda",
+        "Public-safety and business on rise",
+        "Infrastructure investment prioritized"
       ],
       "stats": {
         "year": 2024,
@@ -6128,6 +6175,8 @@
         "signed": 238,
         "failed": 2,
         "vetoed": 0,
+        "died_in_committee": 0,
+        "still_pending": 33,
         "pass_rate": 0.992,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -6192,11 +6241,11 @@
             "delta": -8
           },
           {
-            "tag": "leasing",
+            "tag": "neighborhood",
             "delta": -6
           },
           {
-            "tag": "neighborhood",
+            "tag": "leasing",
             "delta": -6
           }
         ],
@@ -6366,17 +6415,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:24:03.872147Z"
+      "generated_at": "2026-06-10T19:23:24.548755Z"
     },
     {
       "year": 2025,
       "is_partial": false,
-      "headline": "Council Dominated by Zoning, Budget Bills in '25",
-      "narrative": "Philadelphia City Council saw a surge in legislative activity in 2025, introducing 302 bills - a 29-bill increase from the previous year. The top issue areas that dominated the agenda were zoning (125 bills), planning (74 bills), housing (59 bills), and infrastructure (50 bills). These numbers show a notable shift towards increasing focus on housing (+21), zoning (+20), and planning (+18) compared to 2024, while concerns over parking (-37), public-safety (-16), transportation (-10), and traffic (-10) decreased. The most active sponsors were Council President Johnson (66 bills), Councilmember Squilla (42 bills), and Councilmember Young (34 bills). Contested votes on bills like Retailers Must Charge for Plastic Bags Now and Philadelphia Realty Transfer Tax Rate Hike reveal divisions among council members, with some opposing increases in taxes and fees. The high-impact laws passed include the City Budget for Next Year, Fair Treatment for All Workers Act, Buying Land for New Riverfront Industrial Park, Speed Cameras in School Zones Law, and Creating a Budget for City Buildings and Projects.",
+      "headline": "Council's Busy Year: 302 Bills, 248 Signed into Law",
+      "narrative": "Philadelphia City Council introduced a record-breaking 302 bills in 2025, with 248 making it to the mayor's desk and becoming law. The median days from introduction to becoming law was 42, with some major initiatives passing quickly like the Setting City Budget for Next Year bill that will see residents face a 4% tax increase. While zoning remained a top issue area at 125 bills, housing saw significant growth with a +21 increase from last year, alongside planning and infrastructure. Contested votes on issues like plastic bag fees and the Philly Development Tax reveal divisions among council members, with some consistently voting Nay on certain measures.",
       "key_themes": [
-        "Zoning Dominates Council Agenda",
-        "Budget Bills Galore",
-        "Housing Tops Rise"
+        "Zoning Dominates Agenda",
+        "Housing Growth Accelerates",
+        "Budget Changes Impact Residents"
       ],
       "stats": {
         "year": 2025,
@@ -6385,6 +6434,8 @@
         "signed": 248,
         "failed": 2,
         "vetoed": 0,
+        "died_in_committee": 0,
+        "still_pending": 52,
         "pass_rate": 0.992,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -6615,17 +6666,17 @@
           ]
         }
       ],
-      "generated_at": "2026-06-10T16:24:15.005498Z"
+      "generated_at": "2026-06-10T19:23:42.146150Z"
     },
     {
       "year": 2026,
       "is_partial": true,
-      "headline": "Council's Busy Year Sees Fewer Bills but More Success",
-      "narrative": "Philadelphia City Council's legislative activity slowed in 2026, with 158 bills introduced - a significant drop from the year before. Despite fewer proposals, councilors achieved a remarkable success rate of 97%, with 30 bills signed into law and none vetoed or failed to pass. The top issues dominating the agenda were zoning, infrastructure, planning, government, transportation, and finance, reflecting ongoing concerns in these areas.\n\nLooking at shifts from last year, development, public safety, and land use saw notable increases, while zoning, planning, housing, and business experienced declines. This suggests a shift towards addressing emerging needs rather than maintaining previous priorities. Notably, all 158 bills were passed without dissent, indicating a rare level of consensus among councilors this year.",
+      "headline": "Council's Busy Year: Fewer Bills, More Focus on Zoning",
+      "narrative": "Philadelphia City Council introduced 158 bills in 2026, a decrease of 144 from last year. The top issue areas that dominated the agenda were zoning (62), infrastructure (22), and planning (16). In contrast to previous years, development (+10) and public safety (+7) are gaining attention, while zoning (-63) and housing (-46) are declining priorities. Notably, every roll call vote this year was unanimous, indicating a lack of contentious issues.\n\nThe median days from introduction to becoming law was 42, with 30 bills signed into law, one failing, and none vetoed. The impact of certain bills, such as the city budget and immigrant rights legislation, highlights ongoing concerns about public safety, transparency, and accountability.",
       "key_themes": [
-        "Fewer but more effective bills",
-        "Shifting priority areas",
-        "Unanimous approval"
+        "Fewer Bills Introduced",
+        "Zoning Dominates Agenda",
+        "Unanimous Votes"
       ],
       "stats": {
         "year": 2026,
@@ -6634,6 +6685,8 @@
         "signed": 30,
         "failed": 1,
         "vetoed": 0,
+        "died_in_committee": 0,
+        "still_pending": 127,
         "pass_rate": 0.968,
         "median_days_to_passage": 42,
         "top_tags": [
@@ -6684,7 +6737,7 @@
             "delta": 6
           },
           {
-            "tag": "neighborhood development",
+            "tag": "land use planning",
             "delta": 5
           }
         ],
@@ -6795,7 +6848,7 @@
         }
       ],
       "contested_bills": [],
-      "generated_at": "2026-06-10T16:27:28.345680Z"
+      "generated_at": "2026-06-10T19:24:01.846123Z"
     }
   ]
 }
