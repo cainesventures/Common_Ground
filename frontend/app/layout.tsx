@@ -13,6 +13,7 @@ import NextTopLoader from 'nextjs-toploader'
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://opencommonground.com'),
   title: 'Open Common Ground — Philadelphia City Council Tracker',
   description: 'Track Philadelphia City Council bills with AI-generated summaries and 17 political perspectives. Free, independent, no ads.',
   openGraph: {

@@ -35,6 +35,19 @@ _load_env()
 DB_PATH = os.environ.get("DB_PATH", str(ROOT / "common_ground_test.db"))
 BASE_URL = "https://opencommonground.com"
 OUTPUT = ROOT / "frontend" / "public" / "sitemap.xml"
+HISTORY_JSON = ROOT / "frontend" / "public" / "data" / "legislative_history.json"
+
+
+def _history_years() -> list[int]:
+    """Years with a generated year-in-review page (see generate_legislative_narrative.py)."""
+    if not HISTORY_JSON.exists():
+        return []
+    try:
+        import json
+        data = json.loads(HISTORY_JSON.read_text(encoding="utf-8"))
+        return sorted(e["year"] for e in data.get("years", []))
+    except Exception:
+        return []
 
 
 def build_sitemap(db_path: str) -> ElementTree:
@@ -69,6 +82,15 @@ def build_sitemap(db_path: str) -> ElementTree:
         SubElement(u, "priority").text = priority
         SubElement(u, "changefreq").text = freq
         SubElement(u, "lastmod").text = lastmod
+
+    current_year = datetime.now(timezone.utc).year
+    for year in _history_years():
+        u = SubElement(urlset, "url")
+        SubElement(u, "loc").text = f"{BASE_URL}/philadelphia/insights/{year}"
+        SubElement(u, "priority").text = "0.7"
+        # Past years are final; only the current year's review changes
+        SubElement(u, "changefreq").text = "weekly" if year == current_year else "yearly"
+        SubElement(u, "lastmod").text = now
 
     for bill_id in bill_ids:
         u = SubElement(urlset, "url")

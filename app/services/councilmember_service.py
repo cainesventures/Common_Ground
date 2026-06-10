@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
 from app.models import Councilmember, Legislation
@@ -37,10 +37,19 @@ KNOWN_TERM_START: dict[str, int] = {
     "katherinegilmorerichardson": 2020,
     "isaiahthomas":               2020,
     "jimharrity":                 2024,
-    "ninaahmad":                  2020,
+    "ninaahmad":                  2024,
     "ruelandau":                  2024,
     "kendrabrooks":               2020,
     "nicolasorourke":             2024,
+}
+
+# Party affiliation keyed by profile slug. Council is majority-Democratic but
+# not uniformly so — O'Neill is Republican, Brooks and O'Rourke are Working
+# Families Party. Anyone not listed defaults to Democratic.
+KNOWN_PARTY: dict[str, str] = {
+    "brianoneill":    "Republican",
+    "kendrabrooks":   "Working Families",
+    "nicolasorourke": "Working Families",
 }
 
 # Current council members only (first 17 entries from the page, deduplicated)
@@ -175,15 +184,33 @@ def _extract_term_start(bio: str | None, slug: str) -> int | None:
     return KNOWN_TERM_START.get(slug)
 
 
-def _bills_sponsored_count(db: Session, member_name: str) -> int:
-    """Count bills where sponsor field contains this member's last name."""
-    last_name = member_name.split()[-1]
-    return (
-        db.query(func.count(Legislation.id))
-        .filter(Legislation.sponsor.ilike(f"%{last_name}%"))
-        .scalar()
-        or 0
-    )
+_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+
+
+def _member_last_name(member_name: str) -> str:
+    """Surname for sponsor matching — drops generational suffixes so
+    'Curtis Jones, Jr.' yields 'Jones', not 'Jr.'."""
+    parts = [p for p in member_name.replace(",", " ").split() if p.rstrip(".").lower() not in _NAME_SUFFIXES]
+    return parts[-1] if parts else member_name
+
+
+def _sponsored_counts(db: Session, member_name: str, term_start: int | None) -> tuple[int, int]:
+    """(bills_sponsored, bills_passed) for this member.
+
+    Sponsor strings are titles + surname ("Councilmember Jones"), so matching
+    is by surname, scoped to the member's time in office to avoid counting an
+    earlier member with the same surname.
+    """
+    from sqlalchemy import extract
+    last_name = _member_last_name(member_name)
+    q = db.query(
+        func.count(Legislation.id),
+        func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)),
+    ).filter(Legislation.sponsor.ilike(f"%{last_name}%"))
+    if term_start:
+        q = q.filter(extract("year", Legislation.introduced_date) >= term_start)
+    total, passed = q.first()
+    return int(total or 0), int(passed or 0)
 
 
 async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
@@ -205,11 +232,11 @@ async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
                 logger.warning(f"Failed to scrape {url}: {e}")
                 profile = {"profile_url": url, "photo_url": None, "bio": None, "email": None, "phone": None}
 
-            bills_count = _bills_sponsored_count(db, parsed["name"])
-
             # Upsert by profile_url slug
             slug = url.rstrip("/").split("/")[-1]
             member_id = f"cm_{slug}"
+
+            bills_count, bills_passed = _sponsored_counts(db, parsed["name"], KNOWN_TERM_START.get(slug))
 
             existing = db.query(Councilmember).filter(Councilmember.id == member_id).first()
             if existing:
@@ -220,13 +247,14 @@ async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:
 
             cm.name = parsed["name"]
             cm.district = parsed["district"]
-            cm.party = "Democratic"  # All current Philly council members are Democratic
+            cm.party = KNOWN_PARTY.get(slug, "Democratic")
             cm.email = profile["email"]
             cm.phone = profile["phone"]
             cm.photo_url = profile.get("photo_url")
             cm.bio = profile.get("bio")
             cm.profile_url = profile["profile_url"]
             cm.bills_sponsored = bills_count
+            cm.bills_passed = bills_passed
             cm.term_start = _extract_term_start(profile.get("bio"), slug)
             cm.updated_at = datetime.utcnow()
 

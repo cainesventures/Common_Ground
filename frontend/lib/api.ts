@@ -112,6 +112,25 @@ export const api = {
     return apiFetch(`/api/insights/sponsor-leaderboard${qs ? `?${qs}` : ''}`)
   },
 
+  getInsightsContestedBills: (params?: { year?: number; sort?: string; limit?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.year)  p.set('year',  String(params.year))
+    if (params?.sort)  p.set('sort',  params.sort)
+    if (params?.limit) p.set('limit', String(params.limit))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/contested-bills${qs ? `?${qs}` : ''}`)
+  },
+
+  getInsightsVotingRecords: () => apiFetch('/api/insights/voting-records'),
+
+  getInsightsAgreementMatrix: (params?: { current_only?: boolean; min_shared?: number }) => {
+    const p = new URLSearchParams()
+    if (params?.current_only !== undefined) p.set('current_only', String(params.current_only))
+    if (params?.min_shared) p.set('min_shared', String(params.min_shared))
+    const qs = p.toString()
+    return apiFetch(`/api/insights/agreement-matrix${qs ? `?${qs}` : ''}`)
+  },
+
   getInsightsCommitteeActivity: (params?: { year?: number; top_n?: number }) => {
     const p = new URLSearchParams()
     if (params?.year)  p.set('year',  String(params.year))

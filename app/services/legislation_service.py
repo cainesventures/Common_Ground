@@ -739,12 +739,15 @@ async def sync_vote_records(legislation_id: str, db: Session) -> dict:
     if not raw_votes:
         return {"fetched": 0, "matched": 0, "upserted": 0}
 
-    # Build last-name → councilmember lookup
+    # Build last-name → councilmember lookup. Generational suffixes are
+    # dropped so "Curtis Jones, Jr." maps from "jones", not "jr.".
+    SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
     councilmembers = db.query(Councilmember).all()
     name_map: dict = {}
     for cm in councilmembers:
-        last = cm.name.split()[-1].lower()
-        name_map[last] = cm
+        parts = [p for p in cm.name.replace(",", " ").split() if p.rstrip(".").lower() not in SUFFIXES]
+        if parts:
+            name_map[parts[-1].lower()] = cm
 
     matched = 0
     upserted = 0
