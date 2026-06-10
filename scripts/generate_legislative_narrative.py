@@ -308,7 +308,14 @@ def build_year_prompt(s: dict, is_partial_year: bool) -> str:
         for b in s["contested_bills"]
     ) or "none — every roll call this year was unanimous"
 
-    pass_str = f"{round(s['pass_rate'] * 100)}% of closed bills became law" if s["pass_rate"] is not None else "pass rate unavailable"
+    if s["pass_rate"] is not None:
+        pass_str = (
+            f"of the bills that reached a final vote, {round(s['pass_rate'] * 100)}% became law"
+            " (bills that died in committee never reached a vote and are NOT counted in that percentage"
+            " — never describe the pass rate as a share of all introduced bills)"
+        )
+    else:
+        pass_str = "pass rate unavailable"
     delta_str = ""
     if s["delta_vs_prior"] is not None:
         word = "more" if s["delta_vs_prior"] >= 0 else "fewer"

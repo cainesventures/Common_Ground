@@ -772,7 +772,12 @@ async def sync_vote_records(legislation_id: str, db: Session) -> dict:
         action_date = None
         if v.get("action_date"):
             try:
-                action_date = datetime.fromisoformat(v["action_date"].rstrip("Z"))
+                raw = v["action_date"].rstrip("Z")
+                try:
+                    action_date = datetime.fromisoformat(raw)
+                except ValueError:
+                    # Legistar history rows use US format, e.g. "6/12/2014"
+                    action_date = datetime.strptime(raw, "%m/%d/%Y")
             except (ValueError, AttributeError):
                 pass
 

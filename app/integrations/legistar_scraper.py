@@ -345,6 +345,11 @@ class PhilaLegistarScraper:
                     el = page.query_selector(f"#ctl00_ContentPlaceHolder1_lbl{field}2")
                     return el.inner_text().strip() if el else ""
 
+                # "In control" (the committee a bill was referred to) renders as
+                # a hyperlink, not a label — there is no lblInControlOf2.
+                committee_el = page.query_selector("#ctl00_ContentPlaceHolder1_hypInControlOf2")
+                committee = committee_el.inner_text().strip() if committee_el else ""
+
                 return {
                     "matter_id": matter_id,
                     "file_number": _get("File"),
@@ -355,7 +360,7 @@ class PhilaLegistarScraper:
                     "title": _get("Title"),
                     "sponsors": _get("Sponsors"),
                     "description": _get("Name"),  # "Name" field = short description
-                    "committee": _get("ReferredTo"),  # referred-to committee body
+                    "committee": committee,
                 }
             except Exception as e:
                 logger.error(f"Error scraping detail for matter {matter_id}: {e}")
