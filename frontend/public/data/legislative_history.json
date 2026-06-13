@@ -1,37 +1,37 @@
 {
-  "generated_at": "2026-06-11T01:23:27.431425Z",
+  "generated_at": "2026-06-13T02:02:09.731971Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
   },
-  "total_bills": 8623,
+  "total_bills": 8631,
   "key_stats": [
     {
       "label": "Bills Introduced",
-      "value": "8,623",
+      "value": "8,631",
       "note": "2000–2026"
     },
     {
       "label": "Signed into Law",
-      "value": "6,621",
+      "value": "6,638",
       "note": "99% of closed bills"
     },
     {
       "label": "Active Bills",
-      "value": "1,910",
+      "value": "1,901",
       "note": "in committee or introduced"
     },
     {
       "label": "Top Issue",
       "value": "Zoning",
-      "note": "2,578 bills"
+      "note": "2,579 bills"
     }
   ],
-  "narrative": "Over the past 27 years, Philadelphia's City Council has introduced an astonishing 8,623 bills, averaging a staggering 319 per year. This vast dataset reveals the inner workings of local governance and offers valuable insights into the city's priorities. From zoning regulations to budget allocations, every aspect of municipal life is represented in these records. The sheer scale of this legislative activity is a testament to the complexity and nuance of urban governance.\n\nAs we delve into the data, patterns begin to emerge. Zoning has dominated the council's agenda for nearly two decades, with 2,578 bills introduced on this topic alone. Planning and infrastructure have also been consistent priorities, with 1,938 and 1,533 bills respectively. In contrast, issues like housing and finance have ebbed and flowed in importance over time, while public safety has gained traction in recent years. The 99% pass rate for signed bills suggests a high level of consensus among council members, although the relatively rare occurrence of contested votes (361 across all years) hints at underlying tensions and divisions.\n\nThis data is more than just a historical record – it's a tool for civic engagement and participation. By examining the council's priorities and trends, Philadelphians can gain a deeper understanding of how their city is governed and make informed decisions about the issues that matter most to them. Tracking legislation allows citizens to hold their elected officials accountable and advocate for change when needed. With this wealth of information at our fingertips, we're empowered to shape the future of our city in meaningful ways.",
+  "narrative": "Over the past 27 years, the Philadelphia City Council has introduced a staggering 8,631 bills, with an average of 320 per year. This data represents a unique opportunity to understand the city's legislative priorities and trends, providing a window into the council's decision-making process. The sheer volume of legislation suggests that the council is actively addressing the needs of its constituents, but also raises questions about how effectively these efforts are being implemented.\n\nA closer examination of the bill summaries reveals some striking patterns. Zoning has been the top issue area since 2001, with a remarkable 2,579 bills introduced over the years. Planning and infrastructure have consistently ranked second and third, respectively, reflecting the council's emphasis on urban development and community growth. The 99% pass rate for signed bills suggests that the council is often able to reach consensus on key issues, but the relatively low number of contested votes (361 across all years) implies a largely harmonious working relationship between council members.\n\nThe data collected here can inform civic engagement and help Philadelphians understand the city's legislative landscape. By exploring the top sponsors and issue areas, residents can identify priority areas for advocacy and participation. The data also highlights the importance of tracking legislation, as it provides valuable context for understanding the city's policy decisions and their impact on communities. By staying informed about the council's activities, Philadelphians can hold elected officials accountable and contribute to a more participatory democracy.",
   "top_issues": [
     {
       "tag": "zoning",
-      "count": 2578
+      "count": 2579
     },
     {
       "tag": "planning",
@@ -39,7 +39,7 @@
     },
     {
       "tag": "infrastructure",
-      "count": 1533
+      "count": 1534
     },
     {
       "tag": "housing",
@@ -47,7 +47,7 @@
     },
     {
       "tag": "transportation",
-      "count": 1192
+      "count": 1194
     },
     {
       "tag": "finance",
@@ -73,7 +73,7 @@
     },
     {
       "name": "Councilmember Squilla",
-      "count": 632
+      "count": 635
     },
     {
       "name": "Councilmember Clarke",
@@ -6671,32 +6671,36 @@
     {
       "year": 2026,
       "is_partial": true,
-      "headline": "City Council Focuses on Zoning, Infrastructure in Record Year",
-      "narrative": "Philadelphia City Council introduced a record low number of bills this year with 158 proposals, down from 302 last year. The median days from introduction to becoming law was 42, indicating a faster legislative process. Top issue areas dominated the agenda, with zoning emerging as the top concern at 62 proposals.\n\nA notable shift in priorities emerged, with development and public safety rising by 10 and 7 bills respectively compared to last year. On the other hand, planning, housing, and business decreased significantly by 58, 46, and 44 proposals respectively. The record-low veto count speaks to council's bipartisan cooperation.\n\nDespite the efficiency of City Council's processes, one area that stood out was the near-unanimity on legislation. All roll calls this year were unanimous, indicating a strong sense of agreement among lawmakers.",
+      "headline": "Council Sees Record Low Introductions Amid Controversy-Free Votes",
+      "narrative": "The Philadelphia City Council introduced 166 bills in 2026, a significant drop from last year's total but still saw a flurry of activity. Zoning dominated the agenda with 63 bills, followed closely by infrastructure and transportation. In contrast to previous years, development, public safety, land use, and neighborhood development saw increases in bill introductions, while zoning, planning, housing, and business declined.\n\nThe year's legislative record is marked by an unusual lack of controversy, with every roll call vote unanimous.",
       "key_themes": [
         "Zoning Dominates Agenda",
-        "Public Safety Gains Priority",
-        "Council Cooperation Boosts Progress"
+        "Controversy-Free Votes Uncommon",
+        "Development on the Rise"
       ],
       "stats": {
         "year": 2026,
-        "total": 158,
-        "delta_vs_prior": -144,
-        "signed": 30,
+        "total": 166,
+        "delta_vs_prior": -136,
+        "signed": 43,
         "failed": 1,
         "vetoed": 0,
         "died_in_committee": 0,
-        "still_pending": 127,
-        "pass_rate": 0.968,
-        "median_days_to_passage": 42,
+        "still_pending": 122,
+        "pass_rate": 0.977,
+        "median_days_to_passage": 49,
         "top_tags": [
           {
             "tag": "zoning",
-            "count": 62
+            "count": 63
           },
           {
             "tag": "infrastructure",
-            "count": 22
+            "count": 23
+          },
+          {
+            "tag": "transportation",
+            "count": 16
           },
           {
             "tag": "planning",
@@ -6705,10 +6709,6 @@
           {
             "tag": "government",
             "count": 15
-          },
-          {
-            "tag": "transportation",
-            "count": 14
           },
           {
             "tag": "finance",
@@ -6726,25 +6726,25 @@
         "rising_tags": [
           {
             "tag": "development",
-            "delta": 10
+            "delta": 11
           },
           {
             "tag": "public safety",
-            "delta": 7
+            "delta": 10
           },
           {
             "tag": "land use",
             "delta": 6
           },
           {
-            "tag": "land use planning",
+            "tag": "neighborhood development",
             "delta": 5
           }
         ],
         "falling_tags": [
           {
             "tag": "zoning",
-            "delta": -63
+            "delta": -62
           },
           {
             "tag": "planning",
@@ -6762,7 +6762,11 @@
         "top_sponsors": [
           {
             "name": "Council President Johnson",
-            "count": 36
+            "count": 37
+          },
+          {
+            "name": "Councilmember Squilla",
+            "count": 16
           },
           {
             "name": "Councilmember Young",
@@ -6773,11 +6777,7 @@
             "count": 15
           },
           {
-            "name": "Councilmember Squilla",
-            "count": 13
-          },
-          {
-            "name": "Councilmember Gauthier",
+            "name": "Councilmember Jones",
             "count": 11
           }
         ],
@@ -6790,7 +6790,7 @@
           "title": "City Budget for Next Year",
           "lede": "Philadelphia City Council unveiled its proposed $4 billion budget for Fiscal Year 2027, outlining how tax dollars will be spent across city departments. The operating budget would allocate funds to various initiatives, pending council approval.",
           "impact_score": 9,
-          "status": "in_committee",
+          "status": "introduced",
           "tags": [
             "finance",
             "government"
@@ -6839,7 +6839,7 @@
           "title": "Long-Term City Budget Plan 2027-2032",
           "lede": "Philadelphia City Council has approved a six-year capital program for 2027-2032, with estimated costs totaling $22.1 billion to fund various city infrastructure and development projects.",
           "impact_score": 8,
-          "status": "in_committee",
+          "status": "introduced",
           "tags": [
             "finance",
             "infrastructure",
@@ -6848,7 +6848,7 @@
         }
       ],
       "contested_bills": [],
-      "generated_at": "2026-06-11T01:23:20.354904Z"
+      "generated_at": "2026-06-13T02:02:02.754006Z"
     }
   ]
 }
