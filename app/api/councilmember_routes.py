@@ -123,7 +123,7 @@ async def list_councilmembers(db: Session = Depends(get_db)):
                 "email": m.email,
                 "phone": m.phone,
                 "photo_url": m.photo_url,
-                "bills_sponsored": get_councilmember_bills(db, m.name, limit=1, offset=0)[1],
+                "bills_sponsored": get_councilmember_bills(db, m.name, term_start=m.term_start, limit=1, offset=0)[1],
                 "profile_url": m.profile_url,
                 "term_start": m.term_start,
                 "years_serving": (datetime.utcnow().year - m.term_start) if m.term_start else None,
@@ -147,9 +147,9 @@ async def get_member(
     if not member:
         raise HTTPException(status_code=404, detail="Council member not found")
 
-    _, total = get_councilmember_bills(db, member.name, limit=1, offset=0)
     offset = (bills_page - 1) * bills_limit
-    bills, _ = get_councilmember_bills(db, member.name, limit=bills_limit, offset=offset)
+    bills, total = get_councilmember_bills(db, member.name, term_start=member.term_start,
+                                           limit=bills_limit, offset=offset)
 
     return {
         "success": True,

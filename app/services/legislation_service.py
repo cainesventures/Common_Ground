@@ -739,15 +739,10 @@ async def sync_vote_records(legislation_id: str, db: Session) -> dict:
     if not raw_votes:
         return {"fetched": 0, "matched": 0, "upserted": 0}
 
-    # Build last-name → councilmember lookup. Generational suffixes are
-    # dropped so "Curtis Jones, Jr." maps from "jones", not "jr.".
-    SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+    # Build surname → councilmember lookup (suffix-aware; see name_matching).
+    from app.services.name_matching import surname
     councilmembers = db.query(Councilmember).all()
-    name_map: dict = {}
-    for cm in councilmembers:
-        parts = [p for p in cm.name.replace(",", " ").split() if p.rstrip(".").lower() not in SUFFIXES]
-        if parts:
-            name_map[parts[-1].lower()] = cm
+    name_map = {surname(cm.name): cm for cm in councilmembers if surname(cm.name)}
 
     matched = 0
     upserted = 0
@@ -761,9 +756,7 @@ async def sync_vote_records(legislation_id: str, db: Session) -> dict:
 
     for v in raw_votes:
         voter_name = v["voter_name"]  # "Councilmember Bass" / "Council President Johnson"
-        # Strip title prefix — last word is always the last name
-        last_name = voter_name.split()[-1].strip().lower() if voter_name else ""
-        cm = name_map.get(last_name)
+        cm = name_map.get(surname(voter_name))
         # Normalize vote value from Legistar web format to our canonical format
         v["vote"] = VOTE_NORMALIZE.get(v["vote"].lower(), v["vote"])
         if cm:

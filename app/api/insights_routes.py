@@ -5,6 +5,7 @@ from sqlalchemy import func, extract, case
 from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models import Legislation, BillVoteRecord, Councilmember
+from app.services.name_matching import surname as _last_name, strip_title as _short_name
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
@@ -423,20 +424,6 @@ async def get_committee_activity(
 
 def _nay_count():
     return func.sum(case((BillVoteRecord.vote == "Nays", 1), else_=0))
-
-
-def _short_name(voter_name: str) -> str:
-    for prefix in ("Councilmember At-Large ", "Councilmember ", "Council President "):
-        if voter_name.startswith(prefix):
-            return voter_name[len(prefix):]
-    return voter_name
-
-
-_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
-
-def _last_name(name: str) -> str:
-    parts = [p for p in name.replace(",", " ").split() if p.rstrip(".").lower() not in _NAME_SUFFIXES]
-    return parts[-1].lower() if parts else name.lower()
 
 
 @router.get("/contested-bills")

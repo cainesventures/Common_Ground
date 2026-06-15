@@ -458,8 +458,9 @@ def _step_votes(bill, db, label: str, log) -> str:
         log.info(f"{label} votes — no vote records found")
         return "processed"
 
+    from app.services.name_matching import surname
     councilmembers = db.query(Councilmember).all()
-    name_map = {cm.name.split()[-1].lower(): cm for cm in councilmembers}
+    name_map = {surname(cm.name): cm for cm in councilmembers}
 
     VOTE_NORMALIZE = {
         "ayes": "Yea", "aye": "Yea", "yes": "Yea", "yea": "Yea",
@@ -471,8 +472,7 @@ def _step_votes(bill, db, label: str, log) -> str:
     upserted = 0
     for v in raw_votes:
         voter_name = v["voter_name"]
-        last_name = voter_name.split()[-1].strip().lower() if voter_name else ""
-        cm = name_map.get(last_name)
+        cm = name_map.get(surname(voter_name))
         normalized_vote = VOTE_NORMALIZE.get((v.get("vote") or "").lower(), v.get("vote", ""))
 
         action_date = None

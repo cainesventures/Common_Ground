@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, case
+from sqlalchemy import func, case, extract
 from sqlalchemy.orm import Session
 
 from app.models import Councilmember, Legislation
@@ -184,31 +184,31 @@ def _extract_term_start(bio: str | None, slug: str) -> int | None:
     return KNOWN_TERM_START.get(slug)
 
 
-_NAME_SUFFIXES = {"jr", "sr", "ii", "iii", "iv"}
+def _sponsored_filter(query, member_name: str, term_start: int | None):
+    """Apply the canonical sponsored-bill filter to a query.
 
-
-def _member_last_name(member_name: str) -> str:
-    """Surname for sponsor matching — drops generational suffixes so
-    'Curtis Jones, Jr.' yields 'Jones', not 'Jr.'."""
-    parts = [p for p in member_name.replace(",", " ").split() if p.rstrip(".").lower() not in _NAME_SUFFIXES]
-    return parts[-1] if parts else member_name
+    Sponsor strings are title + surname ("Councilmember Jones"), so matching is
+    by surname (suffix-aware — see app.services.name_matching), scoped to the
+    member's time in office so an earlier member with the same surname (or a
+    substring match) isn't attributed to them.
+    """
+    from app.services.name_matching import surname
+    query = query.filter(Legislation.sponsor.ilike(f"%{surname(member_name)}%"))
+    if term_start:
+        query = query.filter(extract("year", Legislation.introduced_date) >= term_start)
+    return query
 
 
 def _sponsored_counts(db: Session, member_name: str, term_start: int | None) -> tuple[int, int]:
-    """(bills_sponsored, bills_passed) for this member.
-
-    Sponsor strings are titles + surname ("Councilmember Jones"), so matching
-    is by surname, scoped to the member's time in office to avoid counting an
-    earlier member with the same surname.
-    """
-    from sqlalchemy import extract
-    last_name = _member_last_name(member_name)
-    q = db.query(
-        func.count(Legislation.id),
-        func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)),
-    ).filter(Legislation.sponsor.ilike(f"%{last_name}%"))
-    if term_start:
-        q = q.filter(extract("year", Legislation.introduced_date) >= term_start)
+    """(bills_sponsored, bills_passed) for this member."""
+    q = _sponsored_filter(
+        db.query(
+            func.count(Legislation.id),
+            func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)),
+        ),
+        member_name,
+        term_start,
+    )
     total, passed = q.first()
     return int(total or 0), int(passed or 0)
 
@@ -317,14 +317,15 @@ def get_councilmember(db: Session, member_id: str) -> Optional[Councilmember]:
     return db.query(Councilmember).filter(Councilmember.id == member_id).first()
 
 
-def get_councilmember_bills(db: Session, member_name: str, limit: int = 20, offset: int = 0):
-    """Return bills sponsored by this council member."""
-    last_name = member_name.split()[-1]
-    query = (
-        db.query(Legislation)
-        .filter(Legislation.sponsor.ilike(f"%{last_name}%"))
-        .order_by(Legislation.introduced_date.desc())
-    )
+def get_councilmember_bills(db: Session, member_name: str, term_start: int | None = None,
+                            limit: int = 20, offset: int = 0):
+    """Return (bills, total) sponsored by this council member.
+
+    Uses the same surname + term-scoped filter as the cached bills_sponsored /
+    bills_passed counts, so the live page and the stored counts always agree.
+    """
+    query = _sponsored_filter(db.query(Legislation), member_name, term_start)
+    query = query.order_by(Legislation.introduced_date.desc())
     total = query.count()
     bills = query.offset(offset).limit(limit).all()
     return bills, total
