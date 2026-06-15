@@ -303,6 +303,11 @@ def get_legislative_profile(db: Session, member_id: str, member_name: str,
     nays = vcount.get("Nays", 0) + vcount.get("Nay", 0)
     present = total_votes - absent
 
+    # The specific bills this member voted No on, with the chamber split for
+    # context (e.g. "passed 14-3 over their objection"). Council is ~94%
+    # unanimous, so these are the votes that actually distinguish a member.
+    dissent_bills = _member_dissent_bills(db, member_id)
+
     return {
         "outcomes": {
             "total": total,
@@ -325,8 +330,67 @@ def get_legislative_profile(db: Session, member_id: str, member_name: str,
             "absent": absent,
             "dissents": nays,
             "attendance_rate": round(present / total_votes, 3) if total_votes else None,
+            "dissent_bills": dissent_bills,
         },
     }
+
+
+def _member_dissent_bills(db: Session, member_id: str) -> list[dict]:
+    """Bills this member voted Nay on, newest first, with the chamber vote split."""
+    nay_rows = (
+        db.query(BillVoteRecord.legislation_id, BillVoteRecord.action_date)
+        .filter(
+            BillVoteRecord.councilmember_id == member_id,
+            BillVoteRecord.vote.in_(["Nays", "Nay"]),
+        )
+        .all()
+    )
+    if not nay_rows:
+        return []
+
+    lids = [r[0] for r in nay_rows]
+    date_by_lid = {lid: d for lid, d in nay_rows}
+
+    tallies = (
+        db.query(
+            BillVoteRecord.legislation_id,
+            func.sum(case((BillVoteRecord.vote == "Yea", 1), else_=0)),
+            func.sum(case((BillVoteRecord.vote.in_(["Nays", "Nay"]), 1), else_=0)),
+        )
+        .filter(BillVoteRecord.legislation_id.in_(lids))
+        .group_by(BillVoteRecord.legislation_id)
+        .all()
+    )
+    tally_by_lid = {lid: (int(y or 0), int(n or 0)) for lid, y, n in tallies}
+
+    bills = (
+        db.query(
+            Legislation.id,
+            Legislation.bill_number,
+            Legislation.plain_title,
+            Legislation.headline,
+            Legislation.title,
+            Legislation.status,
+        )
+        .filter(Legislation.id.in_(lids))
+        .all()
+    )
+
+    out = []
+    for b in bills:
+        yeas, bill_nays = tally_by_lid.get(b.id, (0, 0))
+        d = date_by_lid.get(b.id)
+        out.append({
+            "id": b.id,
+            "bill_number": b.bill_number,
+            "title": b.plain_title or b.headline or b.title,
+            "status": b.status,
+            "action_date": d.isoformat() if d else None,
+            "yeas": yeas,
+            "nays": bill_nays,
+        })
+    out.sort(key=lambda x: x["action_date"] or "", reverse=True)
+    return out
 
 
 async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:

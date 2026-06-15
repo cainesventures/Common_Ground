@@ -161,7 +161,20 @@ interface Profile {
   impact: { levels: Record<string, number>; avg_score: number | null }
   committees: { committee: string; count: number }[]
   median_days_to_passage: number | null
-  voting: { total_votes: number; absent: number; dissents: number; attendance_rate: number | null }
+  voting: {
+    total_votes: number; absent: number; dissents: number; attendance_rate: number | null
+    dissent_bills: DissentBill[]
+  }
+}
+
+interface DissentBill {
+  id: string
+  bill_number: string
+  title: string
+  status: string
+  action_date: string | null
+  yeas: number
+  nays: number
 }
 
 const OUTCOME_SEGMENTS: { key: keyof Profile['outcomes']; label: string; color: string }[] = [
@@ -171,19 +184,34 @@ const OUTCOME_SEGMENTS: { key: keyof Profile['outcomes']; label: string; color: 
   { key: 'failed_vetoed',     label: 'Failed / vetoed',  color: '#ef4444' },
 ]
 
-function Metric({ value, label, sub }: { value: string | number; label: string; sub?: string }) {
+function Metric({ value, label, sub, onClick, expanded }: {
+  value: string | number; label: string; sub?: string
+  onClick?: () => void; expanded?: boolean
+}) {
+  const interactive = !!onClick
   return (
-    <div className="border rounded-lg p-3">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!interactive}
+      className={`border rounded-lg p-3 text-left w-full ${
+        interactive ? 'hover:border-primary/60 hover:bg-muted/40 transition-colors cursor-pointer' : 'cursor-default'
+      } ${expanded ? 'border-primary/60 bg-muted/40' : ''}`}
+    >
       <p className="text-xl font-bold tabular-nums leading-none">{value}</p>
-      <p className="text-xs font-medium mt-1.5">{label}</p>
+      <p className="text-xs font-medium mt-1.5 flex items-center gap-1">
+        {label}
+        {interactive && <span className="text-muted-foreground text-[10px]">{expanded ? '▲' : '▼'}</span>}
+      </p>
       {sub && <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{sub}</p>}
-    </div>
+    </button>
   )
 }
 
 function LegislativeProfile({ memberId, memberName }: { memberId: string; memberName: string }) {
   const { city } = useParams<{ city: string }>()
   const [p, setP] = useState<Profile | null>(null)
+  const [showDissents, setShowDissents] = useState(false)
 
   useEffect(() => {
     api.getCouncilmemberProfile(memberId).then((d) => d && setP(d.profile)).catch(() => {})
@@ -196,6 +224,7 @@ function LegislativeProfile({ memberId, memberName }: { memberId: string; member
   const o = p.outcomes
   const tagMax = Math.max(...p.top_tags.map(t => t.count), 1)
   const v = p.voting
+  const hasDissents = v.dissent_bills.length > 0
 
   return (
     <div className="space-y-4">
@@ -225,8 +254,54 @@ function LegislativeProfile({ memberId, memberName }: { memberId: string; member
           label="Vote Attendance"
           sub={`${v.total_votes.toLocaleString()} roll calls`}
         />
-        <Metric value={v.dissents} label="Dissenting Votes" sub="times voted against the majority" />
+        <Metric
+          value={v.dissents}
+          label="Dissenting Votes"
+          sub={hasDissents ? 'tap to see the bills' : 'times voted against the majority'}
+          onClick={hasDissents ? () => setShowDissents(s => !s) : undefined}
+          expanded={showDissents}
+        />
       </div>
+
+      {/* Dissenting bills (expandable) */}
+      {showDissents && hasDissents && (
+        <div className="border rounded-lg p-4 space-y-2">
+          <p className="text-sm font-semibold">
+            Bills {firstName} voted against
+            <span className="text-xs font-normal text-muted-foreground ml-2">{v.dissent_bills.length} total</span>
+          </p>
+          <div className="space-y-1.5">
+            {v.dissent_bills.map((b) => {
+              const passed = b.yeas > b.nays
+              return (
+                <Link
+                  key={b.id}
+                  href={`/${city}/legislation/${b.id}`}
+                  className="flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:border-primary/60 hover:shadow-sm transition-all group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-mono text-muted-foreground">{b.bill_number}</p>
+                    <p className="text-sm leading-snug line-clamp-1 group-hover:text-primary transition-colors mt-0.5">
+                      {b.title}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 text-xs">
+                    {b.action_date && (
+                      <span className="text-muted-foreground hidden sm:block">
+                        {new Date(b.action_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                      </span>
+                    )}
+                    <span className="tabular-nums font-medium" title="Yeas–Nays">{b.yeas}–{b.nays}</span>
+                    <span className={`px-2 py-0.5 rounded-full font-medium ${passed ? 'bg-muted text-muted-foreground' : 'bg-red-100 text-red-700'}`}>
+                      {passed ? 'passed anyway' : 'blocked'}
+                    </span>
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Outcome breakdown */}
       <div className="border rounded-lg p-4 space-y-2.5">
