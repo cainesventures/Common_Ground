@@ -152,6 +152,150 @@ function SponsorActivityChart({ sponsorName }: { sponsorName: string }) {
   )
 }
 
+// ── Legislative profile (bill analysis) ────────────────────────────────────────
+
+interface Profile {
+  outcomes: { total: number; signed: number; failed_vetoed: number; died_in_committee: number; active: number; pass_rate: number | null }
+  top_tags: { tag: string; count: number }[]
+  bill_types: Record<string, number>
+  impact: { levels: Record<string, number>; avg_score: number | null }
+  committees: { committee: string; count: number }[]
+  median_days_to_passage: number | null
+  voting: { total_votes: number; absent: number; dissents: number; attendance_rate: number | null }
+}
+
+const OUTCOME_SEGMENTS: { key: keyof Profile['outcomes']; label: string; color: string }[] = [
+  { key: 'signed',            label: 'Signed into law',  color: '#22c55e' },
+  { key: 'active',            label: 'Active',           color: '#3b82f6' },
+  { key: 'died_in_committee', label: 'Died in committee', color: '#94a3b8' },
+  { key: 'failed_vetoed',     label: 'Failed / vetoed',  color: '#ef4444' },
+]
+
+function Metric({ value, label, sub }: { value: string | number; label: string; sub?: string }) {
+  return (
+    <div className="border rounded-lg p-3">
+      <p className="text-xl font-bold tabular-nums leading-none">{value}</p>
+      <p className="text-xs font-medium mt-1.5">{label}</p>
+      {sub && <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{sub}</p>}
+    </div>
+  )
+}
+
+function LegislativeProfile({ memberId, memberName }: { memberId: string; memberName: string }) {
+  const { city } = useParams<{ city: string }>()
+  const [p, setP] = useState<Profile | null>(null)
+
+  useEffect(() => {
+    api.getCouncilmemberProfile(memberId).then((d) => d && setP(d.profile)).catch(() => {})
+  }, [memberId])
+
+  if (!p || p.outcomes.total === 0) return null
+
+  const firstName = memberName.split(' ')[0]
+  const surname = extractLastName(memberName)
+  const o = p.outcomes
+  const tagMax = Math.max(...p.top_tags.map(t => t.count), 1)
+  const v = p.voting
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="text-lg font-semibold">Legislative Profile</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          What {firstName} legislates on and how effective those bills have been.
+        </p>
+      </div>
+
+      {/* Key metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <Metric
+          value={o.pass_rate != null ? `${Math.round(o.pass_rate * 100)}%` : '—'}
+          label="Pass Rate"
+          sub="of concluded bills signed into law"
+        />
+        <Metric value={o.signed} label="Signed into Law" sub={`of ${o.total} sponsored`} />
+        <Metric value={p.impact.avg_score ?? '—'} label="Avg Impact" sub="1–10 across analyzed bills" />
+        <Metric
+          value={p.median_days_to_passage ?? '—'}
+          label="Median Days to Law"
+          sub="introduction → signed"
+        />
+        <Metric
+          value={v.attendance_rate != null ? `${Math.round(v.attendance_rate * 100)}%` : '—'}
+          label="Vote Attendance"
+          sub={`${v.total_votes.toLocaleString()} roll calls`}
+        />
+        <Metric value={v.dissents} label="Dissenting Votes" sub="times voted against the majority" />
+      </div>
+
+      {/* Outcome breakdown */}
+      <div className="border rounded-lg p-4 space-y-2.5">
+        <p className="text-sm font-semibold">What happens to {firstName}&apos;s bills</p>
+        <div className="h-3 rounded-full overflow-hidden flex bg-muted">
+          {OUTCOME_SEGMENTS.map((s) => {
+            const n = o[s.key] as number
+            const pct = o.total ? (n / o.total) * 100 : 0
+            if (pct === 0) return null
+            return <div key={s.key} style={{ width: `${pct}%`, backgroundColor: s.color }} title={`${s.label}: ${n}`} />
+          })}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {OUTCOME_SEGMENTS.map((s) => {
+            const n = o[s.key] as number
+            if (n === 0) return null
+            return (
+              <span key={s.key} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                {s.label} <span className="tabular-nums font-medium text-foreground">{n}</span>
+              </span>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Top issues */}
+      {p.top_tags.length > 0 && (
+        <div className="border rounded-lg p-4 space-y-2.5">
+          <p className="text-sm font-semibold">Top Issue Areas</p>
+          <div className="space-y-1.5">
+            {p.top_tags.map((t) => (
+              <Link
+                key={t.tag}
+                href={`/${city}/legislation?tag=${encodeURIComponent(t.tag)}&sponsor=${encodeURIComponent(surname)}`}
+                className="flex items-center gap-2 group"
+              >
+                <span className="text-xs w-28 shrink-0 truncate capitalize group-hover:text-foreground transition-colors">
+                  {t.tag.replace(/-/g, ' ')}
+                </span>
+                <div className="flex-1 h-4 bg-muted/40 rounded-sm overflow-hidden">
+                  <div className="h-full rounded-sm bg-blue-500/70 group-hover:bg-blue-500 transition-colors"
+                    style={{ width: `${Math.max((t.count / tagMax) * 100, 3)}%` }} />
+                </div>
+                <span className="text-xs tabular-nums w-8 text-right text-muted-foreground">{t.count}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Committees */}
+      {p.committees.length > 0 && (
+        <div className="border rounded-lg p-4 space-y-2">
+          <p className="text-sm font-semibold">Committees Their Bills Go Through</p>
+          <div className="space-y-1">
+            {p.committees.map((c) => (
+              <div key={c.committee} className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground truncate pr-2">{c.committee}</span>
+                <span className="tabular-nums text-xs shrink-0">{c.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; memberName: string }) {
   const [counts, setCounts] = useState<{ support: number; oppose: number }>({ support: 0, oppose: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
@@ -583,6 +727,9 @@ export default function CouncilmemberDetailClient() {
               <p className="text-sm text-muted-foreground leading-relaxed">{member.bio}</p>
             </div>
           )}
+
+          {/* Legislative profile / bill analysis */}
+          <LegislativeProfile memberId={member.id} memberName={member.name} />
 
           {/* Citizen approval */}
           <CouncilmemberVotePanel memberId={member.id} memberName={member.name} />

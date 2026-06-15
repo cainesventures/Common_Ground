@@ -357,6 +357,9 @@ export const api = {
   getCouncilmember: (id: string, billsPage = 1, billsLimit = 20) =>
     apiFetch(`/api/councilmembers/${id}?bills_page=${billsPage}&bills_limit=${billsLimit}`),
 
+  getCouncilmemberProfile: (id: string) =>
+    apiFetch(`/api/councilmembers/${id}/legislative-profile`),
+
   scrapeCouncilmembers: () =>
     apiFetch('/api/councilmembers/scrape', { method: 'POST' }),
 

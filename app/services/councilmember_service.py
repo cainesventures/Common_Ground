@@ -18,7 +18,7 @@ from typing import Optional
 from sqlalchemy import func, case, extract
 from sqlalchemy.orm import Session
 
-from app.models import Councilmember, Legislation
+from app.models import Councilmember, Legislation, BillVoteRecord
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +211,122 @@ def _sponsored_counts(db: Session, member_name: str, term_start: int | None) -> 
     )
     total, passed = q.first()
     return int(total or 0), int(passed or 0)
+
+
+_TERMINAL_STATUSES = ("signed_into_law", "failed", "vetoed", "withdrawn", "tabled")
+
+
+def get_legislative_profile(db: Session, member_id: str, member_name: str,
+                            term_start: int | None) -> dict:
+    """Aggregate a member's sponsored-bill analysis + official voting behaviour.
+
+    Sponsored bills are matched by surname/term (see _sponsored_filter); the
+    small per-member set (<=~650 rows) is aggregated in Python.  Outcomes use
+    the same died-in-committee rule as the insights endpoints: a non-terminal
+    bill introduced before the current council term is dead, not active.
+    """
+    import json
+    import statistics
+    from collections import Counter
+    from datetime import datetime
+
+    rows = _sponsored_filter(
+        db.query(
+            Legislation.status,
+            Legislation.tags,
+            Legislation.bill_type,
+            Legislation.impact_score,
+            Legislation.impact_level,
+            Legislation.committee,
+            Legislation.introduced_date,
+            Legislation.final_date,
+        ),
+        member_name,
+        term_start,
+    ).all()
+
+    now_year = datetime.utcnow().year
+    current_term = now_year - (now_year % 4)
+
+    total = len(rows)
+    signed = failed_vetoed = died = active = 0
+    tag_counter: Counter = Counter()
+    type_counter: Counter = Counter()
+    committee_counter: Counter = Counter()
+    impact_levels: Counter = Counter()
+    impact_scores: list[int] = []
+    passage_spans: list[float] = []
+
+    for r in rows:
+        st = r.status
+        if st == "signed_into_law":
+            signed += 1
+            if r.final_date and r.introduced_date and r.final_date >= r.introduced_date:
+                passage_spans.append((r.final_date - r.introduced_date).days)
+        elif st in ("failed", "vetoed", "withdrawn", "tabled"):
+            failed_vetoed += 1
+        elif st in ("introduced", "in_committee"):
+            yr = r.introduced_date.year if r.introduced_date else now_year
+            if yr < current_term:
+                died += 1
+            else:
+                active += 1
+
+        if r.tags:
+            try:
+                tags = json.loads(r.tags) if r.tags.startswith("[") else [t.strip() for t in r.tags.split(",")]
+                for t in tags:
+                    if t and t.strip():
+                        tag_counter[t.strip()] += 1
+            except Exception:
+                pass
+        type_counter[r.bill_type or "unknown"] += 1
+        if r.impact_level:
+            impact_levels[r.impact_level] += 1
+        if r.impact_score is not None:
+            impact_scores.append(r.impact_score)
+        if r.committee:
+            committee_counter[r.committee] += 1
+
+    closed = signed + failed_vetoed + died
+
+    # Official roll-call voting behaviour (linked by councilmember_id).
+    votes = (
+        db.query(BillVoteRecord.vote, func.count(BillVoteRecord.id))
+        .filter(BillVoteRecord.councilmember_id == member_id)
+        .group_by(BillVoteRecord.vote)
+        .all()
+    )
+    vcount = {v: int(n) for v, n in votes}
+    total_votes = sum(vcount.values())
+    absent = vcount.get("Absent", 0)
+    nays = vcount.get("Nays", 0) + vcount.get("Nay", 0)
+    present = total_votes - absent
+
+    return {
+        "outcomes": {
+            "total": total,
+            "signed": signed,
+            "failed_vetoed": failed_vetoed,
+            "died_in_committee": died,
+            "active": active,
+            "pass_rate": round(signed / closed, 3) if closed else None,
+        },
+        "top_tags": [{"tag": t, "count": n} for t, n in tag_counter.most_common(8)],
+        "bill_types": dict(type_counter),
+        "impact": {
+            "levels": dict(impact_levels),
+            "avg_score": round(statistics.mean(impact_scores), 1) if impact_scores else None,
+        },
+        "committees": [{"committee": c, "count": n} for c, n in committee_counter.most_common(6)],
+        "median_days_to_passage": round(statistics.median(passage_spans)) if passage_spans else None,
+        "voting": {
+            "total_votes": total_votes,
+            "absent": absent,
+            "dissents": nays,
+            "attendance_rate": round(present / total_votes, 3) if total_votes else None,
+        },
+    }
 
 
 async def scrape_and_upsert_councilmembers(db: Session) -> list[Councilmember]:

@@ -18,6 +18,7 @@ from app.services.councilmember_service import (
     get_all_councilmembers,
     get_councilmember,
     get_councilmember_bills,
+    get_legislative_profile,
     scrape_and_upsert_councilmembers,
     backfill_missing_emails,
 )
@@ -188,6 +189,17 @@ async def get_member(
             ],
         },
     }
+
+
+@router.get("/{member_id}/legislative-profile")
+async def get_member_legislative_profile(member_id: str, db: Session = Depends(get_db)):
+    """Aggregated analysis of what a member legislates on, their effectiveness,
+    and their voting behaviour."""
+    member = get_councilmember(db, member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Council member not found")
+    profile = get_legislative_profile(db, member.id, member.name, member.term_start)
+    return {"success": True, "member_id": member.id, "profile": profile}
 
 
 # ── Council member approval votes ────────────────────────────────────────────
