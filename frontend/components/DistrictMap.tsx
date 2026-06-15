@@ -16,10 +16,13 @@ interface Props {
 const PHILLY_CENTER: [number, number] = [39.9526, -75.1652]
 const DISTRICTS_GEOJSON_URL = '/api/councilmembers/districts-geojson'
 
-// Distinct muted colours for the full-city view — one per district (1–10)
+// Categorical palette (Tableau 10) for the full-city view — one per district
+// (1–10). A qualitative palette, not a rainbow gradient: consecutive district
+// numbers get maximally distinct hues so geographically adjacent districts
+// (e.g. 1 & 2) never look alike.
 const DISTRICT_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316',
-  '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6',
+  '#4e79a7', '#f28e2b', '#59a14f', '#e15759', '#b07aa1',
+  '#edc948', '#76b7b2', '#ff9da7', '#9c755f', '#bab0ac',
 ]
 
 function getDistrictNum(props: Record<string, any>): number | null {
@@ -96,7 +99,9 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
               const num = getDistrictNum(feature?.properties ?? {})
               if (showAll) {
                 const color = num ? DISTRICT_COLORS[(num - 1) % DISTRICT_COLORS.length] : '#94a3b8'
-                return { color, weight: 1.5, fillColor: color, fillOpacity: 0.25 }
+                // White casing between districts makes adjacency boundaries pop;
+                // higher fill opacity keeps each district's hue legible.
+                return { color: '#ffffff', weight: 1.5, fillColor: color, fillOpacity: 0.5 }
               }
               const isTarget = districtNum !== null && num === districtNum
               return {
