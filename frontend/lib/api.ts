@@ -360,6 +360,9 @@ export const api = {
   getCouncilmemberProfile: (id: string) =>
     apiFetch(`/api/councilmembers/${id}/legislative-profile`),
 
+  getCouncilmemberBillsByOutcome: (id: string, outcome: string, page = 1, limit = 10) =>
+    apiFetch(`/api/councilmembers/${id}/bills?outcome=${outcome}&page=${page}&limit=${limit}`),
+
   scrapeCouncilmembers: () =>
     apiFetch('/api/councilmembers/scrape', { method: 'POST' }),
 

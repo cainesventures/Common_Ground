@@ -497,14 +497,39 @@ def get_councilmember(db: Session, member_id: str) -> Optional[Councilmember]:
     return db.query(Councilmember).filter(Councilmember.id == member_id).first()
 
 
+def _apply_outcome_filter(query, outcome: str):
+    """Narrow a sponsored-bill query to one outcome bucket (matches the
+    legislative-profile counts, incl. the died-in-committee term rule)."""
+    from datetime import datetime
+    current_term = (lambda y: y - (y % 4))(datetime.utcnow().year)
+    if outcome == "signed":
+        return query.filter(Legislation.status == "signed_into_law")
+    if outcome == "failed":
+        return query.filter(Legislation.status.in_(["failed", "vetoed", "withdrawn", "tabled"]))
+    if outcome == "active":
+        return query.filter(
+            Legislation.status.in_(["introduced", "in_committee"]),
+            extract("year", Legislation.introduced_date) >= current_term,
+        )
+    if outcome == "died":
+        return query.filter(
+            Legislation.status.in_(["introduced", "in_committee"]),
+            extract("year", Legislation.introduced_date) < current_term,
+        )
+    return query
+
+
 def get_councilmember_bills(db: Session, member_name: str, term_start: int | None = None,
-                            limit: int = 20, offset: int = 0):
-    """Return (bills, total) sponsored by this council member.
+                            outcome: str | None = None, limit: int = 20, offset: int = 0):
+    """Return (bills, total) sponsored by this council member, optionally
+    narrowed to one outcome bucket (signed / active / died / failed).
 
     Uses the same surname + term-scoped filter as the cached bills_sponsored /
     bills_passed counts, so the live page and the stored counts always agree.
     """
     query = _sponsored_filter(db.query(Legislation), member_name, term_start)
+    if outcome:
+        query = _apply_outcome_filter(query, outcome)
     query = query.order_by(Legislation.introduced_date.desc())
     total = query.count()
     bills = query.offset(offset).limit(limit).all()

@@ -184,6 +184,73 @@ const OUTCOME_SEGMENTS: { key: keyof Profile['outcomes']; label: string; color: 
   { key: 'failed_vetoed',     label: 'Failed / vetoed',  color: '#ef4444' },
 ]
 
+function OutcomeBillList({ memberId, outcome, total, label }: {
+  memberId: string; outcome: string; total: number; label: string
+}) {
+  const { city } = useParams<{ city: string }>()
+  const [bills, setBills] = useState<any[]>([])
+  const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(true)
+  const LIMIT = 10
+  const pages = Math.ceil(total / LIMIT)
+
+  useEffect(() => {
+    setLoading(true)
+    api.getCouncilmemberBillsByOutcome(memberId, outcome, page, LIMIT)
+      .then((d) => setBills(d?.results ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [memberId, outcome, page])
+
+  return (
+    <div className="border rounded-lg p-4 space-y-2">
+      <p className="text-sm font-semibold">
+        {label}
+        <span className="text-xs font-normal text-muted-foreground ml-2">{total.toLocaleString()} total</span>
+      </p>
+      {loading ? (
+        <div className="space-y-1.5">
+          {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-11 rounded-lg bg-muted animate-pulse" />)}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {bills.map((b) => (
+            <Link
+              key={b.id}
+              href={`/${city}/legislation/${b.id}`}
+              className="flex items-center justify-between gap-3 border rounded-lg px-3 py-2 hover:border-primary/60 hover:shadow-sm transition-all group"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-mono text-muted-foreground">{b.bill_number}</p>
+                <p className="text-sm leading-snug line-clamp-1 group-hover:text-primary transition-colors mt-0.5">{b.title}</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 text-xs">
+                {b.introduced_date && (
+                  <span className="text-muted-foreground hidden sm:block">
+                    {new Date(b.introduced_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                  </span>
+                )}
+                {b.impact_level && (
+                  <span className={`px-2 py-0.5 rounded-full capitalize ${IMPACT_COLORS[b.impact_level] ?? ''}`}>{b.impact_level}</span>
+                )}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+      {pages > 1 && (
+        <div className="flex items-center justify-between pt-1 text-xs">
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}
+            className="text-muted-foreground hover:text-foreground disabled:opacity-40">← Prev</button>
+          <span className="text-muted-foreground">Page {page} of {pages}</span>
+          <button onClick={() => setPage((p) => Math.min(pages, p + 1))} disabled={page >= pages}
+            className="text-muted-foreground hover:text-foreground disabled:opacity-40">Next →</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Metric({ value, label, sub, onClick, expanded }: {
   value: string | number; label: string; sub?: string
   onClick?: () => void; expanded?: boolean
@@ -211,7 +278,7 @@ function Metric({ value, label, sub, onClick, expanded }: {
 function LegislativeProfile({ memberId, memberName }: { memberId: string; memberName: string }) {
   const { city } = useParams<{ city: string }>()
   const [p, setP] = useState<Profile | null>(null)
-  const [showDissents, setShowDissents] = useState(false)
+  const [openPanel, setOpenPanel] = useState<'signed' | 'active' | 'dissents' | null>(null)
 
   useEffect(() => {
     api.getCouncilmemberProfile(memberId).then((d) => d && setP(d.profile)).catch(() => {})
@@ -225,6 +292,7 @@ function LegislativeProfile({ memberId, memberName }: { memberId: string; member
   const tagMax = Math.max(...p.top_tags.map(t => t.count), 1)
   const v = p.voting
   const hasDissents = v.dissent_bills.length > 0
+  const toggle = (k: 'signed' | 'active' | 'dissents') => setOpenPanel((cur) => (cur === k ? null : k))
 
   return (
     <div className="space-y-4">
@@ -242,7 +310,20 @@ function LegislativeProfile({ memberId, memberName }: { memberId: string; member
           label="Pass Rate"
           sub="of concluded bills signed into law"
         />
-        <Metric value={o.signed} label="Signed into Law" sub={`of ${o.total} sponsored`} />
+        <Metric
+          value={o.signed}
+          label="Signed into Law"
+          sub={o.signed > 0 ? 'tap to see the bills' : `of ${o.total} sponsored`}
+          onClick={o.signed > 0 ? () => toggle('signed') : undefined}
+          expanded={openPanel === 'signed'}
+        />
+        <Metric
+          value={o.active}
+          label="Live Bills"
+          sub={o.active > 0 ? 'tap to see what’s pending' : 'currently pending'}
+          onClick={o.active > 0 ? () => toggle('active') : undefined}
+          expanded={openPanel === 'active'}
+        />
         <Metric value={p.impact.avg_score ?? '—'} label="Avg Impact" sub="1–10 across analyzed bills" />
         <Metric
           value={p.median_days_to_passage ?? '—'}
@@ -258,13 +339,23 @@ function LegislativeProfile({ memberId, memberName }: { memberId: string; member
           value={v.dissents}
           label="Dissenting Votes"
           sub={hasDissents ? 'tap to see the bills' : 'times voted against the majority'}
-          onClick={hasDissents ? () => setShowDissents(s => !s) : undefined}
-          expanded={showDissents}
+          onClick={hasDissents ? () => toggle('dissents') : undefined}
+          expanded={openPanel === 'dissents'}
         />
       </div>
 
+      {/* Signed / Live bill lists (lazy, paginated) */}
+      {openPanel === 'signed' && (
+        <OutcomeBillList memberId={memberId} outcome="signed" total={o.signed}
+          label={`Bills ${firstName} got signed into law`} />
+      )}
+      {openPanel === 'active' && (
+        <OutcomeBillList memberId={memberId} outcome="active" total={o.active}
+          label={`${firstName}’s live bills`} />
+      )}
+
       {/* Dissenting bills (expandable) */}
-      {showDissents && hasDissents && (
+      {openPanel === 'dissents' && hasDissents && (
         <div className="border rounded-lg p-4 space-y-2">
           <p className="text-sm font-semibold">
             Bills {firstName} voted against

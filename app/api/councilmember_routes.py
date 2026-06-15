@@ -191,6 +191,43 @@ async def get_member(
     }
 
 
+@router.get("/{member_id}/bills")
+async def get_member_bills_by_outcome(
+    member_id: str,
+    outcome: str = Query(default="", pattern="^(signed|active|died|failed)?$"),
+    page:    int = Query(1, ge=1),
+    limit:   int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Sponsored bills for a member, optionally filtered to one outcome bucket.
+    Powers the expandable Signed / Live Bills lists on the profile."""
+    member = get_councilmember(db, member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Council member not found")
+    offset = (page - 1) * limit
+    bills, total = get_councilmember_bills(
+        db, member.name, term_start=member.term_start,
+        outcome=outcome or None, limit=limit, offset=offset,
+    )
+    return {
+        "success": True,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "results": [
+            {
+                "id": b.id,
+                "bill_number": b.bill_number,
+                "title": b.plain_title or b.title,
+                "status": b.status,
+                "introduced_date": b.introduced_date.isoformat() if b.introduced_date else None,
+                "impact_level": b.impact_level,
+            }
+            for b in bills
+        ],
+    }
+
+
 @router.get("/{member_id}/legislative-profile")
 async def get_member_legislative_profile(member_id: str, db: Session = Depends(get_db)):
     """Aggregated analysis of what a member legislates on, their effectiveness,
