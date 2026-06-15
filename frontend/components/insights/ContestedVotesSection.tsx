@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/lib/api'
+import { lastName } from '@/lib/names'
 
 // ── Types (mirror /api/insights vote analytics responses) ────────────────────
 
@@ -48,11 +49,6 @@ const SORTS = [
   { key: 'closest', label: 'Closest margin' },
   { key: 'recent',  label: 'Most recent' },
 ] as const
-
-function lastName(name: string) {
-  const parts = name.replace(/,/g, '').split(/\s+/).filter(p => !/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(p))
-  return parts[parts.length - 1] ?? name
-}
 
 // ── Contested bills explorer ─────────────────────────────────────────────────
 

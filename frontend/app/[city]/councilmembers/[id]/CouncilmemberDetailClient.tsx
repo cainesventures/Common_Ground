@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
+import { lastName as extractLastName } from '@/lib/names'
 import { fmtStatus } from '@/lib/utils'
 import { isLoggedIn } from '@/lib/auth'
 import { CITY } from '@/lib/city'
@@ -93,13 +94,6 @@ function MiniBarChart<T extends { count: number }>({
       </div>
     </div>
   )
-}
-
-// Legislation stores sponsors as "Councilmember Squilla" — match by last name
-function extractLastName(fullName: string): string {
-  const beforeComma = fullName.split(',')[0].trim()
-  const parts = beforeComma.split(' ')
-  return parts[parts.length - 1]
 }
 
 function SponsorActivityChart({ sponsorName }: { sponsorName: string }) {

@@ -7,6 +7,7 @@ import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
 import { CITY } from '@/lib/city'
+import { lastName } from '@/lib/names'
 
 const DistrictMap = dynamic(
   () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
@@ -171,7 +172,7 @@ function SponsorshipChart({ members }: { members: Member[] }) {
             onMouseLeave={() => setHoveredId(null)}
           >
             <span className="text-xs text-muted-foreground w-28 shrink-0 truncate group-hover:text-foreground transition-colors">
-              {m.name.split(' ').slice(-1)[0]}
+              {lastName(m.name)}
             </span>
             <div className="flex-1 h-5 bg-muted/40 rounded-sm overflow-hidden">
               <div
