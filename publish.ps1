@@ -175,14 +175,28 @@ if ($railwayOk) {
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
     # Without this, Railway skips the restore on restarts (preserving user accounts).
     $version = Get-Date -Format "yyyyMMdd-HHmmss"
-    railway variables set "DB_RESTORE_VERSION=$version" 2>&1 | Out-Null
-    Log "DB_RESTORE_VERSION set to $version"
-    railway up --detach 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Log "Railway redeploy triggered - backend updates in ~3 min."
+    # NOTE: do NOT pipe railway through `2>&1` here. Merging a native command's
+    # stderr into the pipeline under $ErrorActionPreference="Stop" turns any
+    # stderr line into a terminating NativeCommandError, which aborts the whole
+    # script before the deploy and before .last_publish is written. Let stderr
+    # flow to the console and gate on $LASTEXITCODE instead.
+    # `set` is the current subcommand (the bare `--set` flag is now legacy);
+    # --skip-deploys avoids a redundant deploy since we trigger one explicitly below.
+    railway variables set "DB_RESTORE_VERSION=$version" --skip-deploys
+    if ($LASTEXITCODE -ne 0) {
+        Warn "Failed to set DB_RESTORE_VERSION. Backend will NOT restore the new DB this run."
+        Warn "Manual fallback:"
+        Warn "  railway variables set DB_RESTORE_VERSION=$version --skip-deploys"
+        Warn "  railway redeploy --yes"
     } else {
-        Warn "Railway redeploy failed. Manual fallback:"
-        Warn "  railway.com -> opencommonground-api -> Redeploy"
+        Log "DB_RESTORE_VERSION set to $version"
+        railway redeploy --yes
+        if ($LASTEXITCODE -eq 0) {
+            Log "Railway redeploy triggered - backend updates in ~3 min."
+        } else {
+            Warn "Railway redeploy failed. Manual fallback:"
+            Warn "  railway redeploy --yes   (or railway.com -> opencommonground-api -> Redeploy)"
+        }
     }
 } else {
     Warn "Step 7/7 - Skipping Railway redeploy (not logged in)."
