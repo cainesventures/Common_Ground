@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 BALLOTPEDIA_SEARCH = "https://ballotpedia.org/Philadelphia_City_Council_elections,_{year}"
 BALLOTPEDIA_COUNCIL = "https://ballotpedia.org/Philadelphia_City_Council"
 HEADERS = {
-    "User-Agent": "CommonGround/1.0 civic-research-tool (+https://github.com/cainesventures/Common_Ground)",
+    "User-Agent": "CommonGround/1.0 civic-research-tool (+https://opencommonground.com)",
     "Accept": "text/html,application/xhtml+xml",
 }
 
