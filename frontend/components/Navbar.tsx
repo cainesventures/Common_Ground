@@ -99,6 +99,8 @@ export function Navbar() {
     { href: `${p}/legislation`, label: 'Legislation' },
     { href: `${p}/councilmembers`, label: 'Council' },
     { href: `${p}/insights`, label: 'Insights' },
+    { href: '/budget', label: 'Budget' },
+    { href: '/blog', label: 'Blog' },
     ...(user ? [{ href: `${p}/my-bills`, label: 'My Bills' }] : []),
     ...(showAdminTools ? [{ href: '/dashboard', label: 'Dashboard' }] : []),
     ...(showAdminTools ? [{ href: '/admin', label: 'Admin' }] : []),

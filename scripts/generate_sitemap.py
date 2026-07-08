@@ -36,6 +36,7 @@ DB_PATH = os.environ.get("DB_PATH", str(ROOT / "common_ground_test.db"))
 BASE_URL = "https://opencommonground.com"
 OUTPUT = ROOT / "frontend" / "public" / "sitemap.xml"
 HISTORY_JSON = ROOT / "frontend" / "public" / "data" / "legislative_history.json"
+BLOG_JSON = ROOT / "frontend" / "public" / "data" / "blog_posts.json"
 
 
 def _history_years() -> list[int]:
@@ -46,6 +47,18 @@ def _history_years() -> list[int]:
         import json
         data = json.loads(HISTORY_JSON.read_text(encoding="utf-8"))
         return sorted(e["year"] for e in data.get("years", []))
+    except Exception:
+        return []
+
+
+def _blog_posts() -> list[str]:
+    """Slugs of published blog posts (see frontend/lib/blog.ts)."""
+    if not BLOG_JSON.exists():
+        return []
+    try:
+        import json
+        data = json.loads(BLOG_JSON.read_text(encoding="utf-8"))
+        return [p["slug"] for p in data.get("posts", []) if p.get("slug")]
     except Exception:
         return []
 
@@ -72,6 +85,8 @@ def build_sitemap(db_path: str) -> ElementTree:
         (f"{BASE_URL}/philadelphia/legislation",            "0.8",  "daily",   now),
         (f"{BASE_URL}/philadelphia/insights",               "0.8",  "weekly",  now),
         (f"{BASE_URL}/philadelphia/councilmembers",         "0.7",  "weekly",  now),
+        (f"{BASE_URL}/budget",                              "0.7",  "monthly", now),
+        (f"{BASE_URL}/blog",                                "0.7",  "weekly",  now),
         (f"{BASE_URL}/about",                               "0.6",  "monthly", now),
         (f"{BASE_URL}/donate",                              "0.5",  "monthly", now),
     ]
@@ -90,6 +105,13 @@ def build_sitemap(db_path: str) -> ElementTree:
         SubElement(u, "priority").text = "0.7"
         # Past years are final; only the current year's review changes
         SubElement(u, "changefreq").text = "weekly" if year == current_year else "yearly"
+        SubElement(u, "lastmod").text = now
+
+    for slug in _blog_posts():
+        u = SubElement(urlset, "url")
+        SubElement(u, "loc").text = f"{BASE_URL}/blog/{slug}"
+        SubElement(u, "priority").text = "0.7"
+        SubElement(u, "changefreq").text = "monthly"
         SubElement(u, "lastmod").text = now
 
     for bill_id in bill_ids:
