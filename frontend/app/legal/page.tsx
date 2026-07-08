@@ -45,9 +45,9 @@ export default function LegalPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold">No Government Affiliation</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Open Common Ground is an independent civic technology project operated by Caines Ventures LLC.
-          It is not affiliated with, endorsed by, or operated by Philadelphia City Council, the City of Philadelphia,
-          or any government agency or official.
+          Open Common Ground is an independent civic technology project. It is not affiliated with,
+          endorsed by, or operated by Philadelphia City Council, the City of Philadelphia, or any
+          government agency or official.
         </p>
       </section>
 
