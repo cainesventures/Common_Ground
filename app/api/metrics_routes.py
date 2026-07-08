@@ -34,16 +34,25 @@ def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
 
 
 @router.get("/health")
-async def get_system_health(db: Session = Depends(get_db)):
-    """Return system status: DB connectivity and current AI provider config."""
+async def get_system_health():
+    """Return system status: DB connectivity and current AI provider config.
+
+    The app uses a two-database bind (content + users), so a bare ``SELECT 1``
+    on the multi-bind session can't be routed to an engine.  Ping each engine
+    directly instead; "ok" means both are reachable.
+    """
     from app.config import get_settings
+    from app.models.database import content_engine, users_engine
     settings = get_settings()
 
-    try:
-        db.execute(text("SELECT 1"))
-        db_status = "ok"
-    except Exception:
-        db_status = "error"
+    db_status = "ok"
+    for eng in (content_engine, users_engine):
+        try:
+            with eng.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except Exception:
+            db_status = "error"
+            break
 
     return {
         "db": db_status,
