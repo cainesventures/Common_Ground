@@ -55,7 +55,7 @@ Last updated: May 2026
  │  UptimeRobot — checks every 5 min   │
  │  opencommonground.com                │
  │  api.opencommonground.com/health     │
- │  Alerts → cainesventures@gmail.com  │
+ │  Alerts → a private ops inbox       │
  └──────────────────────────────────────┘
 ```
 
@@ -110,7 +110,7 @@ Stripe webhook → /api/donations/webhook → Railway records payment
 | **PostHog** | Product analytics | app.posthog.com | Vercel env: NEXT_PUBLIC_POSTHOG_KEY / NEXT_PUBLIC_POSTHOG_HOST |
 | **GitHub Actions** | Bluesky bot (runs daily 9am ET) | github.com → Actions tab | GitHub secrets: BLUESKY_HANDLE / BLUESKY_APP_PASSWORD |
 | **Bluesky** | Social media bot posts | bsky.app / @opencommonground.bsky.social | GitHub secrets (above) |
-| **UptimeRobot** | Uptime alerts every 5 min | uptimerobot.com | cainesventures@gmail.com account |
+| **UptimeRobot** | Uptime alerts every 5 min | uptimerobot.com | a private ops-alert account |
 | **Ollama** | Local AI enrichment (your machine only) | localhost:11434 | Not cloud — installed locally |
 | **Resend** | Weekly email digests (optional, not active) | resend.com | Railway env: RESEND_API_KEY |
 
