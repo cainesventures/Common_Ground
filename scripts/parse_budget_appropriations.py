@@ -136,6 +136,9 @@ def _class_amounts(body: str) -> dict:
 def _clean_name(raw: str) -> str:
     name = re.sub(r"\s+", " ", raw).strip()
     name = name.strip(" .-:")
+    # Normalize hyphen spacing ("FINANCE- FRINGE", "FINANCE-FRINGE" -> "FINANCE - FRINGE")
+    # so the same department matches consistently across 25 years of formatting drift.
+    name = re.sub(r"\s*-\s*", " - ", name)
     return name
 
 
