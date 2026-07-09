@@ -248,16 +248,26 @@ function BreakdownView(props: {
                 const pct = fundData.total ? (d.total / fundData.total) * 100 : 0
                 const note = deptNote(d.name)
                 const hasClasses = d.classes && Object.keys(d.classes).length > 0
-                const expandable = hasClasses || !!note
                 const isOpen = expanded === d.name
+                // This department's total across every fiscal year (matched by name).
+                const series = isOpen
+                  ? trend.map((t) => {
+                      const dd = fundByYear.get(t.fy)?.departments.find((x) => x.name === d.name)
+                      return { fy: t.fy, total: dd ? adj(dd.total, t.fy) : 0, present: !!dd }
+                    })
+                  : []
+                const sMax = Math.max(...series.map((s) => s.total), 1)
+                const sFirst = series.find((s) => s.present)
+                const sLast = [...series].reverse().find((s) => s.present)
+                const sPct = sFirst && sLast && sFirst.total ? Math.round(((sLast.total - sFirst.total) / sFirst.total) * 100) : 0
                 return (
                   <li key={d.name}>
                     <button
-                      onClick={() => expandable && setExpanded(isOpen ? null : d.name)}
-                      className={`w-full flex items-center gap-3 text-sm text-left ${expandable ? 'cursor-pointer' : 'cursor-default'}`}
+                      onClick={() => setExpanded(isOpen ? null : d.name)}
+                      className="w-full flex items-center gap-3 text-sm text-left cursor-pointer"
                     >
                       <span className="w-56 shrink-0 truncate flex items-center gap-1" title={pretty(d.name)}>
-                        {expandable && <span className={`text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>}
+                        <span className={`text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
                         {pretty(d.name)}
                       </span>
                       <span className="flex-1 h-5 rounded bg-muted overflow-hidden">
@@ -266,21 +276,61 @@ function BreakdownView(props: {
                       <span className="w-24 text-right tabular-nums shrink-0">{fmt(v, mode)}</span>
                       <span className="w-10 text-right tabular-nums text-muted-foreground shrink-0">{pct.toFixed(0)}%</span>
                     </button>
-                    {isOpen && expandable && (
-                      <div className="ml-6 mt-1 mb-2 border-l pl-4">
-                        {note && <p className="text-xs text-muted-foreground mb-2 max-w-xl">{note}</p>}
-                        {hasClasses && (
-                          <ul className="space-y-1">
-                            {Object.entries(d.classes!).sort((a, b) => b[1] - a[1]).map(([cls, amt]) => (
-                              <li key={cls} className="flex items-center gap-3 text-xs text-muted-foreground">
-                                <span className="w-52 shrink-0 truncate" title={CLASS_INFO[cls] ?? cls}>{cls}</span>
-                                <span className="flex-1 h-3 rounded bg-muted overflow-hidden">
-                                  <span className="block h-full rounded bg-blue-400/60" style={{ width: `${(amt / d.total) * 100}%` }} />
+                    {isOpen && (
+                      <div className="ml-6 mt-2 mb-3 border-l pl-4 space-y-3">
+                        {note && <p className="text-xs text-muted-foreground max-w-xl">{note}</p>}
+
+                        {/* This department over 25 years */}
+                        <div>
+                          <div className="text-xs text-muted-foreground mb-1">
+                            Over time
+                            {sFirst && sLast ? (
+                              <>
+                                {' — '}
+                                <span className="tabular-nums">{fmt(sFirst.total, mode)}</span> (FY{sFirst.fy}) →{' '}
+                                <span className="tabular-nums font-medium text-foreground">{fmt(sLast.total, mode)}</span> (FY{sLast.fy}){' '}
+                                <span className={sPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
+                                  {sPct >= 0 ? '+' : ''}{sPct}%
                                 </span>
-                                <span className="w-24 text-right tabular-nums shrink-0">{fmt(adj(amt, year), mode)}</span>
-                              </li>
+                              </>
+                            ) : null}
+                          </div>
+                          <div className="flex items-end gap-px h-16">
+                            {series.map((s) => (
+                              <div
+                                key={s.fy}
+                                className="flex-1 flex flex-col justify-end"
+                                title={`FY${s.fy}: ${s.present ? fmt(s.total, mode) : 'not in budget'}`}
+                              >
+                                <div
+                                  className={`w-full rounded-t ${s.present ? 'bg-blue-500/70' : 'bg-muted'}`}
+                                  style={{ height: `${Math.max((s.total / sMax) * 100, s.present ? 2 : 0)}%` }}
+                                />
+                              </div>
                             ))}
-                          </ul>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums mt-0.5">
+                            <span>FY{series[0]?.fy}</span>
+                            <span>FY{series[series.length - 1]?.fy}</span>
+                          </div>
+                        </div>
+
+                        {/* This year's spending-class split */}
+                        {hasClasses && (
+                          <div>
+                            <div className="text-xs text-muted-foreground mb-1">Line items, FY{year}</div>
+                            <ul className="space-y-1">
+                              {Object.entries(d.classes!).sort((a, b) => b[1] - a[1]).map(([cls, amt]) => (
+                                <li key={cls} className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <span className="w-52 shrink-0 truncate" title={CLASS_INFO[cls] ?? cls}>{cls}</span>
+                                  <span className="flex-1 h-3 rounded bg-muted overflow-hidden">
+                                    <span className="block h-full rounded bg-blue-400/60" style={{ width: `${(amt / d.total) * 100}%` }} />
+                                  </span>
+                                  <span className="w-24 text-right tabular-nums shrink-0">{fmt(adj(amt, year), mode)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
                         )}
                       </div>
                     )}
