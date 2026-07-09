@@ -554,6 +554,44 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* ── Go deeper: Budget + Blog ── */}
+      <section className="max-w-4xl mx-auto">
+        <h2 className="type-eyebrow text-muted-foreground text-center mb-10">
+          Go deeper
+        </h2>
+        <div className="grid sm:grid-cols-2 gap-6">
+          {/* Budget Explorer */}
+          <Link href="/budget" className="group border rounded-xl p-6 flex flex-col gap-3 hover:border-foreground/30 transition-colors">
+            <div className="text-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+            </div>
+            <p className="font-bold text-base group-hover:underline underline-offset-4">Budget Explorer</p>
+            <p className="type-body-sm text-muted-foreground">
+              Where does the money actually go? Explore 25 years of Philadelphia&apos;s budget — every
+              department and fund, adjusted for inflation or per resident. The General Fund grew from $2.8B
+              to nearly $7B; see what that bought.
+            </p>
+            <span className="text-sm text-primary mt-auto">Explore the budget →</span>
+          </Link>
+          {/* Blog */}
+          <Link href="/blog" className="group border rounded-xl p-6 flex flex-col gap-3 hover:border-foreground/30 transition-colors">
+            <div className="text-primary">
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+            </div>
+            <p className="font-bold text-base group-hover:underline underline-offset-4">The Blog</p>
+            <p className="type-body-sm text-muted-foreground">
+              Opinionated deep dives into the data — what the bills and budgets actually reveal about the
+              city, grounded in the public record. No comment section, just the analysis.
+            </p>
+            <span className="text-sm text-primary mt-auto">Read the latest →</span>
+          </Link>
+        </div>
+      </section>
+
       {/* ── Mission ── */}
       <section className="max-w-2xl mx-auto text-center">
         <h2 className="type-section mb-4">Built for Philadelphians, by Philadelphians</h2>
