@@ -299,14 +299,10 @@ function BreakdownView(props: {
                             {series.map((s) => (
                               <div
                                 key={s.fy}
-                                className="flex-1 flex flex-col justify-end"
+                                className={`flex-1 rounded-t ${s.present ? 'bg-blue-500/70' : 'bg-transparent'}`}
+                                style={{ height: `${Math.max((s.total / sMax) * 100, s.present ? 2 : 0)}%` }}
                                 title={`FY${s.fy}: ${s.present ? fmt(s.total, mode) : 'not in budget'}`}
-                              >
-                                <div
-                                  className={`w-full rounded-t ${s.present ? 'bg-blue-500/70' : 'bg-muted'}`}
-                                  style={{ height: `${Math.max((s.total / sMax) * 100, s.present ? 2 : 0)}%` }}
-                                />
-                              </div>
+                              />
                             ))}
                           </div>
                           <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums mt-0.5">
@@ -508,18 +504,16 @@ function TrackView(props: {
         </div>
         {note && <p className="text-sm text-muted-foreground mb-3 max-w-2xl">{note}</p>}
 
-        {/* Column chart */}
+        {/* Column chart — bars are DIRECT children of the fixed-height row so
+            their percentage heights resolve correctly. */}
         <div className="flex items-end gap-1 h-52 mt-4 border-b">
           {series.map((s) => (
-            <div key={s.fy} className="flex-1 flex flex-col justify-end items-center group relative" title={`FY${s.fy}: ${fmt(s.total, mode)}`}>
-              <div
-                className={`w-full rounded-t ${s.present ? 'bg-blue-500/80' : 'bg-muted'}`}
-                style={{ height: `${(s.total / max) * 100}%` }}
-              />
-              <div className="absolute -top-6 opacity-0 group-hover:opacity-100 transition-opacity text-[10px] tabular-nums whitespace-nowrap bg-foreground text-background px-1 rounded pointer-events-none">
-                {fmt(s.total, mode)}
-              </div>
-            </div>
+            <div
+              key={s.fy}
+              className={`flex-1 rounded-t transition-colors hover:bg-blue-600 ${s.present ? 'bg-blue-500/80' : 'bg-transparent'}`}
+              style={{ height: `${Math.max((s.total / max) * 100, s.present ? 1 : 0)}%` }}
+              title={`FY${s.fy}: ${s.present ? fmt(s.total, mode) : 'not in budget'}`}
+            />
           ))}
         </div>
         <div className="flex justify-between text-xs text-muted-foreground tabular-nums mt-1">
