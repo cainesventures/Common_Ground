@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 
+# Sentry auth token (local triage only, never commit)
+.sentry-token
+
 # Python
 __pycache__/
 *.py[cod]
