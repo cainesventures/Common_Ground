@@ -6,6 +6,9 @@
 # Sentry auth token (local triage only, never commit)
 .sentry-token
 
+# PostHog personal API key (local analytics only, never commit)
+.posthog-token
+
 # Python
 __pycache__/
 *.py[cod]
