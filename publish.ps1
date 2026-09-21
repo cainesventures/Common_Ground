@@ -21,6 +21,12 @@
 #  5. litestream replicate            - upload CONTENT DB snapshot to Backblaze B2 (path "db")
 #  6. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
 #  7. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
+#  8. cloudflare purge                - drop cached API reads so the new data is served immediately
+#
+# Step 8 needs CLOUDFLARE_API_TOKEN (Zone -> Cache Purge -> Purge) and
+# CLOUDFLARE_ZONE_ID in .env.  Without them the step is skipped with a warning
+# and the edge simply expires on its own (s-maxage=3600), so a publish still
+# succeeds -- the new data just takes up to an hour to appear.
 #
 # NOTE: Step 5 only touches content.db.  Users.db (accounts, votes, tracking,
 # bluesky_posts, donations) lives on production and is continuously backed up
@@ -114,48 +120,48 @@ if (-not $railwayOk) {
 
 # ── Step 1: Fetch new bills from Legistar ────────────────────────────────────
 if (-not $SkipFetch) {
-    Log "Step 1/7 - Fetching new bills from Legistar (incremental)..."
+    Log "Step 1/8 - Fetching new bills from Legistar (incremental)..."
     python scripts/fetch_bills.py
     if ($LASTEXITCODE -ne 0) { Fail "Bill fetch failed. Fix errors above before continuing." }
     Log "Fetch complete."
 } else {
-    Log "Step 1/7 - Skipping fetch."
+    Log "Step 1/8 - Skipping fetch."
 }
 
 # ── Step 2: Enrich with Ollama ───────────────────────────────────────────────
 if (-not $SkipEnrich) {
-    Log "Step 2/7 - Running Ollama enrichment pipeline..."
+    Log "Step 2/8 - Running Ollama enrichment pipeline..."
     python scripts/worker.py
     if ($LASTEXITCODE -ne 0) { Fail "Enrichment failed. Fix errors above before continuing." }
     Log "Enrichment complete."
 } else {
-    Log "Step 2/7 - Skipping enrichment."
+    Log "Step 2/8 - Skipping enrichment."
 }
 
 # ── Step 3: Regenerate 26-year legislative narrative ─────────────────────────
 if (-not $SkipNarrative) {
-    Log "Step 3/7 - Regenerating legislative narrative..."
+    Log "Step 3/8 - Regenerating legislative narrative..."
     python scripts/generate_legislative_narrative.py
     if ($LASTEXITCODE -ne 0) { Fail "Narrative generation failed." }
     Log "Narrative updated."
 } else {
-    Log "Step 3/7 - Skipping narrative."
+    Log "Step 3/8 - Skipping narrative."
 }
 
 # ── Step 4: Regenerate sitemap ───────────────────────────────────────────────
-Log "Step 4/7 - Regenerating sitemap.xml..."
+Log "Step 4/8 - Regenerating sitemap.xml..."
 python scripts/generate_sitemap.py
 if ($LASTEXITCODE -ne 0) { Fail "Sitemap generation failed." }
 Log "Sitemap updated."
 
 # ── Step 5: Upload DB to Backblaze B2 ────────────────────────────────────────
-Log "Step 5/7 - Uploading DB to Backblaze B2..."
+Log "Step 5/8 - Uploading DB to Backblaze B2..."
 & "C:\tools\litestream.exe" replicate -config "$ROOT\litestream.yml" -once -force-snapshot
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
 
 # ── Step 6: Git push (Vercel auto-deploys on push) ───────────────────────────
-Log "Step 6/7 - Committing and pushing sitemap + narrative to GitHub..."
+Log "Step 6/8 - Committing and pushing sitemap + narrative to GitHub..."
 git add frontend/public/sitemap.xml frontend/public/data/legislative_history.json
 $staged = git diff --cached --name-only
 if ($staged) {
@@ -171,7 +177,7 @@ if ($staged) {
 
 # ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
 if ($railwayOk) {
-    Log "Step 7/7 - Triggering Railway redeploy..."
+    Log "Step 7/8 - Triggering Railway redeploy..."
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
     # Without this, Railway skips the restore on restarts (preserving user accounts).
     $version = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -199,8 +205,64 @@ if ($railwayOk) {
         }
     }
 } else {
-    Warn "Step 7/7 - Skipping Railway redeploy (not logged in)."
+    Warn "Step 7/8 - Skipping Railway redeploy (not logged in)."
     Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
+}
+
+# ── Step 8: Purge the Cloudflare edge cache ──────────────────────────────────
+# Public API reads are cached at the edge for an hour (s-maxage=3600 set in
+# main.py). After a publish that cache still holds pre-publish data, so a purge
+# is what makes new bills and headlines show up immediately instead of an hour
+# later.
+$cfToken  = [Environment]::GetEnvironmentVariable("CLOUDFLARE_API_TOKEN", "Process")
+$cfZone   = [Environment]::GetEnvironmentVariable("CLOUDFLARE_ZONE_ID", "Process")
+
+if ([string]::IsNullOrWhiteSpace($cfToken) -or [string]::IsNullOrWhiteSpace($cfZone)) {
+    Warn "Step 8/8 - Skipping cache purge (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID not set in .env)."
+    Warn "The edge will expire on its own within an hour."
+} else {
+    Log "Step 8/8 - Purging Cloudflare cache..."
+
+    # Purge only after the new backend is actually serving, otherwise the purge
+    # refills the cache from the old instance and undoes itself.
+    if ($railwayOk) {
+        Log "Waiting for the redeployed backend before purging..."
+        $healthy = $false
+        for ($i = 0; $i -lt 40; $i++) {
+            Start-Sleep 15
+            try {
+                $h = Invoke-RestMethod "https://api.opencommonground.com/health" -TimeoutSec 10
+                if ($h.status -eq "healthy") { $healthy = $true; break }
+            } catch {
+                # Expected while the instance is restarting.
+            }
+        }
+        if ($healthy) {
+            Log "Backend is healthy. Letting the rollout settle..."
+            Start-Sleep 45
+        } else {
+            Warn "Backend did not report healthy within 10 min; purging anyway."
+        }
+    }
+
+    # Purge-by-hostname is Enterprise-only, so this clears the whole zone. That
+    # is harmless: Vercel's assets are content-hashed and simply re-fetch.
+    try {
+        $resp = Invoke-RestMethod `
+            -Uri "https://api.cloudflare.com/client/v4/zones/$cfZone/purge_cache" `
+            -Method POST `
+            -Headers @{ "Authorization" = "Bearer $cfToken"; "Content-Type" = "application/json" } `
+            -Body '{"purge_everything":true}' `
+            -TimeoutSec 30
+        if ($resp.success) {
+            Log "Cloudflare cache purged."
+        } else {
+            Warn "Cloudflare purge returned success=false: $($resp.errors | ConvertTo-Json -Compress)"
+        }
+    } catch {
+        Warn "Cloudflare purge failed: $($_.Exception.Message)"
+        Warn "Manual fallback: Cloudflare dashboard -> Caching -> Configuration -> Purge Everything"
+    }
 }
 
 # Record successful run timestamp (used by scheduler gate)
@@ -211,4 +273,5 @@ Log "============================================================"
 Log " Publish complete!"
 Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
 Log " Railway (backend):  restores DB from B2 and restarts in ~3 min"
+Log " Cloudflare:         edge cache purged (or expires within 1h)"
 Log "============================================================"
