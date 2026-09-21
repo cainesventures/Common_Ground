@@ -80,8 +80,10 @@ def build_sitemap(db_path: str) -> ElementTree:
     urlset = Element("urlset", xmlns="http://www.sitemaps.org/schemas/sitemap/0.9")
 
     static = [
-        (BASE_URL,                                          "1.0",  "weekly",  now),
-        (f"{BASE_URL}/philadelphia",                        "0.9",  "daily",   now),
+        # "/" is deliberately absent: it 308-redirects to /philadelphia, and a
+        # sitemap should only list URLs that resolve 200. Listing both split the
+        # ranking signal between them.
+        (f"{BASE_URL}/philadelphia",                        "1.0",  "daily",   now),
         (f"{BASE_URL}/philadelphia/legislation",            "0.8",  "daily",   now),
         (f"{BASE_URL}/philadelphia/insights",               "0.8",  "weekly",  now),
         (f"{BASE_URL}/philadelphia/councilmembers",         "0.7",  "weekly",  now),

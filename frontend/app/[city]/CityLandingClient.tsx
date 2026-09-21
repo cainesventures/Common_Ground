@@ -296,7 +296,7 @@ function FoundersQuote() {
   )
 }
 
-export default function LandingPage() {
+export default function CityLandingClient() {
   const router = useRouter()
   const { city } = useParams<{ city: string }>()
   const [recentBills, setRecentBills] = useState<BillCardBill[]>([])

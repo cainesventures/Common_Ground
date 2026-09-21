@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
+import { siteUrl } from '@/lib/site'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Pricing — Open Common Ground',
   description: 'Open Common Ground is free forever, supported by donations.',
+  alternates: { canonical: siteUrl('/pricing') },
 }
 
 export default function PricingPage() {
