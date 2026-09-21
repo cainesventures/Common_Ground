@@ -67,6 +67,63 @@ async def log_requests(request: Request, call_next):
     return response
 
 
+# Bill data only changes when publish.ps1 runs, but every response went out with
+# no Cache-Control, so Cloudflare cached nothing (cf-cache-status: DYNAMIC) and
+# every read hit this single instance. An allow-list, not a deny-list: a new
+# route is uncached until someone opts it in.
+PUBLIC_CACHE_PREFIXES = (
+    "/api/legislation",
+    "/api/councilmembers",
+    "/api/insights",
+    "/api/hearings",
+    "/api/elections",
+)
+
+# GET /api/legislation/export returns the caller's own saved bills when
+# tracked_only=true. A shared cache must never hold that.
+NEVER_EDGE_CACHE = ("/api/legislation/export",)
+
+PUBLIC_CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400"
+
+# Auth is a Bearer token from localStorage, so cookies carry no credentials --
+# but the frontend proxies /api/* through Next's rewrites, which forward the
+# visitor's analytics cookies here. Testing for *any* cookie would therefore
+# skip caching for most real visitors, so only session-shaped names count.
+AUTH_COOKIE_HINTS = ("session", "token", "auth", "jwt")
+
+
+@app.middleware("http")
+async def public_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+
+    path = request.url.path
+    if path.startswith(NEVER_EDGE_CACHE):
+        response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+    if (
+        request.method in ("GET", "HEAD")
+        and response.status_code == 200
+        and path.startswith(PUBLIC_CACHE_PREFIXES)
+        # Anything carrying credentials may be user-specific, so leave it
+        # uncacheable and let the response fall through as DYNAMIC.
+        and not request.headers.get("authorization")
+        and not any(
+            hint in name.lower()
+            for name in request.cookies
+            for hint in AUTH_COOKIE_HINTS
+        )
+        # Don't override a route that set its own policy.
+        and "cache-control" not in response.headers
+    ):
+        response.headers["Cache-Control"] = PUBLIC_CACHE_CONTROL
+        # Belt and braces: keep a shared cache from serving an anonymous copy to
+        # a credentialed request, or vice versa.
+        response.headers["Vary"] = "Authorization"
+
+    return response
+
+
 # CORS — allow the Next.js frontend to call the API
 app.add_middleware(
     CORSMiddleware,
