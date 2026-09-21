@@ -56,23 +56,84 @@ CATEGORY_TAGS = [
 _CATEGORY_TAGS_SET = set(CATEGORY_TAGS)
 
 
+# Legistar returns this literal when a bill's record has no title field.
+_NO_TITLE = "(no title)"
+# Statuses where the bill is still in play; anything else gets past tense.
+_HEADLINE_ACTIVE = {"introduced", "in_committee"}
+
+
+def _headline_source(bill) -> str:
+    """Return the grounding text for a headline, or "" if there isn't any.
+
+    A Legistar record with no title field is an empty form — no title, no
+    sponsor, no body. Asked anyway, the model invents a specific-sounding bill,
+    so don't ask. See scripts/clear_ungrounded_headlines.py for the eight bills
+    this produced before the guard existed.
+    """
+    title = (bill.plain_title or bill.title or "").strip()
+    if not title or title.lower() == _NO_TITLE:
+        # No title means no identity. A summary can't rescue it: `analyze` runs
+        # before `headline`, so a summary written from the same empty form is
+        # itself ungrounded and would only launder the fabrication.
+        return ""
+    body = (bill.summary or bill.description or "").strip()
+    return (title + "\n" + body[:600]).strip()
+
+
 def _ai_headline(bill, provider) -> str:
     """Generate a verb-driven newspaper headline for a bill (10-15 words)."""
-    text = bill.plain_title or bill.title or ""
-    if bill.summary:
-        text += "\n" + bill.summary[:600]
-    elif bill.description:
-        text += "\n" + bill.description[:600]
+    text = _headline_source(bill)
+    if not text:
+        logger.info(f"Headline skipped for bill {bill.id}: no usable source text")
+        return ""
+
+    status = (bill.status or "").lower()
+    pretty_status = status.replace("_", " ") or "inactive"
+    context = []
+    if bill.introduced_date:
+        context.append(f"Introduced: {bill.introduced_date.year}")
+    if status:
+        context.append(f"Status: {pretty_status}")
+    if context:
+        text = " | ".join(context) + "\n" + text
+
+    # Present tense on a bill that lapsed in 2003 reads as breaking news. Ledes
+    # already refuse to invent detail; headlines did not, and drifted the same
+    # way — inventing neighborhoods, motives and outcomes.
+    tense = (
+        "Use present tense; this bill is still pending."
+        if status in _HEADLINE_ACTIVE
+        else (
+            f"This bill is NOT pending — it concluded ({pretty_status}). Use PAST "
+            "tense. Never imply it is happening now, taking effect, or about to be "
+            "voted on. Never use words like today, tonight, now, immediately, "
+            "this week, or next month."
+        )
+    )
 
     system = (
-        "You write newspaper headlines for Philadelphia city council bills. "
-        "Write ONE headline: active voice, present tense, 10-15 words, no jargon, no bill numbers. "
-        "Make it feel like a real local news headline — specific and informative. "
-        "Respond with ONLY the headline, no quotes, no punctuation at the end."
+        "You write newspaper headlines for Philadelphia city council bills.\n\n"
+        "STRICT RULE — use ONLY what the source text says. Do NOT invent "
+        "neighborhoods, streets, dollar amounts, sponsors, dates, motives or "
+        "outcomes. Do not state that something was approved, mandated or took "
+        "effect unless the source says so. A zoning change bounded by four "
+        "streets is a zoning change — do not name a neighborhood the source "
+        "does not name.\n\n"
+        f"{tense}\n\n"
+        "Write ONE headline: active voice, 10-15 words, no jargon, no bill "
+        "numbers. Make it specific and informative, like a real local news "
+        "headline, but only as specific as the source allows.\n\n"
+        "If the source is too thin to describe faithfully, respond with exactly "
+        "the single word: EMPTY\n\n"
+        "Respond with ONLY the headline, or the single word EMPTY. No quotes, "
+        "no punctuation at the end."
     )
     try:
         result = provider.complete(system_prompt=system, user_prompt=text)
-        return result.strip().strip('"\'').strip()[:200]
+        result = result.strip().strip('"\'').strip()
+        if result.upper() == "EMPTY" or not result:
+            return ""
+        return result[:200]
     except Exception as e:
         logger.warning(f"Headline failed for bill {bill.id}: {e}")
     return ""
