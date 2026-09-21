@@ -79,3 +79,7 @@ dump.rdb
 .last_publish
 *.source.png
 Open Common Ground Logo*.png
+
+# headline regeneration run state (scripts/regen_concluded_headlines.py)
+scripts/.regen_headlines_checkpoint.json
+scripts/.regen_stop
