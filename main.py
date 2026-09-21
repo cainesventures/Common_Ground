@@ -79,9 +79,27 @@ PUBLIC_CACHE_PREFIXES = (
     "/api/elections",
 )
 
-# GET /api/legislation/export returns the caller's own saved bills when
-# tracked_only=true. A shared cache must never hold that.
-NEVER_EDGE_CACHE = ("/api/legislation/export",)
+# Routes under a cached prefix that are not public. A shared cache keys on URL
+# alone, so caching any of these would let the next anonymous request read a
+# protected response straight out of the edge -- an auth bypass, not just a
+# stale read.
+#   export        - returns the caller's own saved bills when tracked_only=true
+#   bluesky/*     - X-Bot-Token only
+#   stream/*      - dev tier only
+#   count, pipeline-stats - dev tier only
+NEVER_EDGE_CACHE = (
+    "/api/legislation/export",
+    "/api/legislation/count",
+    "/api/legislation/pipeline-stats",
+    "/api/legislation/bluesky/",
+    "/api/legislation/stream/",
+    "/api/hearings/stream/",
+)
+
+# Headers that mean "this request is authenticated". Authorization is not
+# enough on its own: require_bot_token reads X-Bot-Token, so a bot request
+# would otherwise look anonymous here and have its response cached publicly.
+CREDENTIAL_HEADERS = ("authorization", "x-bot-token", "x-api-key")
 
 PUBLIC_CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400"
 
@@ -107,7 +125,7 @@ async def public_cache_headers(request: Request, call_next):
         and path.startswith(PUBLIC_CACHE_PREFIXES)
         # Anything carrying credentials may be user-specific, so leave it
         # uncacheable and let the response fall through as DYNAMIC.
-        and not request.headers.get("authorization")
+        and not any(request.headers.get(h) for h in CREDENTIAL_HEADERS)
         and not any(
             hint in name.lower()
             for name in request.cookies
