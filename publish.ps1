@@ -168,7 +168,21 @@ if ($staged) {
     $stamp = Get-Date -Format "yyyy-MM-dd"
     git commit -m "Data update ${stamp}: refresh sitemap and legislative narrative"
     if ($LASTEXITCODE -ne 0) { Fail "Git commit failed." }
-    git push
+
+    # `git push` writes its progress ("To https://github.com/...") to stderr even
+    # on success. If this script's own output is redirected or piped -- e.g. run
+    # as `.\publish.ps1 2>&1 | Tee-Object` -- that stderr is merged into the
+    # pipeline, and under $ErrorActionPreference="Stop" PowerShell turns it into
+    # a terminating NativeCommandError. The push succeeds and the script dies
+    # anyway, skipping the Railway redeploy, so the new DB never gets restored.
+    # Gate on $LASTEXITCODE instead, which is the real result.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        git push
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
     if ($LASTEXITCODE -ne 0) { Fail "Git push failed." }
     Log "Pushed - Vercel will redeploy in ~2 min."
 } else {
@@ -181,13 +195,16 @@ if ($railwayOk) {
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
     # Without this, Railway skips the restore on restarts (preserving user accounts).
     $version = Get-Date -Format "yyyyMMdd-HHmmss"
-    # NOTE: do NOT pipe railway through `2>&1` here. Merging a native command's
-    # stderr into the pipeline under $ErrorActionPreference="Stop" turns any
-    # stderr line into a terminating NativeCommandError, which aborts the whole
-    # script before the deploy and before .last_publish is written. Let stderr
-    # flow to the console and gate on $LASTEXITCODE instead.
+    # Native commands that write to stderr become a terminating
+    # NativeCommandError under $ErrorActionPreference="Stop" whenever this
+    # script's output is redirected or piped (see the note at step 6). That
+    # would abort the run before the deploy and before .last_publish is
+    # written, so drop to "Continue" and gate on $LASTEXITCODE, which is the
+    # real result.
     # `set` is the current subcommand (the bare `--set` flag is now legacy);
     # --skip-deploys avoids a redundant deploy since we trigger one explicitly below.
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
     railway variables set "DB_RESTORE_VERSION=$version" --skip-deploys
     if ($LASTEXITCODE -ne 0) {
         Warn "Failed to set DB_RESTORE_VERSION. Backend will NOT restore the new DB this run."
@@ -204,6 +221,7 @@ if ($railwayOk) {
             Warn "  railway redeploy --yes   (or railway.com -> opencommonground-api -> Redeploy)"
         }
     }
+    $ErrorActionPreference = $prevEAP
 } else {
     Warn "Step 7/8 - Skipping Railway redeploy (not logged in)."
     Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
