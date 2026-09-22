@@ -204,35 +204,39 @@ function PerspectivesTally({
                     </div>
                   </button>
 
-                  {isOpen && (
-                    <div className="px-4 pb-4 pt-2 bg-muted/10 border-t">
-                      {p.assessment ? (
-                        <div className="space-y-2.5">
-                          {p.assessment.split('\n\n').filter(Boolean).map((para, i) => (
-                            <p key={i} className="text-sm text-foreground/80 leading-relaxed">{para}</p>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground italic">No analysis available.</p>
-                      )}
-                      <div className="flex items-center justify-between mt-3">
-                        {p.generated_at && (
-                          <p className="text-[11px] text-muted-foreground/40">
-                            Generated {timeAgo(p.generated_at)}
-                          </p>
-                        )}
-                        {isAdmin && generate && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); generate(p.perspective_type, true) }}
-                            disabled={isBusy}
-                            className="text-[11px] px-2 py-0.5 rounded border text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
-                          >
-                            Regenerate
-                          </button>
-                        )}
+                  {/*
+                    Kept in the DOM and hidden with CSS when collapsed. The
+                    assessment is the actual writing -- dropping it from the
+                    tree left crawlers with only the perspective's label and
+                    stance, which is the least interesting part of it.
+                  */}
+                  <div className={isOpen ? 'px-4 pb-4 pt-2 bg-muted/10 border-t' : 'hidden'}>
+                    {p.assessment ? (
+                      <div className="space-y-2.5">
+                        {p.assessment.split('\n\n').filter(Boolean).map((para, i) => (
+                          <p key={i} className="text-sm text-foreground/80 leading-relaxed">{para}</p>
+                        ))}
                       </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground italic">No analysis available.</p>
+                    )}
+                    <div className="flex items-center justify-between mt-3">
+                      {p.generated_at && (
+                        <p className="text-[11px] text-muted-foreground/40">
+                          Generated {timeAgo(p.generated_at)}
+                        </p>
+                      )}
+                      {isAdmin && generate && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); generate(p.perspective_type, true) }}
+                          disabled={isBusy}
+                          className="text-[11px] px-2 py-0.5 rounded border text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+                        >
+                          Regenerate
+                        </button>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               )
             })}
@@ -272,16 +276,20 @@ function PerspectivesTally({
 }
 
 export function PerspectivesPanel({
-  billId, analyzed, isAdmin = false, onLoad,
+  billId, analyzed, isAdmin = false, onLoad, initialPerspectives = null,
 }: {
   billId: string
   analyzed: boolean
   isAdmin?: boolean
   onLoad?: (count: number) => void
+  /** Perspectives from the bill payload, so the panel can render during SSR. */
+  initialPerspectives?: Perspective[] | null
 }) {
-  const [perspectives, setPerspectives] = useState<Perspective[]>([])
+  const [perspectives, setPerspectives] = useState<Perspective[]>(initialPerspectives ?? [])
   const [pending, setPending] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  // Seeded means there is something to show on the first render; the skeleton
+  // below is what a crawler used to get instead of the perspectives.
+  const [loading, setLoading] = useState(!initialPerspectives)
   const [loadError, setLoadError] = useState(false)
   const [generating, setGenerating] = useState<string | null>(null)
   const [generateError, setGenerateError] = useState<string | null>(null)
