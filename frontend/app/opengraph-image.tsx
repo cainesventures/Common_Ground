@@ -55,7 +55,7 @@ export default async function Image() {
             maxWidth: '800px',
           }}
         >
-          Track Philadelphia City Council bills with AI summaries and 17 political perspectives.
+          Track Philadelphia City Council bills with AI summaries and perspectives from across the spectrum.
         </div>
         <div
           style={{
@@ -64,7 +64,7 @@ export default async function Image() {
             gap: '16px',
           }}
         >
-          {['Every bill', 'Plain English', '17 perspectives'].map((label) => (
+          {['Every bill', 'Plain English', 'Every angle'].map((label) => (
             <div
               key={label}
               style={{

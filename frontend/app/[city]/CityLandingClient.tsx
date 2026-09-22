@@ -69,8 +69,8 @@ const FEATURES = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
       </svg>
     ),
-    title: '17 Perspectives',
-    body: 'Every bill gets viewpoints from 17 distinct lenses — progressive, conservative, working class, business owner, urban planner, and more. You decide what to think.',
+    title: 'Up to 17 Perspectives',
+    body: 'Bills still moving through Council are read through the lenses that fit the subject — progressive, conservative, working class, business owner, urban planner and more, drawn from a set of 17. You decide what to think.',
   },
   {
     icon: (
@@ -354,7 +354,7 @@ export default function CityLandingClient() {
             Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
           </h1>
           <p className="type-body text-muted-foreground max-w-xl mx-auto mb-8">
-            Every bill. Plain English. 17 perspectives — from labor to business, progressives to conservatives — so you can follow along and make up your own mind.
+            Every bill. Plain English. Bills in play read from every angle — labor to business, progressives to conservatives — so you can follow along and make up your own mind.
           </p>
           <form onSubmit={handleSearch} className="relative max-w-lg mx-auto w-full mb-6">
             {searching ? (
@@ -441,10 +441,13 @@ export default function CityLandingClient() {
       {/* ── Perspectives callout ── */}
       <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">
         <h2 className="type-section mb-3">
-          One bill. 17 perspectives. You decide.
+          One bill. Every angle. You decide.
         </h2>
         <p className="type-body-sm text-muted-foreground max-w-xl mx-auto mb-6">
-          We don&apos;t tell you what to think. We show you how different communities — progressive activists, small business owners, urban planners, even conspiracy theorists — actually see the same legislation. Then you make up your own mind.
+          We don&apos;t tell you what to think. We show you how different communities — progressive activists, small business owners, urban planners, even the deeply skeptical — actually see the same legislation. Then you make up your own mind.
+        </p>
+        <p className="text-xs text-muted-foreground max-w-xl mx-auto mb-6">
+          Written for bills still working their way through Council, using the lenses that fit the subject — usually six to ten of the seventeen, not all of them on every bill.
         </p>
         <div className="flex flex-wrap justify-center gap-2 mb-8 text-xs">
           {['Progressive', 'Conservative', 'Libertarian', 'Socialist', 'Working Class', 'Business', 'Urban Planner', 'Public Health', 'Youth', 'Elderly', 'Neighborhood', 'Christian Ethicist', '+ more'].map((p) => (
@@ -493,7 +496,7 @@ export default function CityLandingClient() {
           >
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">2</div>
-              <p className="font-semibold text-sm">17 takes, zero spin</p>
+              <p className="font-semibold text-sm">Every angle, zero spin</p>
             </div>
             <div className="space-y-1.5 text-xs">
               {[

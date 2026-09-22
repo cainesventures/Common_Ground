@@ -42,8 +42,9 @@ export default function AboutPage() {
         <div className="space-y-3">
           {[
             ['Bill data', 'Legislation is scraped from Philadelphia Legistar, the official public record system maintained by City Council. Bills are fetched regularly to keep the data current.'],
-            ['AI analysis', 'Each bill is sent to an AI model that writes a plain-English summary, assigns an impact score (1–10), categorizes the bill type, and generates 17 political perspectives ranging across the ideological spectrum.'],
-            ['Perspectives', 'The 17 perspectives are not endorsements. They are AI-generated simulations of how different political viewpoints — progressive, conservative, libertarian, socialist, and more — might frame the same bill. They are meant to illuminate trade-offs, not declare winners.'],
+            ['AI analysis', 'Each bill is sent to an AI model that writes a plain-English summary, assigns an impact score (1–10) and categorizes the bill type. Bills still moving through Council also get written perspectives.'],
+            ['Perspectives', 'There are seventeen perspectives in all, but a bill does not get all of them. Five core political lenses are always written; the rest — urban planner, public health, environmental and so on — are added only when the bill’s subject calls for them, so most bills carry six to ten. Bills that have already passed, failed or lapsed are not given perspectives at all.'],
+            ['On perspectives', 'They are not endorsements. They are AI-generated simulations of how different political viewpoints might frame the same bill, meant to illuminate trade-offs rather than declare winners.'],
             ['Limitations', 'AI can be wrong. Summaries may miss nuance. Perspective assessments are approximations. Always read the source bill and form your own view. Nothing here is legal or political advice.'],
           ].map(([title, body]) => (
             <div key={title as string} className="border rounded-lg p-4">
