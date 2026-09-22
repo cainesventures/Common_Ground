@@ -582,20 +582,27 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'text',         label: 'Bill Text' },
 ]
 
-export default function BillDetailClient() {
+export default function BillDetailClient({ initialBill = null }: { initialBill?: any }) {
   const { city, id } = useParams<{ city: string; id: string }>()
   const searchParams = useSearchParams()
-  const [leg, setLeg] = useState<any>(null)
+  // Seeded from the server so the bill renders during SSR instead of falling
+  // into the `if (loading) return null` branch below, which is what left
+  // crawlers with an empty page. The client still refetches on mount to pick up
+  // per-user state (tracking, admin) and any newer data.
+  const [leg, setLeg] = useState<any>(initialBill)
   const [members, setMembers] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!initialBill)
   const [tracked, setTracked] = useState(false)
   const [voteCounts, setVoteCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
   const [isAdmin, setIsAdmin] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [yourVote, setYourVote] = useState<string | null>(null)
-  const [perspectivesCount, setPerspectivesCount] = useState(0)
-  const [rollCallCount, setRollCallCount] = useState(0)
+  // Also seeded: these drive the tab labels, and both come from the same
+  // payload, so deriving them here keeps the server and first client render
+  // identical.
+  const [perspectivesCount, setPerspectivesCount] = useState((initialBill?.perspectives ?? []).length)
+  const [rollCallCount, setRollCallCount] = useState((initialBill?.vote_records ?? []).length)
   const [stickyVisible, setStickyVisible] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const t = searchParams?.get('tab')

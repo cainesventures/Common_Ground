@@ -747,19 +747,24 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const BILLS_PER_PAGE = 20
 
-export default function CouncilmemberDetailClient() {
+export default function CouncilmemberDetailClient({ initialData = null }: { initialData?: any }) {
   const { city, id } = useParams<{ city: string; id: string }>()
-  const [data, setData]           = useState<any>(null)
-  const [loading, setLoading]     = useState(true)
+  // Seeded from the server so the profile renders during SSR rather than
+  // hitting the skeleton branch below, which is all a crawler used to receive.
+  const [data, setData]           = useState<any>(initialData)
+  const [loading, setLoading]     = useState(!initialData)
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
   const [billsPage, setBillsPage]     = useState(1)
   const [billsLoading, setBillsLoading] = useState(false)
 
   useEffect(() => {
+    // Already seeded with page 1 from the server; skip the duplicate fetch.
+    if (initialData) return
     api.getCouncilmember(id, 1, BILLS_PER_PAGE)
       .then((d) => setData(d))
       .catch(console.error)
       .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const loadBillsPage = async (page: number) => {

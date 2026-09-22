@@ -3,6 +3,32 @@ import { siteUrl } from '@/lib/site'
 
 const TITLE_MAX = 70
 
+/**
+ * Fetch a bill on the server.
+ *
+ * Called by both generateMetadata and the page. Next dedupes identical fetches
+ * within a request, so this costs one call, not two.
+ *
+ * Passing the result into the client component is what puts the bill's actual
+ * content in the server-rendered HTML. Client components are still
+ * server-rendered on first load -- these pages were shipping an empty shell
+ * only because the data arrived in a useEffect, which never runs during SSR,
+ * leaving the component's `if (loading) return null` branch to render nothing.
+ */
+async function getBill(id: string) {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`,
+      { next: { revalidate: 3600 } },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.data ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Trim to a word boundary so a 300-character legal title reads as a title. */
 function truncateTitle(value: string): string {
   const clean = value.trim().replace(/\s+/g, ' ')
@@ -15,12 +41,8 @@ function truncateTitle(value: string): string {
 export async function generateMetadata({ params }: { params: Promise<{ city: string; id: string }> }) {
   const { city, id } = await params
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`, {
-      next: { revalidate: 3600 },
-    })
-    if (!res.ok) return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
-    const data = await res.json()
-    const bill = data?.data
+    const bill = await getBill(id)
+    if (!bill) return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
     // Legal titles run to 300+ characters; Google shows ~60. Prefer the plain
     // title, then the AI headline, and only fall back to the raw legal title,
     // trimmed at a word boundary.
@@ -54,6 +76,13 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   }
 }
 
-export default function BillDetailPage() {
-  return <BillDetailClient />
+export default async function BillDetailPage({
+  params,
+}: {
+  params: Promise<{ city: string; id: string }>
+}) {
+  const { id } = await params
+  // null is fine: the client falls back to fetching, exactly as before.
+  const initialBill = await getBill(id)
+  return <BillDetailClient initialBill={initialBill} />
 }
