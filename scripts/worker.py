@@ -311,9 +311,19 @@ def _step_headline(bill, db, label: str) -> str:
 
 
 def _run_headline(bill, db, label: str):
-    from app.services.legislation_service import _ai_headline, _ai_lede
+    from app.services.legislation_service import _ai_headline, _ai_lede, _headline_source
     from app.services.ai_provider import get_ai_provider
     from app.services.perspectives_service import ACTIVE_STATUSES
+
+    # Same retirement as worker_core._run_headline. A bill whose Legistar record
+    # is a blank form has nothing to write a headline from; refusing to invent
+    # one leaves headline empty, which steps_needed() reads as "still needs a
+    # headline", so it requeues forever and burns a model call every pass.
+    if not _headline_source(bill):
+        _set_skip(bill, db, "no_usable_source_text")
+        log.info(f"{label} no usable source text — skipping permanently")
+        return
+
     provider = get_ai_provider()
     bill.headline = _ai_headline(bill, provider)
     # Ledes drive the bot + bill-detail hook — only generate for live bills.
