@@ -83,3 +83,6 @@ Open Common Ground Logo*.png
 # headline regeneration run state (scripts/regen_concluded_headlines.py)
 scripts/.regen_headlines_checkpoint.json
 scripts/.regen_stop
+
+scripts/.backfill_perspectives_checkpoint.json
+scripts/.backfill_stop
