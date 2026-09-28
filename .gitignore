@@ -86,3 +86,4 @@ scripts/.regen_stop
 
 scripts/.backfill_perspectives_checkpoint.json
 scripts/.backfill_stop
+scripts/.persona_refresh_checkpoint.json

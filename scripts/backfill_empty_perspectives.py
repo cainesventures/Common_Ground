@@ -106,21 +106,38 @@ class Metrics:
                     f"salvaged {self.salvaged} · {gpu} · ETA {eta}")
 
 
-def load_checkpoint() -> set:
-    if os.path.exists(CHECKPOINT):
+def load_checkpoint(path: str) -> set:
+    if os.path.exists(path):
         try:
-            with open(CHECKPOINT, encoding="utf8") as f:
+            with open(path, encoding="utf8") as f:
                 return set(json.load(f).get("done", []))
         except Exception:
             pass
     return set()
 
 
-def save_checkpoint(done: set) -> None:
-    tmp = CHECKPOINT + ".tmp"
+def save_checkpoint(done: set, path: str) -> None:
+    tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf8") as f:
         json.dump({"done": sorted(done)}, f)
-    os.replace(tmp, CHECKPOINT)
+    os.replace(tmp, path)
+
+
+def select_personas(conn, personas, limit):
+    """Every perspective of the given personas, empty or not, on active bills.
+
+    Used after a prompt change: the stored text was written under the old
+    prompt, so the whole persona is refreshed rather than only its gaps.
+    """
+    marks = ",".join("?" * len(personas))
+    rows = conn.execute(f"""
+        select p.id, p.perspective_type, p.bill_id, l.bill_number, l.title,
+               l.sponsor, l.status, l.summary, l.full_text, l.description
+        from bill_perspectives p join legislation l on l.id = p.bill_id
+        where p.perspective_type in ({marks})
+          and l.status in ('introduced', 'in_committee')
+        order by l.introduced_date desc""", personas).fetchall()
+    return rows[:limit] if limit else rows
 
 
 def select_targets(conn, limit):
@@ -166,6 +183,12 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--purge-concluded", action="store_true",
                     help="delete empty perspectives on concluded bills, then exit")
+    ap.add_argument("--personas", default="",
+                    help="comma-separated persona names to regenerate in full "
+                         "(after a prompt change), instead of only empty rows")
+    ap.add_argument("--checkpoint", default=CHECKPOINT,
+                    help="separate checkpoint file, so a persona pass does not "
+                         "collide with the empty-row backfill")
     args = ap.parse_args()
 
     from app.services.perspectives_service import (
@@ -183,8 +206,14 @@ def main() -> int:
         conn.close()
         return 0
 
-    done = load_checkpoint()
-    targets = [r for r in select_targets(conn, args.limit) if r["id"] not in done]
+    done = load_checkpoint(args.checkpoint)
+    if args.personas:
+        personas = [x.strip() for x in args.personas.split(",") if x.strip()]
+        pool = select_personas(conn, personas, args.limit)
+        log(f"persona refresh: {', '.join(personas)}")
+    else:
+        pool = select_targets(conn, args.limit)
+    targets = [r for r in pool if r["id"] not in done]
 
     log(f"{len(targets)} empty perspectives to regenerate "
         f"({len(done)} already done) at concurrency {args.concurrency}")
@@ -253,7 +282,7 @@ def main() -> int:
         if metrics.done % args.report_every == 0:
             log(metrics.snapshot())
             with db_lock:
-                save_checkpoint(done)
+                save_checkpoint(done, args.checkpoint)
 
     try:
         with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
@@ -266,7 +295,7 @@ def main() -> int:
         stop.set()
         log("interrupted — saving progress")
 
-    save_checkpoint(done)
+    save_checkpoint(done, args.checkpoint)
     log("FINAL " + metrics.snapshot())
     if metrics.reasons:
         log("failure reasons: " + ", ".join(f"{k}={v}" for k, v in metrics.reasons.most_common()))
