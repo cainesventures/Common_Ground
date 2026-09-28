@@ -124,13 +124,37 @@ def save_checkpoint(done: set) -> None:
 
 
 def select_targets(conn, limit):
+    """Empty perspectives on bills that are still in play.
+
+    Concluded bills are excluded deliberately: the pipeline does not write
+    perspectives for them (worker_core skips TERMINAL_STATUSES), so generating
+    some here would contradict that and add content the design says not to
+    produce. Their empty rows get deleted instead -- see --purge-concluded.
+    """
     rows = conn.execute("""
         select p.id, p.perspective_type, p.bill_id, l.bill_number, l.title,
                l.sponsor, l.status, l.summary, l.full_text, l.description
         from bill_perspectives p join legislation l on l.id = p.bill_id
-        where p.assessment is null or trim(p.assessment) = ''
+        where (p.assessment is null or trim(p.assessment) = '')
+          and l.status in ('introduced', 'in_committee')
         order by l.introduced_date desc""").fetchall()
     return rows[:limit] if limit else rows
+
+
+def purge_concluded(conn) -> int:
+    """Delete empty perspectives on concluded bills.
+
+    These are leftovers from when the bill was active. The bills keep whatever
+    real perspectives they earned then; only the rows that render a stance badge
+    over "No analysis available" go.
+    """
+    cur = conn.execute("""
+        delete from bill_perspectives
+        where (assessment is null or trim(assessment) = '')
+          and bill_id in (select id from legislation
+                          where status not in ('introduced', 'in_committee'))""")
+    conn.commit()
+    return cur.rowcount
 
 
 def main() -> int:
@@ -140,6 +164,8 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--report-every", type=int, default=25)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--purge-concluded", action="store_true",
+                    help="delete empty perspectives on concluded bills, then exit")
     args = ap.parse_args()
 
     from app.services.perspectives_service import (
@@ -150,6 +176,12 @@ def main() -> int:
     conn = sqlite3.connect(DB, timeout=60, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("pragma journal_mode=wal")
+
+    if args.purge_concluded:
+        n = purge_concluded(conn)
+        log(f"deleted {n} empty perspectives on concluded bills")
+        conn.close()
+        return 0
 
     done = load_checkpoint()
     targets = [r for r in select_targets(conn, args.limit) if r["id"] not in done]
