@@ -24,15 +24,28 @@ class AIProvider(ABC):
 
 
 # Enrichment runs on the same desktop the owner uses, so a long pipeline should
-# not take the GPU hostage. When one of these is running, inference drops to
-# CPU-only and the model is evicted from VRAM.
+# not take the machine hostage while one of these is running.
 _GAME_PROCESSES = {
     "tf_win64.exe", "tf.exe", "hl2.exe", "cs2.exe", "csgo.exe",
     "dota2.exe", "portal2.exe", "left4dead2.exe",
 }
-# How long a GPU/CPU decision stands before it is re-checked. Scanning the
-# process table per request would cost more than the throttling saves.
-_POLICY_TTL_SECONDS = 60
+# How long a game check stands before it is re-taken. Scanning the process
+# table per request would cost more than the throttling saves.
+_GAME_CHECK_TTL_SECONDS = 30
+
+
+class InferencePaused(RuntimeError):
+    """Raised when the machine stayed busy longer than we are willing to wait."""
+
+
+class InferenceTimeout(RuntimeError):
+    """A generation exceeded the client timeout.
+
+    Distinct from a transport error because the server has NOT stopped: Ollama
+    keeps generating after the client gives up, and it serialises per model, so
+    an immediate retry queues behind work that is still running. Retrying on
+    this is what turned a slow run into an unusable machine.
+    """
 
 
 class OllamaProvider(AIProvider):
@@ -45,62 +58,80 @@ class OllamaProvider(AIProvider):
         self._client = httpx.Client(timeout=300, limits=httpx.Limits(max_connections=30, max_keepalive_connections=10))
 
         import os
-        # auto (default) backs off while a game is running; gpu/cpu force it.
-        self._policy = (os.getenv("AI_GPU_POLICY") or "auto").strip().lower()
+        # "pause" (default) waits while a game is running. "gpu" never waits.
+        # "cpu" forces CPU-only and is opt-in ONLY: an automatic CPU fallback
+        # moved load onto the resource that was already contended (the game had
+        # the CPU, not the VRAM), which is what made the machine unusable.
+        self._policy = (os.getenv("AI_GPU_POLICY") or "pause").strip().lower()
+        if self._policy == "auto":  # old name for the fallback behaviour
+            self._policy = "pause"
         self._num_thread = int(os.getenv("AI_NUM_THREAD") or 0)
-        self._vram_floor_mb = int(os.getenv("AI_VRAM_FLOOR_MB") or 3000)
-        self._use_gpu = True
-        self._policy_checked_at = 0.0
+        # Cap generation length so one call cannot run away. Perspectives are
+        # 2-3 paragraphs, ~400 tokens; this leaves headroom without unbounded
+        # generation behind a client that has already given up.
+        self._num_predict = int(os.getenv("AI_NUM_PREDICT") or 800)
+        self._pause_poll_seconds = int(os.getenv("AI_PAUSE_POLL_SECONDS") or 20)
+        self._pause_max_seconds = int(os.getenv("AI_PAUSE_MAX_SECONDS") or 1800)
+        self._game_checked_at = 0.0
+        self._game_seen = False
 
-    def _should_use_gpu(self) -> bool:
-        """Whether to offload to the GPU, re-evaluated at most once a minute.
-
-        Every probe is best-effort: on a host with no GPU, no nvidia-smi or no
-        psutil (Railway, CI) this must not change the existing behaviour, so any
-        failure falls through to using the GPU as before.
-        """
+    def _game_running(self) -> bool:
+        """Names of any known game process, re-checked at most twice a minute."""
         import time
-        if self._policy == "gpu":
-            return True
-        if self._policy == "cpu":
-            return False
-
         now = time.time()
-        if now - self._policy_checked_at < _POLICY_TTL_SECONDS:
-            return self._use_gpu
-        self._policy_checked_at = now
+        if now - self._game_checked_at < _GAME_CHECK_TTL_SECONDS:
+            return self._game_seen
+        self._game_checked_at = now
 
-        previous = self._use_gpu
-        decision = True
+        seen = False
         try:
             import psutil
             for p in psutil.process_iter(["name"]):
                 if (p.info.get("name") or "").lower() in _GAME_PROCESSES:
-                    decision = False
+                    seen = True
                     break
         except Exception:
+            # No psutil (Railway, CI) — never pause there.
+            seen = False
+        self._game_seen = seen
+        return seen
+
+    def _wait_if_busy(self) -> None:
+        """Block while a game is running, rather than moving work to the CPU.
+
+        Pausing is the only honest option: the GPU is what the game needs, and
+        the CPU fallback this replaces simply relocated the load onto the
+        resource the game was already saturating.
+        """
+        import time
+        if self._policy != "pause" or not self._game_running():
+            return
+
+        self._unload()  # hand the VRAM back straight away
+        waited = 0
+        logger.info("Ollama: pausing — a game is running")
+        while waited < self._pause_max_seconds:
+            time.sleep(self._pause_poll_seconds)
+            waited += self._pause_poll_seconds
+            self._game_checked_at = 0.0  # force a fresh look
+            if not self._game_running():
+                logger.info(f"Ollama: resuming after {waited}s")
+                return
+        raise InferencePaused(
+            f"A game has been running for over {self._pause_max_seconds}s; "
+            "stopping rather than competing with it. Set AI_GPU_POLICY=gpu to override."
+        )
+
+    def _loaded_on_gpu(self) -> bool:
+        """True when Ollama already holds this model in VRAM."""
+        try:
+            r = self._client.get(f"{self.base_url}/api/ps", timeout=10)
+            for m in (r.json() or {}).get("models", []):
+                if m.get("name", "").startswith(self.model.split(":")[0]):
+                    return (m.get("size_vram") or 0) > 0
+        except Exception:
             pass
-
-        if decision:
-            try:
-                import subprocess
-                out = subprocess.run(
-                    ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
-                    capture_output=True, text=True, timeout=10,
-                )
-                if out.returncode == 0:
-                    if int(out.stdout.strip().splitlines()[0]) < self._vram_floor_mb:
-                        decision = False
-            except Exception:
-                pass
-
-        self._use_gpu = decision
-        if previous and not decision:
-            logger.info("Ollama: backing off to CPU — GPU is in use elsewhere")
-            self._unload()
-        elif decision and not previous:
-            logger.info("Ollama: GPU free again — resuming GPU inference")
-        return decision
+        return False
 
     def _unload(self) -> None:
         """Evict the model from VRAM instead of waiting out keep_alive."""
@@ -108,15 +139,20 @@ class OllamaProvider(AIProvider):
             self._client.post(
                 f"{self.base_url}/api/chat",
                 json={"model": self.model, "messages": [], "keep_alive": 0},
+                timeout=30,
             )
         except Exception:
             pass
 
     def _options(self) -> dict:
-        options: dict = {}
+        options: dict = {"num_predict": self._num_predict}
         if self._num_thread > 0:
             options["num_thread"] = self._num_thread
-        if not self._should_use_gpu():
+        # num_gpu is set only when CPU mode is explicitly requested. Deciding it
+        # from free VRAM was self-defeating: our own model load consumes the
+        # very headroom being measured, so a concurrent check saw "not enough
+        # VRAM" and pinned the whole run to the CPU on an idle GPU.
+        if self._policy == "cpu":
             options["num_gpu"] = 0
         return options
 
@@ -156,27 +192,40 @@ class OllamaProvider(AIProvider):
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         import httpx
+        self._wait_if_busy()
+
         url = f"{self.base_url}/api/chat"
-        options = self._options()
         payload = {
             "model": self.model,
             "stream": False,
             # Shorter than it was: an abandoned run should give VRAM back
             # quickly rather than holding ~5GB for five minutes.
             "keep_alive": "60s",
+            "options": self._options(),
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
         }
-        if options:
-            payload["options"] = options
         try:
             r = self._client.post(url, json=payload)
             r.raise_for_status()
             return r.json()["message"]["content"]
+        except (httpx.ReadTimeout, httpx.PoolTimeout) as e:
+            # Do NOT retry. The client gave up but Ollama has not: it keeps
+            # generating, and it serialises per model, so a retry queues behind
+            # work still in flight. Repeating that is what pinned the CPU and
+            # took the machine down.
+            still_loaded = self._loaded_on_gpu()
+            logger.warning(
+                "Ollama generation exceeded the client timeout; the server is "
+                "probably still working on it. Not retrying. "
+                f"(model resident on GPU: {still_loaded})"
+            )
+            raise InferenceTimeout(str(e)) from e
         except (httpx.ConnectError, httpx.ConnectTimeout):
-            # Ollama not running — start it and retry once
+            # Ollama not running — start it and retry once. Safe to retry:
+            # nothing was ever accepted by the server.
             self._ensure_running()
             r = self._client.post(url, json=payload)
             r.raise_for_status()
