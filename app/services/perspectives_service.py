@@ -378,8 +378,15 @@ def _extract_json(text: str) -> dict:
         result["position"] = pos_match.group(1)
     # Grab everything between the first "response": " ... " block
     resp_match = re.search(r'"response"\s*:\s*"(.*?)(?<!\\)"\s*\}', raw, re.DOTALL)
+    if not resp_match:
+        # Truncated generation: no closing quote/brace, so the pattern above
+        # cannot match. Salvage the prose anyway -- otherwise this pass returns
+        # a position with no text, which used to be stored as a perspective
+        # showing a stance badge over "No analysis available".
+        resp_match = re.search(r'"response"\s*:\s*"(.+)', raw, re.DOTALL)
     if resp_match:
-        result["response"] = resp_match.group(1).replace('\\n', '\n').replace('\\"', '"')
+        text_value = resp_match.group(1).replace('\\n', '\n').replace('\\"', '"')
+        result["response"] = text_value.rstrip().rstrip('"}').rstrip()
     if result:
         return result
 
@@ -454,6 +461,18 @@ def generate_perspective(
             logger.warning(f"Empty response for {perspective_type} on bill {bill.bill_number}")
             return None
 
+        # A partial parse yields a position with no prose. Storing that gives a
+        # stance badge over "No analysis available" -- 32% of rows ended up that
+        # way. Treat it as a failure so the bill stays incomplete and retryable
+        # instead of looking finished.
+        assessment_text = (data.get("response") or data.get("assessment") or "").strip()
+        if not assessment_text:
+            logger.warning(
+                f"No assessment text for {perspective_type} on bill {bill.bill_number} "
+                "— discarding rather than storing an empty perspective"
+            )
+            return None
+
         # Upsert
         persp = db.query(BillPerspective).filter(
             BillPerspective.bill_id == bill.id,
@@ -478,7 +497,7 @@ def generate_perspective(
         persp.position = normalized
         persp.key_arguments = json.dumps([])
         persp.concerns = None
-        persp.assessment = data.get("response") or data.get("assessment")
+        persp.assessment = assessment_text
         persp.ai_provider = settings.ai_provider
         persp.ai_model = settings.ai_model
         persp.generated_at = datetime.utcnow()
