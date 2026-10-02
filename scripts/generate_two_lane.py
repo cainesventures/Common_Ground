@@ -17,9 +17,16 @@ Three calls per bill, all persona-free. A triage step first, because forcing a
 case for and against guarantees a case exists: that is how the earlier pipeline
 ended up arguing passionately about a kerbside parking rule.
 
+Every stage is then checked mechanically before it is kept -- see
+`scripts/two_lane_checks.py` for what is checked and why. Ungrounded output is
+regenerated, and a bill that cannot produce grounded output in three attempts
+is dropped rather than shipped with a reservation attached. The measured rate
+at which that happens is `scripts/eval_two_lane.py`.
+
 Usage:
     python scripts/generate_two_lane.py --sample 20      # print for review
     python scripts/generate_two_lane.py --bill 260466    # one bill
+    python scripts/generate_two_lane.py --sample 20 --no-checks   # raw output
 """
 
 import argparse
@@ -32,6 +39,10 @@ import textwrap
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from two_lane_checks import (  # noqa: E402  (after the sys.path fix-up)
+    contradiction_check, direction_conflicts, ungrounded_numbers)
 
 DB = "common_ground_test.db"
 
@@ -44,11 +55,16 @@ TRIAGE_SYSTEM = (
     "money, or expands a government power. Answer with exactly one word."
 )
 
+# "2-4" used to appear here as a digit range, and the model opened with "Here
+# are the 2-4 substantive things this bill actually does:" often enough that
+# the grounding check kept rejecting insights for asserting the number 4 -- a
+# figure that came from the instruction, not the bill. Written out, the limit
+# survives the echo without putting a digit in the text.
 INSIGHTS_SYSTEM = (
     "You brief legislators on municipal bills. You have no opinions. List the "
-    "2-4 substantive things this bill actually does: what changes, for whom, and "
-    "any money, powers, obligations or restrictions involved. Be concrete and "
-    "factual. No evaluation."
+    "substantive things this bill actually does, at most four of them: what "
+    "changes, for whom, and any money, powers, obligations or restrictions "
+    "involved. Be concrete and factual. No evaluation. Do not preface the list."
 )
 
 FOR_SYSTEM = (
@@ -81,9 +97,22 @@ def clean(text: str, limit: int = 900) -> str:
     Three of 22 blocks opened with "Here is the case AGAINST Bill 260514:" and
     four were sliced mid-word by a hard character cap, which reads as broken
     rather than brief.
+
+    "here are" was added after the grounding check started rejecting insights
+    for asserting the number 4. The model was opening with "Here are the 2-4
+    substantive things this bill actually does:" -- echoing the instruction it
+    had just been given, so the only ungrounded figure in the text came from
+    the prompt. Insights are run through this too now, which they were not
+    before: a preamble quoting the brief back is not something a reader should
+    see either.
     """
     t = (text or "").strip()
-    t = re.sub(r"^\s*(here is|below is|the following is)[^:\n]{0,80}:\s*", "", t, flags=re.I)
+    # The optional lead-in clause is there because the echo also arrives as
+    # "Based on the bill text, here are 3-4 substantive things ...:".
+    t = re.sub(r"^\s*(?:[^.:\n]{0,50},\s*)?"
+               r"(here is|here are|below is|below are|these are|"
+               r"the following is|the following are)[^:\n]{0,80}:\s*",
+               "", t, flags=re.I)
     t = re.sub(r"^\s*case\s+(for|against)[^:\n]{0,60}:\s*", "", t, flags=re.I)
     t = t.strip()
     if len(t) <= limit:
@@ -91,6 +120,22 @@ def clean(text: str, limit: int = 900) -> str:
     cut = t[:limit]
     end = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
     return (cut[:end + 1] if end > limit // 2 else cut.rstrip()).strip()
+
+
+def grounding_source(r) -> str:
+    """Everything known about the bill, for the grounding checks to match against.
+
+    Deliberately wider than `bill_facts`, which the model sees. A number that
+    sits 3,000 characters into the full text cannot have been copied from the
+    prompt, but it is still a real number in a real bill, and rejecting the
+    summary's own figures because the prompt window clipped them would reject
+    grounded bills. The check is "is this number in the bill", not "is it in
+    the prompt".
+    """
+    return "\n".join(filter(None, (
+        r["bill_number"], r["title"], r["sponsor"], r["summary"],
+        r["description"], r["full_text"],
+    )))
 
 
 def bill_facts(r) -> str:
@@ -104,27 +149,102 @@ def bill_facts(r) -> str:
     )
 
 
-def two_lane(provider, r) -> dict:
-    """Returns {procedural, insights, case_for, case_against}."""
+ATTEMPTS = 3  # one generation plus two retries; beyond that the bill is dropped
+
+
+def _faults(text: str, source: str, label: str):
+    """Mechanical faults in one block of generated text, as readable strings."""
+    faults = []
+    for raw, value in ungrounded_numbers(text, source):
+        faults.append(f"{label}: ungrounded number {raw!r} ({value:g})")
+    for name in direction_conflicts(text, source):
+        faults.append(f"{label}: direction conflict ({name})")
+    return faults
+
+
+def _generate_insights(provider, r, source, facts, checks, attempts):
+    """Insights, regenerated until grounded and not self-contradicting.
+
+    This stage is checked hardest because it is upstream of both arguments:
+    260710's inversion was already present here, in "the new hours will be
+    between 11 p.m. and 6 a.m." read as permission, and both lanes inherited
+    it. A number or a direction that gets past this point gets past everything.
+    """
+    rejections = []
+    for attempt in range(1, attempts + 1):
+        insights = clean(provider.complete(
+            system_prompt=INSIGHTS_SYSTEM, user_prompt=facts), limit=800)
+        if not checks:
+            return insights, rejections, attempt
+        faults = _faults(insights, source, "insights")
+        verdicts = contradiction_check(provider, insights, source)
+        faults += [f"insights: contradicted -- {c[:90]}"
+                   for c in verdicts["contradicted"]]
+        if not faults:
+            return insights, rejections, attempt
+        rejections += [f"attempt {attempt}: {f}" for f in faults]
+    return None, rejections, attempts
+
+
+def _generate_case(provider, system, grounded, source, label, checks, attempts):
+    """One lane, regenerated until every number in it is in the bill."""
+    rejections = []
+    for attempt in range(1, attempts + 1):
+        text = clean(provider.complete(system_prompt=system, user_prompt=grounded))
+        if not checks:
+            return text, rejections, attempt
+        faults = _faults(text, source, label)
+        if not faults:
+            return text, rejections, attempt
+        rejections += [f"attempt {attempt}: {f}" for f in faults]
+    return None, rejections, attempts
+
+
+def two_lane(provider, r, checks: bool = True, attempts: int = ATTEMPTS) -> dict:
+    """Returns {procedural, insights, case_for, case_against, dropped, ...}.
+
+    `dropped` is set when the bill is substantive but could not be argued in
+    grounded terms within `attempts` tries. A dropped bill shows no case at
+    all: a half-checked argument with a caveat under it is worse than silence
+    on a site whose whole claim is that it does not make things up.
+    """
     facts = bill_facts(r)
+    source = grounding_source(r)
+    out = {"procedural": False, "insights": None, "case_for": None,
+           "case_against": None, "dropped": None, "rejections": [],
+           "attempts": {}}
 
     triage = provider.complete(system_prompt=TRIAGE_SYSTEM, user_prompt=facts)
     if "procedural" in triage.lower()[:40]:
-        return {"procedural": True, "insights": None,
-                "case_for": None, "case_against": None}
+        out["procedural"] = True
+        return out
 
-    insights = provider.complete(
-        system_prompt=INSIGHTS_SYSTEM, user_prompt=facts).strip()[:800]
+    insights, rej, n = _generate_insights(provider, r, source, facts, checks, attempts)
+    out["rejections"] += rej
+    out["attempts"]["insights"] = n
+    if insights is None:
+        out["dropped"] = "insights_ungrounded"
+        return out
+    out["insights"] = insights
+
+    # The arguments may use anything in the bill or in the verified insights.
+    # Insights are a legitimate grounding source only because they have just
+    # been checked against the bill themselves.
+    arg_source = source + "\n" + insights
     grounded = f"Bill {r['bill_number']}.\nWhat it does:\n{insights}"
 
-    return {
-        "procedural": False,
-        "insights": insights,
-        "case_for": clean(provider.complete(
-            system_prompt=FOR_SYSTEM, user_prompt=grounded)),
-        "case_against": clean(provider.complete(
-            system_prompt=AGAINST_SYSTEM, user_prompt=grounded)),
-    }
+    for key, system, label in (("case_for", FOR_SYSTEM, "case_for"),
+                               ("case_against", AGAINST_SYSTEM, "case_against")):
+        text, rej, n = _generate_case(
+            provider, system, grounded, arg_source, label, checks, attempts)
+        out["rejections"] += rej
+        out["attempts"][key] = n
+        if text is None:
+            out["dropped"] = f"{key}_ungrounded"
+            return out
+        out[key] = text
+
+    return out
 
 
 def pick_bills(n, bill_number=None):
@@ -148,6 +268,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--sample", type=int, default=20)
     ap.add_argument("--bill", default=None)
+    ap.add_argument("--no-checks", action="store_true",
+                    help="generate without the grounding checks, as it was before")
     args = ap.parse_args()
 
     from app.services.ai_provider import get_ai_provider
@@ -156,18 +278,31 @@ def main():
 
     wrap = lambda s, i="    ": textwrap.fill(s, 96, initial_indent=i, subsequent_indent=i)
     t0 = time.time()
-    procedural = 0
+    procedural = dropped = argued = regenerated = 0
     for i, r in enumerate(rows, 1):
-        out = two_lane(provider, r)
+        out = two_lane(provider, r, checks=not args.no_checks)
         print("=" * 100)
         print(f"[{i}/{len(rows)}] BILL {r['bill_number']}  ({r['status']})")
         print(wrap((r["summary"] or "")[:300], "    "))
         print()
+        if out["rejections"]:
+            regenerated += 1
+            print("  REJECTED AND REGENERATED")
+            for line in out["rejections"]:
+                print(f"    {line}")
+            print()
         if out["procedural"]:
             procedural += 1
             print("    -- PROCEDURAL: no case presented --")
             print()
             continue
+        if out["dropped"]:
+            dropped += 1
+            print(f"    -- DROPPED ({out['dropped']}): no grounded case after "
+                  f"{ATTEMPTS} attempts --")
+            print()
+            continue
+        argued += 1
         print("  CASE FOR")
         print(wrap(out["case_for"]))
         print()
@@ -175,8 +310,10 @@ def main():
         print(wrap(out["case_against"]))
         print()
     print("=" * 100)
-    print(f"{len(rows)} bills in {(time.time()-t0)/60:.1f} min "
-          f"({procedural} judged procedural, {len(rows)-procedural} argued)")
+    print(f"{len(rows)} bills in {(time.time()-t0)/60:.1f} min  "
+          f"{procedural} procedural, {argued} argued, {dropped} dropped")
+    print(f"{regenerated} bills needed at least one regeneration"
+          + ("  (checks off)" if args.no_checks else ""))
     return 0
 
 
