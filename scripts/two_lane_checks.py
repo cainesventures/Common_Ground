@@ -218,6 +218,14 @@ def output_numbers(text: str):
     for raw, value in _digit_values(text):
         found.append((raw, value))
     for raw, value, start, end in _word_values(text):
+        # A scale word already counted as part of a digit figure is not a
+        # separate claim. "$38.2 million" was reporting three faults -- 38.2,
+        # 38,200,000 and a bare "million" -- for one invented number, which
+        # makes the rejection log read as though the model had done three
+        # things wrong.
+        if (raw.lower() in SCALES
+                and re.search(r"[\d,.]\s*$", text[max(0, start - 12):start])):
+            continue
         if _is_quantified(text, start, end):
             found.append((raw, value))
     for m in _ORDINAL.finditer(text):

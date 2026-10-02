@@ -119,6 +119,11 @@ def clean(text: str, limit: int = 900) -> str:
                r"the following is|the following are)[^:\n]{0,80}:\s*",
                "", t, flags=re.I)
     t = re.sub(r"^\s*case\s+(for|against)[^:\n]{0,60}:\s*", "", t, flags=re.I)
+    # "Bill 260765 promotes ..." in both lanes at once, side by side, reads as
+    # filler the second time. The number is already the page heading. Swapped
+    # rather than cut, because cutting it leaves the sentence without a
+    # subject.
+    t = re.sub(r"^Bill\s+\d[\w-]*\s+(?=[a-z])", "This bill ", t)
     t = t.strip()
     if len(t) <= limit:
         return t
