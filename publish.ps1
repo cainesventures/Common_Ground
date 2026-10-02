@@ -12,23 +12,25 @@
 #   .\publish.ps1                              - full pipeline
 #   .\publish.ps1 -SkipFetch                  - skip Legistar scrape
 #   .\publish.ps1 -SkipEnrich -SkipNarrative  - sitemap + upload only
+#   .\publish.ps1 -SkipTwoLane               - skip the case for / against
 #
 # Steps:
 #  1. scripts/fetch_bills.py          - incremental Legistar scrape (since last ingest date)
 #  2. scripts/worker.py               - Ollama enrichment (full_text, analyze, headline, metadata, perspectives)
-#  3. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
-#  4. scripts/generate_sitemap.py     - regenerate static sitemap.xml
-#  5. litestream replicate            - upload CONTENT DB snapshot to Backblaze B2 (path "db")
-#  6. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
-#  7. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
-#  8. cloudflare purge                - drop cached API reads so the new data is served immediately
+#  3. scripts/generate_two_lane.py    - the case for / against for newly active bills (Ollama)
+#  4. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
+#  5. scripts/generate_sitemap.py     - regenerate static sitemap.xml
+#  6. litestream replicate            - upload CONTENT DB snapshot to Backblaze B2 (path "db")
+#  7. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
+#  8. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
+#  9. cloudflare purge                - drop cached API reads so the new data is served immediately
 #
-# Step 8 needs CLOUDFLARE_API_TOKEN (Zone -> Cache Purge -> Purge) and
+# Step 9 needs CLOUDFLARE_API_TOKEN (Zone -> Cache Purge -> Purge) and
 # CLOUDFLARE_ZONE_ID in .env.  Without them the step is skipped with a warning
 # and the edge simply expires on its own (s-maxage=3600), so a publish still
 # succeeds -- the new data just takes up to an hour to appear.
 #
-# NOTE: Step 5 only touches content.db.  Users.db (accounts, votes, tracking,
+# NOTE: Step 6 only touches content.db.  Users.db (accounts, votes, tracking,
 # bluesky_posts, donations) lives on production and is continuously backed up
 # by the Railway-side Litestream process to B2 path "users".  publish.ps1
 # never overwrites prod user data.  See app/models/__init__.py for the split.
@@ -37,6 +39,7 @@ param(
     [switch]$SkipFetch,
     [switch]$SkipEnrich,
     [switch]$SkipNarrative,
+    [switch]$SkipTwoLane,
     [int]$MinDaysSinceLastRun = 0   # 0 = always run; set by scheduler wrapper to avoid duplicate runs
 )
 
@@ -120,48 +123,66 @@ if (-not $railwayOk) {
 
 # ── Step 1: Fetch new bills from Legistar ────────────────────────────────────
 if (-not $SkipFetch) {
-    Log "Step 1/8 - Fetching new bills from Legistar (incremental)..."
+    Log "Step 1/9 - Fetching new bills from Legistar (incremental)..."
     python scripts/fetch_bills.py
     if ($LASTEXITCODE -ne 0) { Fail "Bill fetch failed. Fix errors above before continuing." }
     Log "Fetch complete."
 } else {
-    Log "Step 1/8 - Skipping fetch."
+    Log "Step 1/9 - Skipping fetch."
 }
 
 # ── Step 2: Enrich with Ollama ───────────────────────────────────────────────
 if (-not $SkipEnrich) {
-    Log "Step 2/8 - Running Ollama enrichment pipeline..."
+    Log "Step 2/9 - Running Ollama enrichment pipeline..."
     python scripts/worker.py
     if ($LASTEXITCODE -ne 0) { Fail "Enrichment failed. Fix errors above before continuing." }
     Log "Enrichment complete."
 } else {
-    Log "Step 2/8 - Skipping enrichment."
+    Log "Step 2/9 - Skipping enrichment."
 }
 
-# ── Step 3: Regenerate 26-year legislative narrative ─────────────────────────
+# ── Step 3: Case for / case against for newly active bills ───────────────────
+# Must run after enrichment and before the upload: the generator reads the
+# summary that step 2 writes, and the result has to be in the DB that step 6
+# ships. Without this a publish puts new bills on the site with an empty
+# panel, since the page shows nothing unless a bill has both lanes.
+#
+# Only bills with no two_lane_state are generated, so this is a few seconds
+# when nothing new has landed. Grounding checks are always on -- see
+# scripts/two_lane_checks.py and the measured rate in scripts/eval_two_lane.py.
+if (-not $SkipTwoLane) {
+    Log "Step 3/9 - Generating the case for / against for new bills..."
+    python scripts/generate_two_lane.py --all-active --write
+    if ($LASTEXITCODE -ne 0) { Fail "Two-lane generation failed." }
+    Log "Two-lane complete."
+} else {
+    Log "Step 3/9 - Skipping two-lane generation."
+}
+
+# ── Step 4: Regenerate 26-year legislative narrative ─────────────────────────
 if (-not $SkipNarrative) {
-    Log "Step 3/8 - Regenerating legislative narrative..."
+    Log "Step 4/9 - Regenerating legislative narrative..."
     python scripts/generate_legislative_narrative.py
     if ($LASTEXITCODE -ne 0) { Fail "Narrative generation failed." }
     Log "Narrative updated."
 } else {
-    Log "Step 3/8 - Skipping narrative."
+    Log "Step 4/9 - Skipping narrative."
 }
 
-# ── Step 4: Regenerate sitemap ───────────────────────────────────────────────
-Log "Step 4/8 - Regenerating sitemap.xml..."
+# ── Step 5: Regenerate sitemap ───────────────────────────────────────────────
+Log "Step 5/9 - Regenerating sitemap.xml..."
 python scripts/generate_sitemap.py
 if ($LASTEXITCODE -ne 0) { Fail "Sitemap generation failed." }
 Log "Sitemap updated."
 
-# ── Step 5: Upload DB to Backblaze B2 ────────────────────────────────────────
-Log "Step 5/8 - Uploading DB to Backblaze B2..."
+# ── Step 6: Upload DB to Backblaze B2 ────────────────────────────────────────
+Log "Step 6/9 - Uploading DB to Backblaze B2..."
 & "C:\tools\litestream.exe" replicate -config "$ROOT\litestream.yml" -once -force-snapshot
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
 
-# ── Step 6: Git push (Vercel auto-deploys on push) ───────────────────────────
-Log "Step 6/8 - Committing and pushing sitemap + narrative to GitHub..."
+# ── Step 7: Git push (Vercel auto-deploys on push) ───────────────────────────
+Log "Step 7/9 - Committing and pushing sitemap + narrative to GitHub..."
 git add frontend/public/sitemap.xml frontend/public/data/legislative_history.json
 $staged = git diff --cached --name-only
 if ($staged) {
@@ -189,15 +210,15 @@ if ($staged) {
     Log "No sitemap/narrative changes to push."
 }
 
-# ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
+# ── Step 8: Railway redeploy (picks up new DB from B2) ───────────────────────
 if ($railwayOk) {
-    Log "Step 7/8 - Triggering Railway redeploy..."
+    Log "Step 8/9 - Triggering Railway redeploy..."
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
     # Without this, Railway skips the restore on restarts (preserving user accounts).
     $version = Get-Date -Format "yyyyMMdd-HHmmss"
     # Native commands that write to stderr become a terminating
     # NativeCommandError under $ErrorActionPreference="Stop" whenever this
-    # script's output is redirected or piped (see the note at step 6). That
+    # script's output is redirected or piped (see the note at step 7). That
     # would abort the run before the deploy and before .last_publish is
     # written, so drop to "Continue" and gate on $LASTEXITCODE, which is the
     # real result.
@@ -223,7 +244,7 @@ if ($railwayOk) {
     }
     $ErrorActionPreference = $prevEAP
 } else {
-    Warn "Step 7/8 - Skipping Railway redeploy (not logged in)."
+    Warn "Step 8/9 - Skipping Railway redeploy (not logged in)."
     Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
 }
 
@@ -236,10 +257,10 @@ $cfToken  = [Environment]::GetEnvironmentVariable("CLOUDFLARE_API_TOKEN", "Proce
 $cfZone   = [Environment]::GetEnvironmentVariable("CLOUDFLARE_ZONE_ID", "Process")
 
 if ([string]::IsNullOrWhiteSpace($cfToken) -or [string]::IsNullOrWhiteSpace($cfZone)) {
-    Warn "Step 8/8 - Skipping cache purge (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID not set in .env)."
+    Warn "Step 9/9 - Skipping cache purge (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID not set in .env)."
     Warn "The edge will expire on its own within an hour."
 } else {
-    Log "Step 8/8 - Purging Cloudflare cache..."
+    Log "Step 9/9 - Purging Cloudflare cache..."
 
     # Purge only after the new backend is actually serving, otherwise the purge
     # refills the cache from the old instance and undoes itself.
