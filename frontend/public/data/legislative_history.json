@@ -1,45 +1,45 @@
 {
-  "generated_at": "2026-09-27T20:56:38.685033Z",
+  "generated_at": "2026-10-02T12:04:57.487124Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
   },
-  "total_bills": 8668,
+  "total_bills": 8680,
   "key_stats": [
     {
       "label": "Bills Introduced",
-      "value": "8,668",
+      "value": "8,680",
       "note": "2000–2026"
     },
     {
       "label": "Signed into Law",
-      "value": "6,716",
+      "value": "6,718",
       "note": "99% of closed bills"
     },
     {
       "label": "Active Bills",
-      "value": "1,860",
+      "value": "1,870",
       "note": "in committee or introduced"
     },
     {
       "label": "Top Issue",
       "value": "Zoning",
-      "note": "2,595 bills"
+      "note": "2,607 bills"
     }
   ],
-  "narrative": "Between 2000 and 2026, the Philadelphia City Council has introduced an astonishing 8,668 bills, averaging 321 bills per year. This dataset offers a unique window into the city's legislative history, covering 27 years of decision-making on critical issues that have shaped the city's growth and development. With over 99% of closed bills signed into law, it's clear that the council has been remarkably effective in turning proposals into policy.\n\nAs the data reveals, certain issues have consistently dominated the council's agenda. Zoning has been the top issue for 24 years, with over 2,595 bills introduced on this topic alone. Planning has also been a persistent concern, with 1,941 bills introduced. In contrast, issues like finance and business have seen more variability in their legislative attention. The council's productivity has also ebbed and flowed, with some years seeing significant increases in bill introduction. Notably, contested votes – which indicate divisions within the council – have been relatively rare, with only 361 bills drawing opposition across all years.\n\nThis data matters because it provides a framework for understanding the council's priorities and performance. By tracking legislation, citizens can identify areas of agreement and controversy, as well as key issues that have been overlooked. With this information, Philadelphians can hold their elected officials accountable for their actions and advocate for changes that align with their values and priorities. As a city, we can use this data to foster a more informed and engaged civic dialogue, ensuring that our elected representatives are working on behalf of the community's needs.",
+  "narrative": "Over the past 27 years, the Philadelphia City Council has generated a staggering 8,680 bills, with an average of 321 bills introduced each year. This data, spanning from 2000 to 2026, paints a comprehensive picture of the council's legislative activity. With 6,718 bills signed into law, a 99% pass rate, and an astonishing 361 bills receiving at least one \"Nay\" vote, this dataset offers a unique glimpse into the city's governance.\n\nAs we dive into the data, several trends emerge. Zoning has consistently dominated the council's agenda, with a staggering 2,607 bills introduced, followed closely by planning, infrastructure, and housing. While zoning has remained a top priority, other issues have ebbed and flowed over the years. For instance, in 2002, the council scored a historic budget, and in 2015, they passed a record number of bills. The relative rarity of contested votes – every other roll call was unanimous – suggests that the council often works together to pass legislation.\n\nWith this data, Philadelphians can now better understand the city's legislative landscape. By examining the trends and priorities of the council, citizens can engage more effectively with their representatives and advocate for changes they want to see. The sheer volume of bills introduced and passed over the years highlights the importance of civic engagement and tracking legislation. By staying informed about the issues that matter most to their community, Philadelphians can hold their elected officials accountable and push for positive change.",
   "top_issues": [
     {
       "tag": "zoning",
-      "count": 2595
+      "count": 2607
     },
     {
       "tag": "planning",
-      "count": 1941
+      "count": 1946
     },
     {
       "tag": "infrastructure",
-      "count": 1536
+      "count": 1538
     },
     {
       "tag": "housing",
@@ -47,19 +47,19 @@
     },
     {
       "tag": "transportation",
-      "count": 1197
+      "count": 1198
     },
     {
       "tag": "finance",
-      "count": 1164
+      "count": 1165
     },
     {
       "tag": "business",
-      "count": 1144
+      "count": 1148
     },
     {
       "tag": "land-use",
-      "count": 1110
+      "count": 1111
     }
   ],
   "top_sponsors": [
@@ -73,7 +73,7 @@
     },
     {
       "name": "Councilmember Squilla",
-      "count": 638
+      "count": 639
     },
     {
       "name": "Councilmember Clarke",
@@ -6671,40 +6671,44 @@
     {
       "year": 2026,
       "is_partial": true,
-      "headline": "Council Makes Big Moves in 2026, But Fewer Bills Introduced",
-      "narrative": "Zoning and infrastructure dominated the Philadelphia City Council's agenda in 2026, with 79 bills focused on zoning and 25 on infrastructure. This shift is part of a broader trend, as the council has seen a rise in bills related to development (+12), public safety (+11), and land use (+11) compared to the prior year. In contrast, issues like planning, zoning, housing, and business saw significant declines, down -55, -46, -46, and -41 respectively. Despite the relatively low number of bills introduced (203, 99 fewer than the previous year), the council made significant progress, with 99% of bills that reached a final vote becoming law. The median days from introduction to becoming law was 42, indicating a relatively quick pace of legislation.",
+      "headline": "Council Sees Record Fewer Bills, Zoning Dominates Agenda",
+      "narrative": "Philadelphia City Council saw a significant drop in bill introductions this year, with 215 bills introduced, 87 fewer than the previous year. Despite the decrease, zoning remained a top issue, accounting for 91 of the bills that reached a final vote. In fact, 99% of the bills that reached a final vote became law, a testament to the council's efficiency. Meanwhile, issues like development, land use, and public safety saw significant increases in attention, while planning, housing, and business declined in importance. The absence of contested votes is notable, with every roll call this year resulting in unanimous agreement.\n\nThe median days from introduction to becoming law was 42, a pace that suggests council members are working quickly to turn bills into laws. The top sponsors of bills were Council President Johnson, Councilmember Young, and Councilmember Squilla, who together introduced more than half of the year's bills.",
       "key_themes": [
         "Zoning Dominates Council Agenda",
-        "Infrastructure and Development on the Rise",
-        "Fewer Bills Introduced, But Stronger Laws"
+        "Bills Reach Law in Record Time",
+        "Public Safety Gains Attention"
       ],
       "stats": {
         "year": 2026,
-        "total": 203,
-        "delta_vs_prior": -99,
-        "signed": 116,
+        "total": 215,
+        "delta_vs_prior": -87,
+        "signed": 117,
         "failed": 1,
         "vetoed": 0,
         "died_in_committee": 0,
-        "still_pending": 86,
-        "pass_rate": 0.991,
+        "still_pending": 97,
+        "pass_rate": 0.992,
         "median_days_to_passage": 42,
         "top_tags": [
           {
             "tag": "zoning",
-            "count": 79
+            "count": 91
           },
           {
             "tag": "infrastructure",
-            "count": 25
-          },
-          {
-            "tag": "transportation",
-            "count": 19
+            "count": 27
           },
           {
             "tag": "planning",
-            "count": 19
+            "count": 24
+          },
+          {
+            "tag": "transportation",
+            "count": 20
+          },
+          {
+            "tag": "business",
+            "count": 17
           },
           {
             "tag": "government",
@@ -6712,29 +6716,25 @@
           },
           {
             "tag": "finance",
-            "count": 13
+            "count": 14
           },
           {
-            "tag": "housing",
-            "count": 13
-          },
-          {
-            "tag": "business",
-            "count": 13
+            "tag": "development",
+            "count": 14
           }
         ],
         "rising_tags": [
           {
             "tag": "development",
-            "delta": 12
-          },
-          {
-            "tag": "public safety",
-            "delta": 11
+            "delta": 14
           },
           {
             "tag": "land use",
-            "delta": 11
+            "delta": 13
+          },
+          {
+            "tag": "public safety",
+            "delta": 12
           },
           {
             "tag": "neighborhood development",
@@ -6744,11 +6744,7 @@
         "falling_tags": [
           {
             "tag": "planning",
-            "delta": -55
-          },
-          {
-            "tag": "zoning",
-            "delta": -46
+            "delta": -50
           },
           {
             "tag": "housing",
@@ -6756,29 +6752,33 @@
           },
           {
             "tag": "business",
-            "delta": -41
+            "delta": -37
+          },
+          {
+            "tag": "land-use",
+            "delta": -36
           }
         ],
         "top_sponsors": [
           {
             "name": "Council President Johnson",
-            "count": 42
+            "count": 44
           },
           {
             "name": "Councilmember Young",
-            "count": 22
+            "count": 25
           },
           {
             "name": "Councilmember Squilla",
-            "count": 19
-          },
-          {
-            "name": "Council President Johnson, Councilmember Gilmore Richardson",
-            "count": 15
+            "count": 20
           },
           {
             "name": "Councilmember Jones",
-            "count": 14
+            "count": 15
+          },
+          {
+            "name": "Councilmember Bass",
+            "count": 15
           }
         ],
         "contested_count": 0
@@ -6848,7 +6848,7 @@
         }
       ],
       "contested_bills": [],
-      "generated_at": "2026-09-27T20:56:31.769688Z"
+      "generated_at": "2026-10-02T12:04:50.656666Z"
     }
   ]
 }
