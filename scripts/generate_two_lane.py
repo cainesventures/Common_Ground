@@ -295,8 +295,21 @@ def pick_bills(n, bill_number=None, all_active=False, redo=False):
             "select * from legislation where bill_number = ?", (bill_number,)).fetchall()
     else:
         # Active bills only -- these are the ones that would get the treatment.
+        #
+        # The summary threshold is a source-quality floor, not a judgement
+        # about the bill. It was 80 characters, which left a real zoning bill
+        # out of the first full run on a 77-character summary while admitting
+        # an 80-character one that says the bill "has no title, sponsor, or
+        # details". Length is a poor proxy for that, so the floor is lower and
+        # the bills with no usable source are named by the condition that
+        # actually describes them -- the same class scripts/
+        # clear_ungrounded_headlines.py had to clean up after, where the model
+        # invented plausible legislation out of an empty Legistar record.
         where = ("status in ('introduced','in_committee') "
-                 "and summary is not null and length(summary) > 80")
+                 "and summary is not null and length(summary) > 40 "
+                 "and skip_reason is null "
+                 "and summary not like '%no title, sponsor%' "
+                 "and summary not like '%contains no title%'")
         if not redo:
             # Already-decided bills are left alone, procedural and dropped
             # ones included, so a re-run costs nothing for work already done.

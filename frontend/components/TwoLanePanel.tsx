@@ -1,4 +1,5 @@
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
+import { TwoLaneSeen } from './TwoLaneSeen'
 
 /**
  * The case for and the case against, side by side.
@@ -21,10 +22,12 @@ import { ThumbsUp, ThumbsDown } from 'lucide-react'
  * same to a reader.
  */
 export function TwoLanePanel({
+  billId,
   caseFor,
   caseAgainst,
   state,
 }: {
+  billId: string
   caseFor?: string | null
   caseAgainst?: string | null
   state?: string | null
@@ -82,6 +85,9 @@ export function TwoLanePanel({
       <p className="text-[11px] text-muted-foreground/60">
         Neither side is the site&apos;s position. They are here so you can weigh the bill yourself.
       </p>
+
+      {/* Last, so the event means "read to the end of both cases". */}
+      <TwoLaneSeen billId={billId} />
     </section>
   )
 }

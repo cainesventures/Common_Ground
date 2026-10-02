@@ -899,6 +899,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           one person opened in 120 days from two clicks deep. Renders nothing
           unless the bill has both lanes and passed the grounding checks. */}
       <TwoLanePanel
+        billId={id}
         caseFor={leg.case_for}
         caseAgainst={leg.case_against}
         state={leg.two_lane_state}
