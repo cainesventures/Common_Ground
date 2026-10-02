@@ -20,6 +20,17 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = "https://phila.legistar.com"
 
+# Present in all 8,675 bill records currently stored. Used to tell a real
+# "Legislation Details (With Text)" export from an error page that happened to
+# parse — several are checked rather than one, so a template tweak to any single
+# string does not silently stop full-text fetching everywhere.
+_LEGISTAR_TEXT_MARKERS = (
+    "File #",
+    "City of Philadelphia",
+    "powered by Legistar",
+    "Legislation Details",
+)
+
 STATUS_MAP: Dict[str, str] = {
     "new": "introduced",
     "referred": "in_committee",
@@ -315,9 +326,36 @@ class PhilaLegistarScraper:
             import fitz  # PyMuPDF
             r = httpx.get(url, follow_redirects=True, timeout=20)
             r.raise_for_status()
+
+            # raise_for_status only catches error STATUS codes. Legistar also
+            # serves error pages with a 200, and one of those once came back
+            # parseable: bill 000711 stored "Server Error / The server
+            # encountered a temporary error" as its full text, which the site
+            # then rendered to readers as the bill's text and the model
+            # summarised as if it were legislation.
+            content_type = (r.headers.get("content-type") or "").lower()
+            if "pdf" not in content_type:
+                logger.warning(
+                    f"Full text for matter {matter_id} was {content_type or 'an unknown type'}, "
+                    "not a PDF — discarding"
+                )
+                return None
+
             doc = fitz.open(stream=r.content, filetype="pdf")
             text = "\n".join(page.get_text() for page in doc)
-            return text.strip() or None
+            text = text.strip()
+            if not text:
+                return None
+
+            # Every one of the 8,675 real records carries all of these, so a
+            # response missing them is not a bill record whatever it parsed as.
+            if not any(m in text for m in _LEGISTAR_TEXT_MARKERS):
+                logger.warning(
+                    f"Full text for matter {matter_id} has no Legistar markers "
+                    f"({len(text)} chars) — discarding rather than storing it as bill text"
+                )
+                return None
+            return text
         except ImportError:
             logger.warning("PyMuPDF (fitz) not installed — skipping full text extraction. Run: pip install pymupdf")
             return None
