@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { PerspectivesPanel } from '@/components/PerspectivesPanel'
+import { TwoLanePanel } from '@/components/TwoLanePanel'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 import { usePostHog } from 'posthog-js/react'
@@ -574,12 +575,16 @@ function cleanBillText(raw: string): string {
 
 type TabKey = 'summary' | 'perspectives' | 'votes' | 'news' | 'text'
 
+// Perspectives moved from second to last. The two-lane panel above the tab bar
+// is now the argument a reader is meant to see; the personas stay reachable,
+// and stay indexed, but they no longer sit in the position that implies they
+// are the main event. Deep links with ?tab=perspectives still work.
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'summary',      label: 'Summary' },
-  { key: 'perspectives', label: 'Perspectives' },
   { key: 'votes',        label: 'Votes' },
   { key: 'news',         label: 'News' },
   { key: 'text',         label: 'Bill Text' },
+  { key: 'perspectives', label: 'Perspectives' },
 ]
 
 export default function BillDetailClient({ initialBill = null }: { initialBill?: any }) {
@@ -888,6 +893,16 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           <p className="text-xs text-muted-foreground">A plain-English summary, impact score, and AI perspectives will appear here once it&apos;s processed.</p>
         </div>
       )}
+
+      {/* The case for / the case against — above the tab bar, so it needs no
+          click. This is the pivot away from leading with the personas, which
+          one person opened in 120 days from two clicks deep. Renders nothing
+          unless the bill has both lanes and passed the grounding checks. */}
+      <TwoLanePanel
+        caseFor={leg.case_for}
+        caseAgainst={leg.case_against}
+        state={leg.two_lane_state}
+      />
 
       {/* Tab bar — shifts down when sticky header is showing (navbar 56px + sticky header ~48px = 104px) */}
       <div className={`flex border-b gap-0 sticky ${stickyVisible ? 'top-[6.5rem]' : 'top-14'} bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-[top] duration-150`}>

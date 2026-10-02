@@ -111,6 +111,24 @@ class Legislation(ContentBase):
     news_fetched_at       = Column(DateTime, nullable=True)  # last time news fetch ran (even if no articles found)
     votes_fetched_at      = Column(DateTime, nullable=True)  # last time vote record scrape ran
 
+    # Two-lane view: the case for and the case against, persona-free.
+    # Columns rather than a child table because there is exactly one of each
+    # per bill, like headline and lede above, and the bill page renders them
+    # server-side -- a join would buy nothing.
+    #
+    # two_lane_state is what the page branches on:
+    #   argued      -- both cases present
+    #   procedural  -- triage found no real policy stake; show no case
+    #   dropped     -- substantive, but no grounded case survived the checks
+    # A dropped bill deliberately stores no text. See scripts/two_lane_checks.py.
+    case_for              = Column(Text, nullable=True)
+    case_against          = Column(Text, nullable=True)
+    two_lane_insights     = Column(Text, nullable=True)     # provenance, not shown to readers
+    two_lane_state        = Column(String, nullable=True)   # argued / procedural / dropped
+    two_lane_drop_reason  = Column(String, nullable=True)   # which stage failed its checks
+    two_lane_model        = Column(String, nullable=True)   # model that produced it
+    two_lane_generated_at = Column(DateTime, nullable=True)
+
     # Background worker tracking
     skip_reason           = Column(String, nullable=True)    # set when bill is permanently unfetchable
     worker_retries        = Column(Integer, default=0)       # failed fetch attempts before giving up

@@ -27,6 +27,10 @@ Usage:
     python scripts/generate_two_lane.py --sample 20      # print for review
     python scripts/generate_two_lane.py --bill 260466    # one bill
     python scripts/generate_two_lane.py --sample 20 --no-checks   # raw output
+    python scripts/generate_two_lane.py --all-active --write      # the real run
+
+--write records a state for every bill, including the ones with no case, so a
+re-run skips what has already been decided. --redo overrides that.
 """
 
 import argparse
@@ -37,6 +41,7 @@ import sqlite3
 import sys
 import textwrap
 import time
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -247,7 +252,37 @@ def two_lane(provider, r, checks: bool = True, attempts: int = ATTEMPTS) -> dict
     return out
 
 
-def pick_bills(n, bill_number=None):
+def _now() -> str:
+    """UTC timestamp in the same naive form the other columns use."""
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(" ", "seconds")
+
+
+def persist(out, r, model: str):
+    """Write one bill's result to the DB.
+
+    Procedural and dropped bills are stored as a state with no text. They have
+    to be recorded rather than skipped: without a row the generator cannot
+    tell "this bill has no case" from "this bill has not been looked at", and
+    it would re-argue the same kerbside parking rule on every run.
+    """
+    conn = sqlite3.connect(DB, timeout=30)
+    try:
+        conn.execute(
+            "update legislation set case_for = ?, case_against = ?, "
+            "two_lane_insights = ?, two_lane_state = ?, two_lane_drop_reason = ?, "
+            "two_lane_model = ?, two_lane_generated_at = ? where id = ?",
+            (out["case_for"], out["case_against"], out["insights"],
+             "procedural" if out["procedural"] else
+             ("dropped" if out["dropped"] else "argued"),
+             out["dropped"], model, _now(),
+             r["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def pick_bills(n, bill_number=None, all_active=False, redo=False):
     conn = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     if bill_number:
@@ -255,11 +290,20 @@ def pick_bills(n, bill_number=None):
             "select * from legislation where bill_number = ?", (bill_number,)).fetchall()
     else:
         # Active bills only -- these are the ones that would get the treatment.
-        rows = conn.execute(
-            "select * from legislation where status in ('introduced','in_committee') "
-            "and summary is not null and length(summary) > 80").fetchall()
-        random.Random(11).shuffle(rows)
-        rows = rows[:n]
+        where = ("status in ('introduced','in_committee') "
+                 "and summary is not null and length(summary) > 80")
+        if not redo:
+            # Already-decided bills are left alone, procedural and dropped
+            # ones included, so a re-run costs nothing for work already done.
+            where += " and two_lane_state is null"
+        rows = conn.execute(f"select * from legislation where {where}").fetchall()
+        if all_active:
+            # Oldest first, so a long run leaves the newest bills -- the ones
+            # most likely to be read -- for a short top-up run later.
+            rows = sorted(rows, key=lambda x: x["bill_number"])
+        else:
+            random.Random(11).shuffle(rows)
+            rows = rows[:n]
     conn.close()
     return rows
 
@@ -270,17 +314,31 @@ def main():
     ap.add_argument("--bill", default=None)
     ap.add_argument("--no-checks", action="store_true",
                     help="generate without the grounding checks, as it was before")
+    ap.add_argument("--all-active", action="store_true",
+                    help="every active bill without a case yet, not a sample")
+    ap.add_argument("--write", action="store_true",
+                    help="persist to the database instead of only printing")
+    ap.add_argument("--redo", action="store_true",
+                    help="re-generate bills that already have a state")
     args = ap.parse_args()
 
     from app.services.ai_provider import get_ai_provider
     provider = get_ai_provider()
-    rows = pick_bills(args.sample, args.bill)
+    rows = pick_bills(args.sample, args.bill,
+                      all_active=args.all_active, redo=args.redo)
+    # From the provider, not the environment: this script does not load .env
+    # itself, so AI_MODEL read here was empty and every row said "unknown".
+    model = getattr(provider, "model", None) or os.getenv("AI_MODEL") or "unknown"
+    if args.write:
+        print(f"writing to {DB} as {model}")
 
     wrap = lambda s, i="    ": textwrap.fill(s, 96, initial_indent=i, subsequent_indent=i)
     t0 = time.time()
     procedural = dropped = argued = regenerated = 0
     for i, r in enumerate(rows, 1):
         out = two_lane(provider, r, checks=not args.no_checks)
+        if args.write:
+            persist(out, r, model)
         print("=" * 100)
         print(f"[{i}/{len(rows)}] BILL {r['bill_number']}  ({r['status']})")
         print(wrap((r["summary"] or "")[:300], "    "))
@@ -314,6 +372,8 @@ def main():
           f"{procedural} procedural, {argued} argued, {dropped} dropped")
     print(f"{regenerated} bills needed at least one regeneration"
           + ("  (checks off)" if args.no_checks else ""))
+    if args.write:
+        print(f"written to {DB}")
     return 0
 
 

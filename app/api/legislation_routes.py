@@ -2807,6 +2807,13 @@ async def get_legislation(
                 "next_hearing_url":      leg.next_hearing_url,
                 "perspectives": perspectives_data,
                 "perspective_count": len(perspectives_data),
+                # The case for / the case against. two_lane_state tells the
+                # page why there is no case when there is none, so it can show
+                # nothing rather than an empty panel. two_lane_insights is
+                # provenance for debugging and is deliberately not sent.
+                "case_for": leg.case_for,
+                "case_against": leg.case_against,
+                "two_lane_state": leg.two_lane_state,
             }
         }
     except HTTPException:

@@ -277,9 +277,29 @@ POLARITY_RULES = [
             r"extend\w*[^.]{0,30}\b(?:business\s+)?hours|"
             r"longer\s+(?:business\s+)?hours|"
             r"operate\s+(?:freely\s+)?(?:overnight|all\s+night|around\s+the\s+clock)", re.I),
+        # Acknowledging the restriction means STATING THE CLOSURE OBLIGATION,
+        # not mentioning the word "curfew".
+        #
+        # This started as the looser "does the text say curfew anywhere", and
+        # that was wrong in a way worth recording. On 260710 the insights stage
+        # wrote "amends the curfew hours for commercial businesses in the
+        # Eighth Councilmanic District, allowing them to be open between 11
+        # p.m. and 6 a.m." -- which is the confirmed failure verbatim, a
+        # curfew read as permission -- and the word "curfew" in that same
+        # sentence excused it. A check whose escape hatch is satisfied by the
+        # vocabulary of the thing it is meant to catch does not work.
+        #
+        # So the bill drops unless the text actually says businesses have to
+        # close. "Keeps the curfew but carves out an exception west of Broad
+        # Street" asserts no permission to be open and never reaches this
+        # clause; "lets them stay open later" without the obligation is
+        # dropped, which is the conservative end of a case we cannot verify.
         "acknowledged": re.compile(
-            r"curfew|restrict\w*|must\s+close|required?\s+to\s+close|"
-            r"prohibit\w*|ban\b|closure", re.I),
+            r"must\s+close|required?\s+to\s+close|have\s+to\s+close|"
+            r"may\s+not\s+(?:remain|stay|be)\s+open|"
+            r"cannot\s+(?:remain|stay|be)\s+open|"
+            r"prohibit\w*[^.]{0,40}(?:operat|open)|"
+            r"forc\w*[^.]{0,30}to\s+close|closure\s+requirement", re.I),
     },
     {
         "name": "tax_direction",
