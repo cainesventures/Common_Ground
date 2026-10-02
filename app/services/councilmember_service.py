@@ -213,7 +213,7 @@ def _sponsored_counts(db: Session, member_name: str, term_start: int | None) -> 
     return int(total or 0), int(passed or 0)
 
 
-_TERMINAL_STATUSES = ("signed_into_law", "failed", "vetoed", "withdrawn", "tabled")
+_TERMINAL_STATUSES = ("signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed")
 
 
 def get_legislative_profile(db: Session, member_id: str, member_name: str,

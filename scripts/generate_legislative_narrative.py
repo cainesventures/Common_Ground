@@ -65,7 +65,7 @@ OLLAMA_URL   = os.environ.get("AI_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.environ.get("AI_MODEL", "llama3.1:8b")
 OUTPUT_PATH  = ROOT / "frontend" / "public" / "data" / "legislative_history.json"
 
-TERMINAL_STATUSES = ["signed_into_law", "failed", "vetoed", "withdrawn", "tabled"]
+TERMINAL_STATUSES = ["signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed"]
 
 
 # ── Shared helpers ────────────────────────────────────────────────────────────

@@ -9,6 +9,9 @@ export const STATUS_COLORS: Record<string, string> = {
   signed:           'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   signed_into_law:  'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   failed:           'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  // Died when the council term ended rather than being voted down —
+  // muted slate so it reads as 'expired', not 'rejected'.
+  lapsed:           'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
   vetoed:           'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
   pending:          'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
 }

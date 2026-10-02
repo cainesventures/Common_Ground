@@ -31,19 +31,38 @@ _LEGISTAR_TEXT_MARKERS = (
     "Legislation Details",
 )
 
+# Keyed on Legistar's own status strings. Matching is exact first, then by
+# longest key, because several of these contain each other: "withdrawn while in
+# committee" holds both "withdrawn" and "in committee", and plain substring
+# matching in dict order silently filed those 11 bills as still in committee.
 STATUS_MAP: Dict[str, str] = {
-    "new": "introduced",
-    "referred": "in_committee",
-    "in committee": "in_committee",
+    # Terminal
+    "enacted": "signed_into_law",
     "adopted": "signed_into_law",
     "approved": "signed_into_law",
     "passed": "signed_into_law",
-    "enacted": "signed_into_law",
-    "failed": "failed",
-    "defeated": "failed",
+    # LAPSED is Legistar's word for a bill that died when the council term
+    # ended. It is the second most common status in the export (1,680 bills)
+    # and had no mapping at all, so every one of them fell through to the
+    # "introduced" default and counted as live legislation.
+    "lapsed": "lapsed",
+    "pocket vetoed": "vetoed",
     "vetoed": "vetoed",
-    "tabled": "failed",
+    "withdrawn while in committee": "failed",
+    "withdrawn from calendar": "failed",
     "withdrawn": "failed",
+    "placed on file": "failed",
+    "defeated": "failed",
+    "tabled": "failed",
+    "failed": "failed",
+    # Still in play
+    "held in committee": "in_committee",
+    "in committee": "in_committee",
+    "referred": "in_committee",
+    "reported favorably": "in_committee",
+    "in council": "introduced",
+    "new": "introduced",
+    "introduced": "introduced",
 }
 
 
@@ -59,10 +78,23 @@ def _parse_date(raw: str) -> Optional[datetime]:
 
 
 def _normalize_status(raw: str) -> str:
+    """Map a Legistar status string onto ours.
+
+    Exact match first, then longest key, so a more specific status always beats
+    a shorter one it happens to contain. An unrecognised status still defaults
+    to "introduced" -- treating an unknown bill as live is the safe direction --
+    but it is logged now, because the previous silent default is what let 1,680
+    LAPSED bills sit in the database as active legislation.
+    """
     lower = raw.lower().strip()
-    for key, val in STATUS_MAP.items():
+    if not lower:
+        return "introduced"
+    if lower in STATUS_MAP:
+        return STATUS_MAP[lower]
+    for key in sorted(STATUS_MAP, key=len, reverse=True):
         if key in lower:
-            return val
+            return STATUS_MAP[key]
+    logger.warning(f"Unmapped Legistar status {raw!r} — defaulting to introduced")
     return "introduced"
 
 

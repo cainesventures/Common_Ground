@@ -60,6 +60,9 @@ MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
 
 ACTIVE_STATUSES = {"introduced", "in_committee"}
+# Kept in step with worker_core.TERMINAL_STATUSES. "lapsed" is Legistar's own
+# word for a bill that died when the council term ended.
+TERMINAL_STATUSES = {"signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed"}
 ALL_STATUSES = {"introduced", "in_committee", "signed_into_law", "failed", "vetoed", "passed_chamber", "passed_both"}
 
 # Steps that apply only to Legistar (local) bills
@@ -166,8 +169,12 @@ def process_bill(bill, db, dry_run: bool, only_step: str | None) -> str:
             or (not bill.lede and bill.status in ACTIVE_STATUSES)
         )
         needs_metadata     = is_legistar and not bill.metadata_fetched_at
+        # The status guard matches worker_core.steps_needed(). Without it this
+        # worker -- the one publish.ps1 runs -- wrote perspectives for bills
+        # that had already passed or died, which the design says not to do.
         needs_perspectives = (
             bool(bill.analyzed_at) and
+            bill.status not in TERMINAL_STATUSES and
             _perspective_count(bill, db) < _relevant_perspective_count(bill)
         )
         needs_news = bool(bill.analyzed_at) and not bill.news_fetched_at and bill.status in ACTIVE_STATUSES

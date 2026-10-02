@@ -20,7 +20,7 @@ os.chdir(ROOT)
 MAX_RETRIES = 3
 PERSPECTIVES_TARGET = 17
 ACTIVE_STATUSES = {"introduced", "in_committee"}
-TERMINAL_STATUSES = {"signed_into_law", "failed", "vetoed", "withdrawn", "tabled"}
+TERMINAL_STATUSES = {"signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed"}
 LEGISTAR_PREFIX = "legistar_phila_"
 
 ALL_STEPS = ["text", "analyze", "headline", "metadata", "perspectives", "news", "votes"]
