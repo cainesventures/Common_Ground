@@ -1,6 +1,11 @@
-"""Tests for API endpoints via FastAPI TestClient."""
+"""Tests for API endpoints via FastAPI TestClient.
 
-import pytest
+The agent and debate suites that used to live here were removed along with the
+debate engine (commit d8f59ff). Two of those tests were still "passing" only
+because a deleted route 404s, which is exactly what they asserted.
+"""
+
+from tests.conftest import make_legislation
 
 
 # ---------------------------------------------------------------------------
@@ -33,95 +38,14 @@ def test_health_ai_no_key(client, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Agent routes
-# ---------------------------------------------------------------------------
-
-VALID_AGENT = {
-    "name": "Policy Expert",
-    "description": "An expert",
-    "persona": "A seasoned policy analyst",
-    "system_prompt": "You are a policy expert.",
-    "expertise_areas": "policy",
-    "agent_type": "claude",
-}
-
-
-def test_create_agent_valid(client):
-    r = client.post("/api/agents/create", json=VALID_AGENT)
-    assert r.status_code == 200
-    data = r.json()
-    assert data["success"] is True
-    assert data["agent"]["id"].startswith("agent_")
-
-
-def test_create_agent_empty_name(client):
-    payload = {**VALID_AGENT, "name": "   "}
-    r = client.post("/api/agents/create", json=payload)
-    assert r.status_code == 422
-
-
-def test_create_agent_missing_name(client):
-    payload = {k: v for k, v in VALID_AGENT.items() if k != "name"}
-    r = client.post("/api/agents/create", json=payload)
-    assert r.status_code == 422
-
-
-def test_create_agent_invalid_type(client):
-    payload = {**VALID_AGENT, "agent_type": "gpt4"}
-    r = client.post("/api/agents/create", json=payload)
-    assert r.status_code == 422
-
-
-def test_create_agent_bad_api_url(client):
-    payload = {**VALID_AGENT, "agent_type": "byo", "api_url": "not-a-url"}
-    r = client.post("/api/agents/create", json=payload)
-    assert r.status_code == 422
-
-
-def test_list_agents_default(client):
-    """With no agents, list returns empty results with pagination fields."""
-    r = client.get("/api/agents/list")
-    assert r.status_code == 200
-    data = r.json()
-    assert "total" in data
-    assert "limit" in data
-    assert "offset" in data
-    assert isinstance(data["agents"], list)
-
-
-def test_list_agents_pagination(client):
-    """Create 5 agents, page through with limit=2."""
-    for i in range(5):
-        client.post("/api/agents/create", json={**VALID_AGENT, "name": f"Agent {i}"})
-
-    r = client.get("/api/agents/list?limit=2&offset=0")
-    assert r.status_code == 200
-    data = r.json()
-    assert data["total"] == 5
-    assert len(data["agents"]) == 2
-
-    r2 = client.get("/api/agents/list?limit=2&offset=4")
-    assert r2.status_code == 200
-    assert len(r2.json()["agents"]) == 1
-
-
-def test_list_agents_invalid_limit(client):
-    r = client.get("/api/agents/list?limit=0")
-    assert r.status_code == 422
-
-
-def test_get_agent_not_found(client):
-    r = client.get("/api/agents/nonexistent_id")
-    assert r.status_code == 404
-
-
-# ---------------------------------------------------------------------------
 # Legislation routes
 # ---------------------------------------------------------------------------
 
 def test_search_legislation_empty_query(client):
+    """An empty q is a browse-everything request, not a validation error."""
     r = client.get("/api/legislation/search?q=")
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert "results" in r.json()
 
 
 def test_search_legislation_too_long(client):
@@ -143,52 +67,62 @@ def test_search_legislation_pagination_params(client):
     assert r.json()["limit"] == 5
 
 
-def test_ingest_invalid_state(client):
-    r = client.post("/api/legislation/ingest/state/ZZ")
-    assert r.status_code == 400
-    assert "Invalid state" in r.json()["detail"]
+def test_legislation_detail_round_trip(client, test_db):
+    """A seeded bill is retrievable through the public detail route."""
+    make_legislation(test_db, "42")
+    test_db.commit()
+    r = client.get("/api/legislation/bill_42")
+    assert r.status_code == 200
+    assert r.json()["data"]["bill_number"] == "HR42"
 
 
-def test_ingest_valid_state_format(client):
-    """CA is a valid state — request accepted (may fail due to no API key, but not 400)."""
-    r = client.post("/api/legislation/ingest/state/CA?limit=1")
-    assert r.status_code in (200, 500)  # 500 is ok if no API key, but not 400
-
-
-def test_ingest_federal_invalid_congress(client):
-    r = client.post("/api/legislation/ingest/federal?congress=50")
-    assert r.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# Debate routes
-# ---------------------------------------------------------------------------
-
-def test_public_debate_invalid_format(client):
-    r = client.get("/api/debates/public/some_id?format=xml")
-    assert r.status_code == 400
-    assert "Invalid format" in r.json()["detail"]
-
-
-def test_get_debate_not_found(client):
-    r = client.get("/api/debates/nonexistent_debate")
+def test_legislation_detail_not_found(client):
+    r = client.get("/api/legislation/does_not_exist")
     assert r.status_code == 404
 
 
-def test_track_share_invalid_platform(client):
-    r = client.post("/api/debates/some_id/track-share?platform=myspace")
-    assert r.status_code == 400
+# ---------------------------------------------------------------------------
+# Protected routes
+#
+# These used to assert on validation errors (400/422) and were written before
+# the ingest endpoints required a developer-tier account. Auth is resolved
+# first now, so an unauthenticated caller never reaches the validation — which
+# makes "is this endpoint actually protected?" the thing worth asserting.
+# ---------------------------------------------------------------------------
+
+def test_ingest_state_requires_auth(client):
+    r = client.post("/api/legislation/ingest/state/ZZ")
+    assert r.status_code in (401, 403)
 
 
-def test_create_debate_missing_legislation(client):
-    """Debate creation with unknown legislation_id returns 400."""
-    client.post("/api/agents/create", json=VALID_AGENT)
-    r = client.get("/api/agents/list")
-    agent_id = r.json()["agents"][0]["id"]
+def test_ingest_federal_requires_auth(client):
+    r = client.post("/api/legislation/ingest/federal?congress=50")
+    assert r.status_code in (401, 403)
 
-    r = client.post("/api/debates/create", json={
-        "legislation_id": "nonexistent",
-        "topic": "Test",
-        "agent_ids": [agent_id],
-    })
-    assert r.status_code == 400
+
+def test_export_is_never_edge_cached(client):
+    """The export can return the caller's own saved bills, so it must not be
+    storable by a shared cache. See the allow-list in main.py."""
+    r = client.get("/api/legislation/export?format=csv")
+    assert "no-store" in r.headers.get("cache-control", "").lower()
+
+
+def test_public_read_is_edge_cacheable(client):
+    """Public reads carry the s-maxage that lets Cloudflare cache them."""
+    r = client.get("/api/councilmembers")
+    assert r.status_code == 200
+    assert "s-maxage" in r.headers.get("cache-control", "").lower()
+
+
+def test_credentialed_read_is_not_cacheable(client):
+    """A request carrying credentials must not get a public cache header, or a
+    shared cache could serve one caller's response to another."""
+    r = client.get("/api/councilmembers", headers={"Authorization": "Bearer faketoken"})
+    assert "s-maxage" not in r.headers.get("cache-control", "").lower()
+
+
+def test_bot_token_read_is_not_cacheable(client):
+    """require_bot_token reads X-Bot-Token, not Authorization — missing that
+    once made a protected response publicly cacheable."""
+    r = client.get("/api/councilmembers", headers={"X-Bot-Token": "faketoken"})
+    assert "s-maxage" not in r.headers.get("cache-control", "").lower()
