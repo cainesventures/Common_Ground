@@ -1,3 +1,4 @@
+import { notFound } from 'next/navigation'
 import CouncilmemberDetailClient from './CouncilmemberDetailClient'
 import { siteUrl } from '@/lib/site'
 
@@ -10,15 +11,23 @@ const BILLS_PER_PAGE = 20
  * (Next dedupes the identical request). Seeding the client with this is what
  * puts real content in the server-rendered HTML -- see the note in
  * ../../legislation/[id]/page.tsx.
+ *
+ * MISSING means the API said 404, so the member genuinely does not exist. A
+ * null means the lookup failed some other way and must NOT become a 404 -- a
+ * backend blip should not tell crawlers a real profile has gone.
  */
-async function getMember(id: string) {
+const MISSING = Symbol('missing')
+
+async function getMember(id: string): Promise<any | typeof MISSING | null> {
   try {
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}?bills_page=1&bills_limit=${BILLS_PER_PAGE}`,
       { next: { revalidate: 3600 } },
     )
+    if (res.status === 404) return MISSING
     if (!res.ok) return null
-    return await res.json()
+    const data = await res.json()
+    return data?.member ? data : MISSING
   } catch {
     return null
   }
@@ -28,7 +37,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   const { city, id } = await params
   try {
     const data = await getMember(id)
-    if (!data) return { title: 'Councilmember — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
+    if (!data || data === MISSING) return { title: 'Councilmember — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
     const m = data?.member
     const title = m?.name ?? 'Councilmember'
     const description = `${title}${m?.district ? `, ${m.district}` : ''}${m?.party ? ` · ${m.party}` : ''} — Philadelphia City Council`
@@ -63,7 +72,8 @@ export default async function CouncilmemberPage({
   params: Promise<{ city: string; id: string }>
 }) {
   const { id } = await params
-  // null is fine: the client falls back to fetching, exactly as before.
   const initialData = await getMember(id)
+  // Only a confirmed 404 becomes a 404; see the note on MISSING above.
+  if (initialData === MISSING) notFound()
   return <CouncilmemberDetailClient initialData={initialData} />
 }

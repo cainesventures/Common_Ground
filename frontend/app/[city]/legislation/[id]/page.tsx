@@ -1,33 +1,9 @@
+import { notFound } from 'next/navigation'
 import BillDetailClient from './BillDetailClient'
 import { siteUrl } from '@/lib/site'
+import { getBill, MISSING } from './get-bill'
 
 const TITLE_MAX = 70
-
-/**
- * Fetch a bill on the server.
- *
- * Called by both generateMetadata and the page. Next dedupes identical fetches
- * within a request, so this costs one call, not two.
- *
- * Passing the result into the client component is what puts the bill's actual
- * content in the server-rendered HTML. Client components are still
- * server-rendered on first load -- these pages were shipping an empty shell
- * only because the data arrived in a useEffect, which never runs during SSR,
- * leaving the component's `if (loading) return null` branch to render nothing.
- */
-async function getBill(id: string) {
-  try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`,
-      { next: { revalidate: 3600 } },
-    )
-    if (!res.ok) return null
-    const data = await res.json()
-    return data?.data ?? null
-  } catch {
-    return null
-  }
-}
 
 /** Trim to a word boundary so a 300-character legal title reads as a title. */
 function truncateTitle(value: string): string {
@@ -40,9 +16,15 @@ function truncateTitle(value: string): string {
 
 export async function generateMetadata({ params }: { params: Promise<{ city: string; id: string }> }) {
   const { city, id } = await params
+  // layout.tsx already 404s a missing bill before the response commits; this
+  // stays outside the try because notFound() throws, and catching would
+  // swallow it.
+  const bill = await getBill(id)
+  if (bill === MISSING) notFound()
   try {
-    const bill = await getBill(id)
-    if (!bill) return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
+    if (!bill) {
+      return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
+    }
     // Legal titles run to 300+ characters; Google shows ~60. Prefer the plain
     // title, then the AI headline, and only fall back to the raw legal title,
     // trimmed at a word boundary.
@@ -82,7 +64,11 @@ export default async function BillDetailPage({
   params: Promise<{ city: string; id: string }>
 }) {
   const { id } = await params
-  // null is fine: the client falls back to fetching, exactly as before.
   const initialBill = await getBill(id)
+  // layout.tsx is what actually makes this a 404; kept here too so the page is
+  // correct on its own. A null is left alone -- the lookup failed for some
+  // other reason and the client falls back to fetching, so a backend blip
+  // cannot de-index a real bill.
+  if (initialBill === MISSING) notFound()
   return <BillDetailClient initialBill={initialBill} />
 }
