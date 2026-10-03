@@ -192,8 +192,13 @@ def process_bill(
         needs_metadata = is_legistar and not bill.metadata_fetched_at
         _persp_count = _perspective_count(bill, db)
         _persp_needed = _relevant_perspective_count(bill)
+        # Explicit-only, matching worker.steps_needed(). The two-lane view
+        # replaced the personas for active bills, so new ones are generated
+        # only when someone asks for them by name (allowed_steps ==
+        # ["perspectives"]) -- a backfill, not a routine enrichment pass.
         needs_perspectives = (
-            bool(bill.analyzed_at)
+            allowed_steps == ["perspectives"]
+            and bool(bill.analyzed_at)
             and bill.status not in TERMINAL_STATUSES
             and _persp_count < _persp_needed
         )
