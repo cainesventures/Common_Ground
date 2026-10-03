@@ -34,7 +34,7 @@ export default function PricingPage() {
           {[
             'Browse and search all City Council bills',
             'AI summaries in plain English',
-            'Up to 17 political perspectives on active bills',
+            'The case for and against the bills still in play',
             'Impact scores and analysis',
             'Sponsor and committee insights',
             'Vote on legislation (sign-in required)',

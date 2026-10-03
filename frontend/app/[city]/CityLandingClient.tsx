@@ -47,7 +47,7 @@ const FEATURES = [
       </svg>
     ),
     title: 'Both Sides, Argued',
-    body: 'Every bill still moving through Council gets the strongest honest case for it and the strongest honest case against it, side by side. Every figure in them is checked against the bill text. You decide what to think.',
+    body: 'When a bill still before Council carries a real decision, you get the strongest honest case for it and the strongest honest case against it, side by side, with every figure checked against the bill text. Routine housekeeping is marked as routine rather than argued into a fight it does not have.',
   },
   {
     icon: (
@@ -298,7 +298,7 @@ export default function CityLandingClient() {
             Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
           </h1>
           <p className="type-body text-muted-foreground max-w-xl mx-auto mb-8">
-            Every bill. Plain English. Bills in play read from every angle — labor to business, progressives to conservatives — so you can follow along and make up your own mind.
+            Every bill. Plain English. When a bill has a real decision in it, you get the strongest case for it and the strongest case against it — so you can follow along and make up your own mind.
           </p>
           <form onSubmit={handleSearch} className="relative max-w-lg mx-auto w-full mb-6">
             {searching ? (
@@ -382,27 +382,27 @@ export default function CityLandingClient() {
         </section>
       )}
 
-      {/* ── Perspectives callout ── */}
+      {/* ── Both sides callout ── */}
       <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">
         <h2 className="type-section mb-3">
-          One bill. Every angle. You decide.
+          One bill. Both sides. You decide.
         </h2>
         <p className="type-body-sm text-muted-foreground max-w-xl mx-auto mb-6">
-          We don&apos;t tell you what to think. We show you how different communities — progressive activists, small business owners, urban planners, even the deeply skeptical — actually see the same legislation. Then you make up your own mind.
+          We don&apos;t tell you what to think. For a bill still moving through Council, we write the strongest honest case for it and the strongest honest case against it, argued only from what the bill actually says. Then you make up your own mind.
         </p>
         <p className="text-xs text-muted-foreground max-w-xl mx-auto mb-6">
-          Written for bills still working their way through Council, using the lenses that fit the subject — usually six to ten of the seventeen, not all of them on every bill.
+          Not every bill gets an argument. A zoning map change or a parking rule is marked as routine instead, and a bill whose arguments cannot be grounded in its own text is left without one. Older bills also carry an archive of AI perspectives written from different political viewpoints.
         </p>
         <div className="flex flex-wrap justify-center gap-2 mb-8 text-xs">
-          {['Progressive', 'Conservative', 'Libertarian', 'Socialist', 'Working Class', 'Business', 'Urban Planner', 'Public Health', 'Youth', 'Elderly', 'Neighborhood', 'Christian Ethicist', '+ more'].map((p) => (
+          {['The case for', 'The case against', 'Every figure checked against the bill'].map((p) => (
             <span key={p} className="px-3 py-1 rounded-full border bg-background font-medium">{p}</span>
           ))}
         </div>
         <Link
-          href={`/${city}/legislation?analyzed=true`}
+          href={`/${city}/legislation?analyzed=true&status=introduced,in_committee`}
           className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border border-foreground bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
         >
-          Read the perspectives →
+          Read what&apos;s in play →
         </Link>
       </section>
 
@@ -440,22 +440,18 @@ export default function CityLandingClient() {
           >
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground font-bold text-xs flex items-center justify-center shrink-0">2</div>
-              <p className="font-semibold text-sm">Every angle, zero spin</p>
+              <p className="font-semibold text-sm">Both sides, argued</p>
             </div>
-            <div className="space-y-1.5 text-xs">
-              {[
-                { label: 'Progressive', pos: 'support', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-                { label: 'Business Owner', pos: 'support', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-                { label: 'Neighborhood', pos: 'oppose', color: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' },
-                { label: 'Conservative', pos: 'neutral', color: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
-                { label: 'Urban Planner', pos: 'support', color: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' },
-              ].map(({ label, pos, color }) => (
-                <div key={label} className="flex items-center justify-between">
-                  <span className="text-muted-foreground">{label}</span>
-                  <span className={`px-2 py-0.5 rounded-full font-medium capitalize ${color}`}>{pos}</span>
-                </div>
-              ))}
-              <p className="text-muted-foreground/50 pt-1">+ 12 more perspectives</p>
+            <div className="space-y-2 text-xs">
+              <div className="border-l-2 border-emerald-400 pl-2.5">
+                <p className="font-semibold text-emerald-700 dark:text-emerald-400 mb-0.5">The case for</p>
+                <p className="text-muted-foreground leading-snug">Protects tenants from a cost they cannot see coming, using a process the City already runs.</p>
+              </div>
+              <div className="border-l-2 border-rose-400 pl-2.5">
+                <p className="font-semibold text-rose-700 dark:text-rose-400 mb-0.5">The case against</p>
+                <p className="text-muted-foreground leading-snug">Shifts the enforcement burden onto the City, with no funding named to carry it.</p>
+              </div>
+              <p className="text-muted-foreground/50 pt-1">Every figure checked against the bill text.</p>
             </div>
           </div>
 
