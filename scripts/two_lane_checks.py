@@ -321,6 +321,34 @@ POLARITY_RULES = [
 ]
 
 
+# Wording that exists only in the generator's own instructions. If it comes
+# back in the output, the model has read the brief as part of the bill.
+#
+# Found on the homepage: "This bill will establish a valuable civic reference
+# site in the heart of the city" -- about a bill acquiring parkland. "Civic
+# reference site" is what the prompt calls *this website*. Three of 102 bills
+# had it, and no existing check could see it: nothing was miscounted and no
+# direction was reversed, the model had simply invented the bill's purpose out
+# of its own instructions.
+#
+# Deliberately a short list of phrases that are meaningless as the subject of a
+# Philadelphia ordinance, so a bill that happens to discuss plain language or
+# public reference materials is not rejected for it.
+PROMPT_LEAKS = [
+    re.compile(r"civic\s+reference\s+site", re.I),
+    re.compile(r"\breference\s+site\b", re.I),
+    re.compile(r"strongest\s+honest\s+(?:case|argument)", re.I),
+    re.compile(r"whatever\s+your\s+own\s+view", re.I),
+    re.compile(r"so\s+a\s+reader\s+can\s+weigh\s+it", re.I),
+]
+
+
+def prompt_leaks(text: str):
+    """Phrases from the generator's own prompt that surfaced in its output."""
+    return [m.group(0) for rx in PROMPT_LEAKS
+            for m in [rx.search(text or "")] if m]
+
+
 def direction_conflicts(text: str, source: str):
     """Names of polarity rules the text trips against the source.
 

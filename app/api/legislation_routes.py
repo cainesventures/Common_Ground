@@ -777,15 +777,29 @@ async def spotlight_bills(
     limit: int = Query(6, ge=1, le=20),
     db: Session = Depends(get_db),
 ):
-    """Return random analyzed bills with perspectives for the homepage slideshow."""
+    """Random active bills with both sides argued, for the homepage slideshow.
+
+    This used to serve perspectives, which was wrong twice over. The section is
+    headed "What's being decided right now", but the filter was "any analyzed
+    bill that has perspectives" -- and perspectives live overwhelmingly on
+    concluded bills, so the homepage advertised finished business as current.
+    And it led with the personas, which is the thing the two-lane pivot exists
+    to stop doing.
+
+    Now it is restricted to bills that are genuinely active AND have a case for
+    and a case against that passed the grounding checks, so the heading is
+    true and the writing on the homepage is the writing the site leads with.
+    """
     import random
-    from app.models import BillPerspective
 
     bills = (
         db.query(Legislation)
         .filter(
             Legislation.level == "local",
-            Legislation.analyzed_at.isnot(None),
+            Legislation.status.in_(["introduced", "in_committee"]),
+            Legislation.two_lane_state == "argued",
+            Legislation.case_for.isnot(None),
+            Legislation.case_against.isnot(None),
             Legislation.headline.isnot(None),
             Legislation.headline != "",
         )
@@ -795,35 +809,36 @@ async def spotlight_bills(
     )
 
     random.shuffle(bills)
-    results = []
-    for bill in bills:
-        perspectives_raw = (
-            db.query(BillPerspective)
-            .filter(BillPerspective.bill_id == bill.id)
-            .all()
-        )
-        perspectives = []
-        for p in perspectives_raw:
-            text = p.assessment or p.concerns or ""
-            snippet = text[:200].rsplit(" ", 1)[0] + "…" if len(text) > 200 else text
-            if snippet:
-                perspectives.append({
-                    "type": p.perspective_type,
-                    "position": p.position or "neutral",
-                    "snippet": snippet,
-                })
-        if not perspectives:
-            continue
-        results.append({
+
+    def _snippet(text: str, cap: int = 330) -> str:
+        """Trim to whole sentences, never mid-clause.
+
+        A hard character cut left the homepage reading "Tenants who are forced
+        to occupy a property without a required…", which looks broken rather
+        than brief -- the same reason generate_two_lane.clean() ends on a
+        sentence boundary. Falls back to a word cut only when the first
+        sentence is itself longer than the cap.
+        """
+        text = (text or "").strip()
+        if len(text) <= cap:
+            return text
+        window = text[:cap]
+        end = max(window.rfind(". "), window.rfind("! "), window.rfind("? "))
+        if end > cap // 3:
+            return window[:end + 1].strip()
+        return window.rsplit(" ", 1)[0] + "…"
+
+    results = [
+        {
             "id": bill.id,
             "headline": bill.headline,
             "lede": bill.lede or "",
             "bill_number": bill.bill_number,
-            "perspectives": perspectives,
-        })
-        if len(results) >= limit:
-            break
-
+            "case_for": _snippet(bill.case_for),
+            "case_against": _snippet(bill.case_against),
+        }
+        for bill in bills[:limit]
+    ]
     return {"results": results}
 
 

@@ -21,36 +21,13 @@ function useInView(ref: RefObject<HTMLElement | null>, threshold = 0.15) {
   return inView
 }
 
-const PERSPECTIVE_LABELS: Record<string, string> = {
-  progressive: 'Progressive', conservative: 'Conservative', libertarian: 'Libertarian',
-  socialist: 'Socialist', centrist: 'Centrist', economic: 'Economic Analyst',
-  civil_liberties: 'Civil Liberties', environmental: 'Environmentalist',
-  public_health: 'Public Health', urban_planning: 'Urban Planner',
-  working_class: 'Working Class', business: 'Business Owner',
-  youth: 'Youth Perspective', elderly: 'Senior Perspective',
-  neighborhood: 'Neighborhood Advocate', christian_ethicist: 'Christian Ethicist',
-  conspiracy_theorist: 'Skeptic',
-}
-
-const POSITION_STYLES: Record<string, string> = {
-  support: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
-  oppose:  'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  neutral: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  mixed:   'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
-}
-
-interface SpotlightPerspective {
-  type: string
-  position: string
-  snippet: string
-}
-
 interface SpotlightItem {
   id: string
   headline: string
   lede: string
   bill_number: string
-  perspectives: SpotlightPerspective[]
+  case_for: string
+  case_against: string
 }
 
 const FEATURES = [
@@ -69,8 +46,8 @@ const FEATURES = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
       </svg>
     ),
-    title: 'Up to 17 Perspectives',
-    body: 'Bills still moving through Council are read through the lenses that fit the subject — progressive, conservative, working class, business owner, urban planner and more, drawn from a set of 17. You decide what to think.',
+    title: 'Both Sides, Argued',
+    body: 'Every bill still moving through Council gets the strongest honest case for it and the strongest honest case against it, side by side. Every figure in them is checked against the bill text. You decide what to think.',
   },
   {
     icon: (
@@ -111,25 +88,28 @@ function LibertyBell({ className }: { className?: string }) {
   )
 }
 
-// ── Perspectives Slideshow ─────────────────────────────────────────────────────
-function PerspectivesSlideshow({ items }: { items: SpotlightItem[] }) {
+// ── Both Sides Slideshow ───────────────────────────────────────────────────────
+// Was a persona carousel: one bill, then a nested index stepping through up to
+// 17 perspectives. It is now one bill showing both cases at once, which drops
+// the inner index entirely and shows a visitor the thing the site actually
+// leads with. The endpoint behind it now returns only active bills whose
+// arguments passed the grounding checks, so the section heading -- "What's
+// being decided right now" -- is finally true; it used to serve any bill with
+// perspectives, which are overwhelmingly on concluded ones.
+function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
   const { city } = useParams<{ city: string }>()
   const [billIdx, setBillIdx] = useState(0)
-  const [perspIdx, setPerspIdx] = useState(0)
   const [fading, setFading] = useState(false)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const pausedRef = useRef(false)
   const billIdxRef = useRef(billIdx)
-  const perspIdxRef = useRef(perspIdx)
 
   useEffect(() => { billIdxRef.current = billIdx }, [billIdx])
-  useEffect(() => { perspIdxRef.current = perspIdx }, [perspIdx])
 
   const goToBill = useCallback((next: number) => {
     setFading(true)
     setTimeout(() => {
       setBillIdx(next)
-      setPerspIdx(0)
       setFading(false)
     }, 250)
   }, [])
@@ -140,28 +120,22 @@ function PerspectivesSlideshow({ items }: { items: SpotlightItem[] }) {
 
   useEffect(() => {
     if (items.length === 0) return
+    // Slower than the old 10s: a visitor now has two arguments to read on each
+    // slide instead of one quoted sentence.
     intervalRef.current = setInterval(() => {
       if (pausedRef.current) return
-      const bill = items[billIdxRef.current]
-      const perspCount = bill?.perspectives?.length ?? 0
-      const nextPersp = perspIdxRef.current + 1
-      if (nextPersp < perspCount) {
-        setPerspIdx(nextPersp)
-      } else {
-        goToBill((billIdxRef.current + 1) % items.length)
-      }
-    }, 10000)
+      goToBill((billIdxRef.current + 1) % items.length)
+    }, 14000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [items, goToBill])
 
   if (items.length === 0) return null
 
   const bill = items[billIdx]
-  const perspectives = bill.perspectives ?? []
-  const persp = perspectives[perspIdx] ?? null
-
-  const prevPersp = () => setPerspIdx(i => (i - 1 + perspectives.length) % perspectives.length)
-  const nextPersp = () => setPerspIdx(i => (i + 1) % perspectives.length)
+  const lanes = [
+    { key: 'for', label: 'The case for', text: bill.case_for, accent: 'border-emerald-400/40' },
+    { key: 'against', label: 'The case against', text: bill.case_against, accent: 'border-rose-400/40' },
+  ]
 
   return (
     <div
@@ -173,65 +147,34 @@ function PerspectivesSlideshow({ items }: { items: SpotlightItem[] }) {
         className="px-6 pt-8 pb-6 sm:px-10 sm:pt-10 transition-opacity duration-250"
         style={{ opacity: fading ? 0 : 1 }}
       >
-        {/* Bill number */}
         <p className="text-white/40 text-xs font-mono mb-2 uppercase tracking-wider">{bill.bill_number}</p>
 
-        {/* Headline */}
-        <Link href={`/${city}/legislation/${bill.id}?tab=perspectives`}>
+        <Link href={`/${city}/legislation/${bill.id}`}>
           <h3 className="text-white text-xl sm:text-2xl font-bold leading-snug mb-3 max-w-2xl hover:text-white/80 transition-colors">
             {bill.headline}
           </h3>
         </Link>
 
-        {/* Lede */}
         {bill.lede && (
           <p className="text-white/60 text-sm leading-relaxed mb-6 max-w-2xl">
             {bill.lede}
           </p>
         )}
 
-        {/* Perspectives carousel */}
-        {perspectives.length > 0 && persp ? (
-          <div className="border-t border-white/10 pt-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-white/40 text-xs uppercase tracking-widest font-semibold">Perspectives</span>
-                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${POSITION_STYLES[persp.position] ?? POSITION_STYLES.neutral}`}>
-                  {PERSPECTIVE_LABELS[persp.type] ?? persp.type}
-                </span>
-                <span className="text-xs text-white/30 capitalize">{persp.position}</span>
-              </div>
-              {perspectives.length > 1 && (
-                <div className="flex items-center gap-1">
-                  <button onClick={prevPersp} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors text-xs">‹</button>
-                  <span className="text-white/30 text-xs tabular-nums w-10 text-center">{perspIdx + 1} / {perspectives.length}</span>
-                  <button onClick={nextPersp} className="w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition-colors text-xs">›</button>
-                </div>
-              )}
+        <div className="border-t border-white/10 pt-5 grid gap-5 sm:grid-cols-2">
+          {lanes.map(({ key, label, text, accent }) => (
+            <div key={key} className={`border-l-2 pl-4 ${accent}`}>
+              <p className="text-white/40 text-xs uppercase tracking-widest font-semibold mb-2">{label}</p>
+              <p className="text-white/70 text-sm leading-relaxed">{text}</p>
             </div>
-            <blockquote key={perspIdx} className="anim-slide-right text-white/70 text-sm leading-relaxed italic border-l-2 border-white/20 pl-4 mb-4">
-              "{persp.snippet}"
-            </blockquote>
-            {perspectives.length > 1 && (
-              <div className="flex gap-1">
-                {perspectives.map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setPerspIdx(i)}
-                    className={`h-1 rounded-full transition-all ${i === perspIdx ? 'w-5 bg-white/60' : 'w-1.5 bg-white/20 hover:bg-white/35'}`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="border-t border-white/10 pt-5">
-            <p className="text-white/30 text-xs italic">Perspectives generating…</p>
-          </div>
-        )}
+          ))}
+        </div>
+
+        <p className="text-white/25 text-[11px] mt-5">
+          AI-written arguments, checked against the bill text. Neither side is the site&apos;s position.
+        </p>
       </div>
 
-      {/* Bill navigation footer */}
       {items.length > 1 && (
         <div className="flex items-center justify-between px-6 sm:px-10 py-3 border-t border-white/10">
           <button
@@ -245,6 +188,7 @@ function PerspectivesSlideshow({ items }: { items: SpotlightItem[] }) {
               <button
                 key={i}
                 onClick={() => goToBill(i)}
+                aria-label={`Go to bill ${i + 1}`}
                 className={`rounded-full transition-all ${i === billIdx ? 'w-5 h-1.5 bg-white/60' : 'w-1.5 h-1.5 bg-white/20 hover:bg-white/40'}`}
               />
             ))}
@@ -404,18 +348,18 @@ export default function CityLandingClient() {
       {/* ── Founders Quote ── */}
       <FoundersQuote />
 
-      {/* ── Perspectives Slideshow ── */}
+      {/* ── Both Sides Slideshow ── */}
       {spotlight.length > 0 && (
         <section className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h2 className="type-eyebrow text-muted-foreground">
               What&apos;s being decided right now
             </h2>
-            <Link href={`/${city}/legislation?analyzed=true&perspectives=true`} className="text-sm text-primary hover:underline">
+            <Link href={`/${city}/legislation?analyzed=true&status=introduced,in_committee`} className="text-sm text-primary hover:underline">
               Browse all bills →
             </Link>
           </div>
-          <PerspectivesSlideshow items={spotlight} />
+          <BothSidesSlideshow items={spotlight} />
         </section>
       )}
 

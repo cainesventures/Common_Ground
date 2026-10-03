@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from two_lane_checks import (  # noqa: E402  (after the sys.path fix-up)
-    contradiction_check, direction_conflicts, ungrounded_numbers)
+    contradiction_check, direction_conflicts, prompt_leaks, ungrounded_numbers)
 
 DB = "common_ground_test.db"
 
@@ -73,9 +73,14 @@ INSIGHTS_SYSTEM = (
 )
 
 FOR_SYSTEM = (
-    "You write the case IN FAVOUR of a municipal bill for a civic reference "
-    "site, so a reader can weigh it themselves. Make the strongest honest "
-    "argument, whatever your own view.\n\n"
+    # "for a civic reference site" used to sit in this sentence, describing
+    # where the writing would be published. The model read it as the bill's
+    # subject and wrote "This bill will establish a valuable civic reference
+    # site in the heart of the city" about an ordinance acquiring parkland.
+    # The audience is still named, but not as a noun phrase that can be
+    # mistaken for the thing the bill does.
+    "You write the case IN FAVOUR of a municipal bill, for readers deciding "
+    "what they think of it. Make the strongest honest argument you can.\n\n"
     "Ground every claim in what the bill actually does. Do not invent dollar "
     "figures, neighbourhoods, statistics or consequences that are not in the "
     "material. Name who benefits and how.\n\n"
@@ -84,9 +89,8 @@ FOR_SYSTEM = (
 )
 
 AGAINST_SYSTEM = (
-    "You write the case AGAINST a municipal bill for a civic reference site, so "
-    "a reader can weigh it themselves. Make the strongest honest argument, "
-    "whatever your own view.\n\n"
+    "You write the case AGAINST a municipal bill, for readers deciding what "
+    "they think of it. Make the strongest honest argument you can.\n\n"
     "Ground every claim in what the bill actually does -- costs, who bears them, "
     "who loses, powers it hands over, enforcement burden, precedent it sets. Do "
     "not invent dollar figures, neighbourhoods, statistics or consequences that "
@@ -169,6 +173,8 @@ def _faults(text: str, source: str, label: str):
         faults.append(f"{label}: ungrounded number {raw!r} ({value:g})")
     for name in direction_conflicts(text, source):
         faults.append(f"{label}: direction conflict ({name})")
+    for phrase in prompt_leaks(text):
+        faults.append(f"{label}: prompt leaked into output ({phrase!r})")
     return faults
 
 

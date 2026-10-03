@@ -9,7 +9,6 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { usePostHog } from 'posthog-js/react'
-import { POSITION_STYLES, TALLY_BAR_COLORS } from '@/lib/badge-colors'
 
 const GROUP_COLORS: Record<string, string> = {
   Political:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -94,12 +93,6 @@ interface Perspective {
   generated_at?: string
 }
 
-const POSITION_LABELS: Record<string, string> = {
-  support: 'Support',
-  oppose: 'Oppose',
-  neutral: 'Neutral',
-}
-
 function PerspectivesTally({
   perspectives, pending, billId, isAdmin, generating, generate, isBusy,
 }: {
@@ -119,21 +112,27 @@ function PerspectivesTally({
 
   if (!hasPerspectives && !hasPending) return null
 
-  const counts: Record<string, number> = { support: 0, oppose: 0, neutral: 0 }
-  for (const p of perspectives) {
-    const pos = p.position === 'mixed' ? 'neutral' : p.position
-    if (counts[pos] !== undefined) counts[pos]++
-    else counts.neutral++
-  }
-
   const total = perspectives.length
-  const positionOrder = ['support', 'neutral', 'oppose'] as const
 
+  // Sorted by label, not by stance. Everything stance-derived was removed from
+  // this panel -- the tally, the bar, the per-row support/oppose badge -- and
+  // the ordering went with it, because grouping the rows by position is the
+  // same claim made with layout instead of a label.
+  //
+  // Why: the stance is the one part of a perspective that was measured, and it
+  // came out at 69% accurate with 3% taking the position opposite the
+  // persona's own values (scripts/eval_personas.py). Every alternative prompt
+  // tried was worse. A reader cannot tell which 69% they are looking at, and a
+  // conservative columnist calling a tax cut a giveaway is the failure they
+  // notice and remember.
+  //
+  // The writing itself was never the problem, so it stays. The position column
+  // remains in the database and in the API: this hides a claim that could not
+  // be stood behind, it does not delete anyone's data.
   const sorted = perspectives.slice().sort((a, b) => {
-    const order = ['support', 'neutral', 'oppose']
-    const pa = a.position === 'mixed' ? 'neutral' : a.position
-    const pb = b.position === 'mixed' ? 'neutral' : b.position
-    return order.indexOf(pa) - order.indexOf(pb)
+    const la = ALL_PERSPECTIVES.find((x) => x.key === a.perspective_type)?.label ?? a.perspective_type
+    const lb = ALL_PERSPECTIVES.find((x) => x.key === b.perspective_type)?.label ?? b.perspective_type
+    return la.localeCompare(lb)
   })
 
   return (
@@ -142,30 +141,14 @@ function PerspectivesTally({
       {/* Header + stacked bar — only when there are generated perspectives */}
       {hasPerspectives && (
         <>
-          <div className="px-4 py-3 border-b bg-muted/30 flex flex-wrap items-center gap-4">
+          <div className="px-4 py-3 border-b bg-muted/30 space-y-0.5">
             <span className="text-sm font-semibold">
-              AI Tally
+              How different readers saw it
               <span className="ml-1.5 text-xs font-normal text-muted-foreground">({total} perspectives)</span>
             </span>
-            <div className="flex items-center gap-3 text-sm">
-              {positionOrder.map((pos) => counts[pos] > 0 && (
-                <span key={pos} className="flex items-center gap-1.5">
-                  <span className={`inline-block w-2.5 h-2.5 rounded-full ${TALLY_BAR_COLORS[pos]}`} />
-                  <span className="font-medium">{counts[pos]}</span>
-                  <span className="text-muted-foreground">{POSITION_LABELS[pos]}</span>
-                  <span className="text-muted-foreground/60 text-xs">({Math.round((counts[pos] / total) * 100)}%)</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex h-1.5">
-            {positionOrder.map((pos) => {
-              const pct = (counts[pos] / total) * 100
-              return pct > 0 ? (
-                <div key={pos} className={TALLY_BAR_COLORS[pos]} style={{ width: `${pct}%` }} />
-              ) : null
-            })}
+            <p className="text-xs text-muted-foreground">
+              Simulated viewpoints written by AI, not real people, and not a count of who supports this bill.
+            </p>
           </div>
 
           {/* Generated perspective rows */}
@@ -173,8 +156,6 @@ function PerspectivesTally({
             {sorted.map((p) => {
               const meta = ALL_PERSPECTIVES.find((x) => x.key === p.perspective_type)
               const label = meta?.label ?? p.perspective_type
-              const displayPos = p.position === 'mixed' ? 'neutral' : p.position
-              const posStyle = POSITION_STYLES[displayPos] ?? POSITION_STYLES.neutral
               const isOpen = expanded === p.perspective_type
               const args: string[] = Array.isArray(p.key_arguments)
                 ? p.key_arguments
@@ -190,16 +171,13 @@ function PerspectivesTally({
                     }}
                     className="w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/20 transition-colors text-left"
                     aria-expanded={isOpen}
-                    aria-label={`${label}, ${displayPos}. ${isOpen ? 'Collapse' : 'Expand'} details`}
+                    aria-label={`${label}. ${isOpen ? 'Collapse' : 'Expand'} details`}
                   >
                     <span className="text-muted-foreground flex items-center gap-1.5">
                       <PerspectiveMonogram perspKey={p.perspective_type} group={meta?.group ?? 'Special'} />
                       {label}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize ${posStyle}`}>
-                        {displayPos}
-                      </span>
                       <span className="text-muted-foreground text-xs">{isOpen ? '▲' : '▼'}</span>
                     </div>
                   </button>
