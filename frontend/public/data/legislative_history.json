@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-02T21:36:57.473445Z",
+  "generated_at": "2026-10-03T16:58:36.728360Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
@@ -27,7 +27,7 @@
       "note": "2,607 bills"
     }
   ],
-  "narrative": "Over the past 27 years, the Philadelphia City Council has introduced a staggering 8,680 bills, with an average of 321 bills per year. This data represents a comprehensive snapshot of the council's legislative activity from 2000 to 2026, covering three decades of policy-making and issue-advocacy. Within this vast dataset, we find that 6,718 bills have been signed into law, a remarkable 79% pass rate that underscores the council's effectiveness in translating proposals into policy.\n\nAs we delve into the yearly summaries, we notice the emergence of dominant issue areas, including zoning, planning, and infrastructure. Zoning, in particular, has been the top issue area in 24 out of 27 years, with a total of 2,607 bills introduced on this topic. The data also reveals a notable shift in legislative priorities over time, with periods of heightened activity around specific issues like housing (2010), transportation (2011), and public safety (2012-2013). Conversely, we observe declining interest in zoning legislation in 2020, coinciding with the COVID-19 pandemic.\n\nThis data provides a unique lens through which to understand the council's functioning and the priorities of its members. The relatively low number of contested votes (361 across all years) suggests a collaborative and consensus-driven approach to policy-making. By examining this data, Philadelphians can gain insight into the council's decision-making processes and the trade-offs made by its members. Equipped with this information, citizens can engage more effectively with their representatives, hold them accountable, and advocate for policies that reflect their values and concerns.",
+  "narrative": "For nearly three decades, the City Council has churned out an astonishing 8,680 bills, with an average of 321 per year. This deluge of legislation paints a vivid picture of the city's concerns and priorities, and offers a unique window into the inner workings of local government. From 2000 to 2026, the Council has been a veritable engine of lawmaking, producing a bill that, on average, every 2.5 days.\n\nAs we delve into the data, it's clear that zoning has been the Council's preoccupation of choice for most of these 27 years. The issue dominated the legislative agenda for 13 years, with 2,607 bills introduced, and was also the top issue for 2026, with 215 bills focused on it. However, there have been moments of shift, like in 2002 when the Council scored big with a historic budget. The 79% pass rate suggests a high level of efficiency in the legislative process, while the scarcity of contested votes – just 361 in total – implies a relatively harmonious Council.\n\nWhat this data tells us is that the City Council has a crucial role in shaping the city's future, and that tracking legislation is essential for informed civic engagement. With the Council currently active on 175 bills, Philadelphians can use this information to hold their representatives accountable, stay up-to-date on important issues, and make their voices heard. By understanding the priorities and concerns of their elected officials, citizens can work towards creating a more just and equitable city, one bill at a time.",
   "top_issues": [
     {
       "tag": "zoning",
@@ -6671,13 +6671,12 @@
     {
       "year": 2026,
       "is_partial": true,
-      "headline": "Council Sees Record-Low Bills, More Zoning Focus",
-      "narrative": "Philadelphia City Council's legislative activity saw a significant decrease in introduced bills, down to 215 from the previous year. However, this didn't slow down the pace of becoming law, with a median of 42 days from introduction to signing. Zoning dominated the agenda, with 91 bills introduced, followed by infrastructure and planning. Compared to the previous year, development, land use, and public safety saw significant increases in bill introductions, while planning, housing, and business saw declines. Notably, no bills drew contested votes, with every roll call unanimous. The council's focus on zoning and infrastructure is reflected in the top issue areas, which also saw significant increases in development and land use.",
+      "headline": "Council Focuses on Zoning, Infrastructure in 2026",
+      "narrative": "The Philadelphia City Council dominated by zoning and infrastructure issues in 2026, with 91 bills introduced related to zoning and 27 to infrastructure. This shift may signal a renewed focus on development and land use, as bills in these areas increased by 14 and 13 respectively compared to the previous year. On the other hand, planning, housing, business, and land-use bills declined significantly, by 50, 46, 37, and 36 respectively. The council's legislation was also marked by a notable absence of controversy, with every roll call vote being unanimous. This lack of contentiousness may indicate a year of consensus-building and cooperation among council members, but it also underscores the need for robust public engagement and scrutiny to ensure that the public interest is being served.",
       "key_themes": [
-        "Zoning Dominates Agenda",
-        "Unanimous Council Votes",
-        "Fewer Introduced Bills",
-        "More Development Focus"
+        "Zoning dominates council agenda",
+        "Infrastructure investments increase",
+        "Consensus drives unanimous votes"
       ],
       "stats": {
         "year": 2026,
@@ -6849,7 +6848,7 @@
         }
       ],
       "contested_bills": [],
-      "generated_at": "2026-10-02T21:36:50.388689Z"
+      "generated_at": "2026-10-03T16:58:29.751433Z"
     }
   ]
 }
