@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { CouncilmemberWithTenure as Member } from '@/lib/types'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -8,27 +9,13 @@ import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
 import { CITY } from '@/lib/city'
 import { lastName } from '@/lib/names'
+import { errorMessage } from '@/lib/utils'
+import type { DistrictGeoJSON } from '@/lib/types'
 
 const DistrictMap = dynamic(
   () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
   { ssr: false, loading: () => <div className="h-96 rounded-lg bg-muted animate-pulse" /> }
 )
-
-interface Member {
-  id: string
-  name: string
-  district: string
-  party: string
-  email?: string
-  phone?: string
-  photo_url?: string
-  bills_sponsored: number
-  profile_url?: string
-  term_start?: number
-  years_serving?: number
-  next_election?: number
-  years_until_election?: number
-}
 
 // Point-in-polygon (ray-casting). GeoJSON coords are [lng, lat].
 function pointInPolygon(lat: number, lng: number, ring: number[][]): boolean {
@@ -43,7 +30,7 @@ function pointInPolygon(lat: number, lng: number, ring: number[][]): boolean {
   return inside
 }
 
-function getDistrictNum(props: Record<string, any>): number | null {
+function getDistrictNum(props: Record<string, unknown>): number | null {
   const val = props?.DISTRICT ?? props?.District ?? props?.district ??
               props?.DIST_NUM ?? props?.districtNum ?? props?.OBJECTID ?? null
   if (val === null || val === undefined) return null
@@ -51,14 +38,14 @@ function getDistrictNum(props: Record<string, any>): number | null {
   return isNaN(n) ? null : n
 }
 
-function findDistrictFromGeoJSON(lat: number, lng: number, geojson: any): number | null {
+function findDistrictFromGeoJSON(lat: number, lng: number, geojson: DistrictGeoJSON): number | null {
   for (const feature of (geojson.features ?? [])) {
     const num = getDistrictNum(feature?.properties ?? {})
     if (num === null) continue
     const geom = feature.geometry
     const rings: number[][][] =
-      geom?.type === 'Polygon'      ? [geom.coordinates[0]] :
-      geom?.type === 'MultiPolygon' ? geom.coordinates.map((p: any) => p[0]) : []
+      geom?.type === 'Polygon'      ? [(geom.coordinates as number[][][])[0]] :
+      geom?.type === 'MultiPolygon' ? (geom.coordinates as number[][][][]).map((p) => p[0]) : []
     for (const ring of rings) {
       if (pointInPolygon(lat, lng, ring)) return num
     }
@@ -100,8 +87,8 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
 
       setResult(member)
       onFound(member.id)
-    } catch (e: any) {
-      setError(e.message || 'Something went wrong.')
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Something went wrong.'))
     } finally {
       setLoading(false)
     }
@@ -153,15 +140,16 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
 function SponsorshipChart({ members }: { members: Member[] }) {
   const { city } = useParams<{ city: string }>()
   const [hoveredId, setHoveredId] = useState<string | null>(null)
-  const sorted = [...members].filter(m => m.bills_sponsored > 0).sort((a, b) => b.bills_sponsored - a.bills_sponsored)
+  const sorted = [...members].filter(m => (m.bills_sponsored ?? 0) > 0)
+    .sort((a, b) => (b.bills_sponsored ?? 0) - (a.bills_sponsored ?? 0))
   if (sorted.length === 0) return null
-  const max = sorted[0].bills_sponsored
+  const max = sorted[0].bills_sponsored ?? 0
 
   return (
     <div className="rounded-xl border bg-card p-4 space-y-2">
       <p className="text-sm font-semibold mb-3">Bills Sponsored</p>
       {sorted.map((m) => {
-        const pct = Math.max((m.bills_sponsored / max) * 100, 2)
+        const pct = max > 0 ? Math.max(((m.bills_sponsored ?? 0) / max) * 100, 2) : 2
         const isHovered = hoveredId === m.id
         return (
           <Link
@@ -319,7 +307,7 @@ export default function CouncilmembersPage() {
       {!loading && members.length === 0 && !error && (
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-sm">No council members yet.</p>
-          <p className="text-xs mt-1">An admin can scrape profiles from the <a href="/admin" className="underline">admin panel</a>.</p>
+          <p className="text-xs mt-1">An admin can scrape profiles from the <Link href="/admin" className="underline">admin panel</Link>.</p>
         </div>
       )}
 

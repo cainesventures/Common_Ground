@@ -59,8 +59,8 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
           }
         }
       }
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
+    } catch (e: unknown) {
+      if (!(e instanceof Error) || e.name !== 'AbortError') {
         setProgress({ current: 0, total: 0, message: String(e), done: true })
       }
     } finally {

@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback, Suspense, useRef } from 'react'
+import type { FacetsResponse } from '@/lib/api-types'
+import type { Bill } from '@/lib/types'
 import Link from 'next/link'
 import { useSearchParams, useParams } from 'next/navigation'
 import { api } from '@/lib/api'
@@ -8,32 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MultiSelect } from '@/components/ui/multi-select'
 import { usePostHog } from 'posthog-js/react'
 import { STATUS_COLORS as STATUS_BADGE, STATUS_COLORS_FALLBACK, IMPACT_ACCENT, HEARING_BADGE } from '@/lib/badge-colors'
-import { isWithin7Days, fmtStatus } from '@/lib/utils'
+import { isWithin7Days, fmtStatus, errorMessage } from '@/lib/utils'
 import { BillCard } from '@/components/BillCard'
 import { BILL_CATEGORIES, CATEGORY_TAGS } from '@/lib/bill-categories'
 
 const PAGE_SIZE = 20
 
 const MONTH_NAMES_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December']
-
-interface Bill {
-  id: string
-  bill_number: string
-  title: string
-  plain_title?: string
-  headline?: string
-  lede?: string
-  status: string
-  level?: string
-  introduced_date?: string
-  final_date?: string
-  impact_level?: string
-  bill_type?: string
-  analyzed_at?: string
-  tags?: string
-  summary?: string
-  next_hearing_date?: string
-}
 
 function ExportButtons({ analyzed, tags, impact, statuses, sponsor, year, month, total }: {
   analyzed?: string; tags?: string[]; impact?: string; statuses?: string[]
@@ -128,12 +111,11 @@ function LegislationPageInner() {
   const [paginationExpanded, setPaginationExpanded] = useState(false)
   const [paginationFixed, setPaginationFixed] = useState(true)
   const bottomSentinelRef = useRef<HTMLDivElement>(null)
-  const [facets, setFacets] = useState<{
-    statuses: {value: string; count: number}[]
-    sponsors: {name: string; count: number}[]
-    tags: {tag: string; count: number}[]
-    categories: {key: string; count: number}[]
-  }>({ statuses: [], sponsors: [], tags: [], categories: [] })
+  // Shape comes from the endpoint; see FacetsResponse for why the label key
+  // differs per bucket list.
+  const [facets, setFacets] = useState<Required<FacetsResponse>>(
+    { statuses: [], sponsors: [], tags: [], categories: [] },
+  )
   const [yearCounts,  setYearCounts]  = useState<YearCount[]>([])
   const [monthCounts, setMonthCounts] = useState<MonthCount[]>([])
 
@@ -176,9 +158,8 @@ function LegislationPageInner() {
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
-    } catch (e: any) {
-      const msg = typeof e?.message === 'string' ? e.message : 'Failed to load legislation'
-      setError(msg)
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Failed to load legislation'))
       setBills([])
       setTotal(0)
     } finally {
@@ -204,7 +185,15 @@ function LegislationPageInner() {
         sponsor: selectedSponsors.join(',') || undefined,
         year: selectedYear ?? undefined,
         month: selectedMonth ?? undefined,
-      }).then(d => { if (d) setFacets(d) }).catch(() => {})
+      }).then(d => {
+        if (!d) return
+        setFacets({
+          statuses: d.statuses ?? [],
+          sponsors: d.sponsors ?? [],
+          tags: d.tags ?? [],
+          categories: d.categories ?? [],
+        })
+      }).catch(() => {})
     }, 250)
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
   }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])

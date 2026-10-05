@@ -1,0 +1,93 @@
+name: CI
+
+# The repo had no test/lint/build gate at all — the three existing workflows are
+# scheduled operational jobs. Publishing is a direct push to main, so until now
+# a `next build` failure was discovered by Vercel in production and a broken
+# backend import was discovered by Railway's health check.
+#
+# Both jobs run on free-tier GitHub Actions minutes (public repo) and are kept
+# deliberately cheap: no coverage upload, no matrix, no container services.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push supersedes an in-flight run on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    # The suite runs in ~3s. The one caveat is test_health_ai_no_key, which
+    # really does call the configured AI provider: on a dev box where Ollama is
+    # cold it blocks while a model loads into VRAM (observed at 71s, and 9min
+    # for the whole suite on a cold start — 2.8s once warm). A runner has no
+    # provider at all, so the connection is refused immediately. The cap is
+    # here so that if it ever hangs instead of refusing, the job fails fast
+    # rather than burning the free-tier minute budget.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run pytest
+        # JWT_SECRET is the one setting that hard-fails startup validation, and
+        # importing the app in conftest triggers it. The rest of the suite runs
+        # against the in-memory SQLite fixture, so no real services are needed.
+        env:
+          JWT_SECRET: ci-not-a-real-secret
+          APP_BASE_URL: http://localhost:8000
+          AI_PROVIDER: ollama
+        run: pytest -q
+
+  frontend:
+    name: Frontend typecheck + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        # Catches what `next build` would also catch, but reports every error at
+        # once instead of stopping at the first failing route.
+        run: npx tsc --noEmit
+
+      - name: Lint
+        # Blocking. The repo sat at 101 eslint errors because the config could
+        # not load, so nothing ran; those are now fixed and the rule set is
+        # clean, so a new error should fail the build rather than accumulate.
+        # Warnings (unused vars, exhaustive-deps, <img> hints) are not gated.
+        run: npm run lint
+
+      - name: Build
+        # No backend is reachable here. That is fine: the only build-time data
+        # reads are generateStaticParams for /blog and /[city]/insights/[year],
+        # both of which read committed JSON from public/data. Bill pages are
+        # rendered on demand.
+        env:
+          NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+        run: npm run build

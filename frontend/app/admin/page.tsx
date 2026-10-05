@@ -1,12 +1,69 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import type { CompletenessRow, PipelineStatsResponse } from '@/lib/api-types'
+import type { Bill } from '@/lib/types'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 import { getAdminMode } from '@/lib/admin-mode'
 import { usePipeline } from '@/app/contexts/pipeline-context'
+import { errorMessage } from '@/lib/utils'
+
+// ── Admin payload shapes ──────────────────────────────────────────────────────
+// These mirror /api/admin/* and /api/metrics. Only the fields this dashboard
+// actually reads are declared; everything is optional because the routes build
+// their responses conditionally (several counts are scoped by the date filter).
+
+interface AdminUserRow {
+  id: string
+  email?: string
+  display_name?: string
+  subscription_tier?: string
+  is_admin_via_allowlist?: boolean
+  created_at?: string
+  last_login?: string | null
+  tracked_bills_count?: number
+  bill_votes_count?: number
+  status?: string
+  reason?: string
+  value?: string | number
+}
+
+interface AdminStats {
+  users?: { total?: number; active_30d?: number; signups_7d?: number; signups_30d?: number; by_tier?: Record<string, number> }
+  engagement?: { tracked_bills?: number; bill_votes?: number }
+  operations?: { bluesky_posts?: number; donations?: number }
+}
+
+interface AdminMetrics {
+  bills: {
+    total: number
+    analyzed: number
+    scoped?: boolean
+    analysis_rate_pct?: number
+    with_news?: number
+    with_plain_titles?: number
+    with_vote_records?: number
+  }
+  perspectives: { total: number }
+  users: { total: number; digest_opted_in?: number }
+  tracking: { total_saves: number }
+}
+
+interface CandidateRow {
+  id: string
+  name: string
+  district?: string
+  party?: string | null
+  office_sought?: string | null
+  election_year?: number
+  is_incumbent?: boolean
+  bio?: string | null
+  website_url?: string | null
+  known_positions?: string | null
+}
 
 // ── SSE streaming hook ────────────────────────────────────────────────────────
 type StreamEvent = {
@@ -57,8 +114,8 @@ function useStreamProgress() {
           }
         }
       }
-    } catch (e: any) {
-      if (e?.name !== 'AbortError') {
+    } catch (e: unknown) {
+      if (!(e instanceof Error) || e.name !== 'AbortError') {
         setProgress({ current: 0, total: 0, message: String(e), done: true })
       }
     } finally {
@@ -127,24 +184,6 @@ function ProgressBar({ progress, running, onStop }: { progress: StreamEvent | nu
 
 interface Result { ok: boolean; message: string }
 
-interface Bill {
-  id: string
-  bill_number: string
-  title: string
-  plain_title?: string
-  level: string
-  status: string
-  analyzed_at?: string
-  introduced_date?: string
-  full_text?: string
-  sponsor?: string
-  headline?: string
-  committee?: string
-  metadata_fetched_at?: string
-  news_fetched_at?: string
-  perspective_count?: number
-}
-
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -211,8 +250,8 @@ export default function AdminPage() {
       const count = data?.bills_ingested ?? data?.total ?? 0
       setLocalResult({ ok: true, message: `Ingested ${count} items from "${city}".` })
       setReloadKey(k => k + 1)
-    } catch (err: any) {
-      setLocalResult({ ok: false, message: err.message })
+    } catch (err: unknown) {
+      setLocalResult({ ok: false, message: errorMessage(err) })
     } finally {
       setLocalRunning(false)
     }
@@ -334,8 +373,8 @@ export default function AdminPage() {
                 try {
                   const data = await api.scrapeCouncilmembers()
                   setScrapeResult({ ok: true, message: `Scraped ${data?.scraped ?? 0} council members.` })
-                } catch (err: any) {
-                  setScrapeResult({ ok: false, message: err.message })
+                } catch (err: unknown) {
+                  setScrapeResult({ ok: false, message: errorMessage(err) })
                 } finally { setScrapeRunning(false) }
               }}>
                 {scrapeRunning ? 'Scraping…' : 'Scrape Council Members'}
@@ -348,8 +387,8 @@ export default function AdminPage() {
                     ? `All members already have emails (checked ${data?.checked ?? 0}).`
                     : `Updated ${data?.updated} email${data?.updated !== 1 ? 's' : ''} · still missing: ${(data?.still_missing ?? []).join(', ') || 'none'}.`
                   setScrapeResult({ ok: true, message: msg })
-                } catch (err: any) {
-                  setScrapeResult({ ok: false, message: err.message })
+                } catch (err: unknown) {
+                  setScrapeResult({ ok: false, message: errorMessage(err) })
                 } finally { setScrapeRunning(false) }
               }}>
                 {scrapeRunning ? 'Running…' : 'Backfill Missing Emails'}
@@ -383,8 +422,8 @@ export default function AdminPage() {
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 function UsersSection() {
-  const [stats, setStats] = useState<any>(null)
-  const [users, setUsers] = useState<any[]>([])
+  const [stats, setStats] = useState<AdminStats | null>(null)
+  const [users, setUsers] = useState<AdminUserRow[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -419,10 +458,10 @@ function UsersSection() {
       {/* Stat strip */}
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <StatCard label="Total users" value={stats.users.total} />
-          <StatCard label="Active (30d)" value={stats.users.active_30d} />
-          <StatCard label="New (7d)" value={stats.users.signups_7d} />
-          <StatCard label="New (30d)" value={stats.users.signups_30d} />
+          <StatCard label="Total users" value={stats.users?.total ?? 0} />
+          <StatCard label="Active (30d)" value={stats.users?.active_30d ?? 0} />
+          <StatCard label="New (7d)" value={stats.users?.signups_7d ?? 0} />
+          <StatCard label="New (30d)" value={stats.users?.signups_30d ?? 0} />
           <StatCard label="Tracked bills" value={eng.tracked_bills ?? 0} />
           <StatCard label="Bill votes" value={eng.bill_votes ?? 0} />
           <StatCard label="Bluesky posts" value={ops.bluesky_posts ?? 0} />
@@ -494,7 +533,7 @@ function StatCard({ label, value }: { label: string; value: number }) {
 
 // ── System Status ─────────────────────────────────────────────────────────────
 function SystemStatusSection() {
-  const [metrics, setMetrics] = useState<any>(null)
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
   const [health, setHealth] = useState<{ db: string; ai_provider: string; ai_model: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -607,7 +646,6 @@ function DataHealthSection() {
 }
 
 // ── Data Health Table ─────────────────────────────────────────────────────────
-type CompletenessRow = { year: number; total: number; full_text: number; sponsor: number; analyzed: number; headline: number; committee: number; perspectives: number }
 
 function DataHealthTable({ rows }: { rows: CompletenessRow[] }) {
   const COLS: { key: keyof CompletenessRow; label: string }[] = [
@@ -706,8 +744,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
   const [perspectivesFilter,  setPerspectivesFilter]  = useState<'all' | 'missing' | 'complete'>('all')
 
   // Pipeline stats (tallies)
-  type CompletenessRow = { year: number; total: number; full_text: number; sponsor: number; analyzed: number; headline: number; committee: number; perspectives: number }
-  const [pipelineStats, setPipelineStats] = useState<{ total: number; unanalyzed: number; missing_perspectives: number; completeness?: CompletenessRow[] } | null>(null)
+    const [pipelineStats, setPipelineStats] = useState<PipelineStatsResponse | null>(null)
 
   // Per-bill list
   const [bills,        setBills]        = useState<Bill[]>([])
@@ -771,7 +808,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
       }
       setBills(results)
       setBillsTotal(data?.total ?? 0)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('loadBills failed:', err)
     } finally {
       setBillsLoading(false)
@@ -845,7 +882,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
   const runBadgeAction = async (bill: Bill, field: string) => {
     const key = `${bill.id}:${field}`
     setBadgeLoadingId(key)
-    setAnalyzeResults(prev => ({ ...prev, [bill.id]: undefined as any }))
+    setAnalyzeResults(prev => { const next = { ...prev }; delete next[bill.id]; return next })
     try {
       let msg = ''
       if (field === 'text') {
@@ -873,8 +910,8 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
       setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: true, message: msg } }))
       // Reload the bill list to reflect updated fields
       loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page)
-    } catch (err: any) {
-      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: err.message } }))
+    } catch (err: unknown) {
+      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: errorMessage(err) } }))
     } finally {
       setBadgeLoadingId(null)
     }
@@ -882,7 +919,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
 
   const analyzeBill = async (bill: Bill) => {
     setAnalyzingId(bill.id)
-    setAnalyzeResults(prev => ({ ...prev, [bill.id]: undefined as any }))
+    setAnalyzeResults(prev => { const next = { ...prev }; delete next[bill.id]; return next })
     try {
       const data = await api.analyzeLegislation(bill.id)
       setAnalyzeResults(prev => ({
@@ -890,8 +927,8 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
         [bill.id]: { ok: true, message: `Done — impact: ${data?.impact_level ?? '?'} (${data?.impact_score ?? '?'}/10), type: ${data?.bill_type ?? '?'}.` },
       }))
       loadBills(filterYear, filterMonth, filterDateFrom, filterDateTo, page)
-    } catch (err: any) {
-      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: err.message } }))
+    } catch (err: unknown) {
+      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: errorMessage(err) } }))
     } finally {
       setAnalyzingId(null)
     }
@@ -899,12 +936,12 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
 
   const fetchNews = async (bill: Bill) => {
     setFetchingNewsId(bill.id)
-    setAnalyzeResults(prev => ({ ...prev, [bill.id]: undefined as any }))
+    setAnalyzeResults(prev => { const next = { ...prev }; delete next[bill.id]; return next })
     try {
       const data = await api.fetchBillNews(bill.id)
       setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: true, message: `Found ${data?.articles_found ?? 0} news articles.` } }))
-    } catch (err: any) {
-      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: err.message } }))
+    } catch (err: unknown) {
+      setAnalyzeResults(prev => ({ ...prev, [bill.id]: { ok: false, message: errorMessage(err) } }))
     } finally {
       setFetchingNewsId(null)
     }
@@ -945,12 +982,12 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
           </p>
           {pipelineStats && (
             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5">
-              <span className={`text-xs font-medium ${pipelineStats.unanalyzed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
-                {pipelineStats.unanalyzed.toLocaleString()} unanalyzed
+              <span className={`text-xs font-medium ${(pipelineStats.unanalyzed ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                {(pipelineStats.unanalyzed ?? 0).toLocaleString()} unanalyzed
               </span>
               {!isArchive && (
-                <span className={`text-xs font-medium ${pipelineStats.missing_perspectives > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
-                  {pipelineStats.missing_perspectives.toLocaleString()} missing perspectives
+                <span className={`text-xs font-medium ${(pipelineStats.missing_perspectives ?? 0) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400'}`}>
+                  {(pipelineStats.missing_perspectives ?? 0).toLocaleString()} missing perspectives
                 </span>
               )}
             </div>
@@ -1200,7 +1237,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
               <div className="w-4 h-4 rounded border border-input bg-muted shrink-0" />
               <div>
                 <p className="text-sm font-medium">Sync Vote Records</p>
-                <p className="text-xs text-muted-foreground">Archive only — active bills haven't had a council floor vote yet</p>
+                <p className="text-xs text-muted-foreground">Archive only — active bills haven&rsquo;t had a council floor vote yet</p>
               </div>
             </div>
           )}
@@ -1370,7 +1407,7 @@ function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload,
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function MetricsSection({ filter }: { filter?: { year: string; month: string; date_from: string; date_to: string } }) {
-  const [metrics, setMetrics] = useState<any>(null)
+  const [metrics, setMetrics] = useState<AdminMetrics | null>(null)
   const [loading, setLoading] = useState(false)
   const load = async () => {
     setLoading(true)
@@ -1408,9 +1445,9 @@ function MetricsSection({ filter }: { filter?: { year: string; month: string; da
           {statTile('Perspectives', metrics.perspectives.total)}
           {statTile('Users', metrics.users.total)}
           {statTile('Saved Bills', metrics.tracking.total_saves)}
-          {statTile('Digest Opt-ins', metrics.users.digest_opted_in)}
-          {statTile('With News', metrics.bills.with_news)}
-          {statTile('Plain Titles', metrics.bills.with_plain_titles)}
+          {statTile('Digest Opt-ins', metrics.users.digest_opted_in ?? 0)}
+          {statTile('With News', metrics.bills.with_news ?? 0)}
+          {statTile('Plain Titles', metrics.bills.with_plain_titles ?? 0)}
           {statTile('Vote Records', metrics.bills.with_vote_records ?? 0, 'bills backfilled')}
         </div>
       ) : (
@@ -1437,8 +1474,8 @@ function DigestSection() {
         try {
           const data = await api.sendDigest(7)
           setResult({ ok: true, message: `Sent to ${data?.sent ?? 0} users · ${data?.bills_in_digest ?? 0} bills · ${data?.failed ?? 0} failed.` })
-        } catch (err: any) {
-          setResult({ ok: false, message: err.message })
+        } catch (err: unknown) {
+          setResult({ ok: false, message: errorMessage(err) })
         } finally { setRunning(false) }
       }}>
         {running ? 'Sending…' : 'Send Digest Now'}
@@ -1457,7 +1494,7 @@ function GenerateLedesSection() {
     setResult(null)
     try {
       const data = await api.generateLedes(force)
-      setResult(data)
+      setResult({ generated: data?.generated ?? 0, total: data?.total ?? 0 })
     } catch {
       setResult({ generated: 0, total: 0 })
     } finally {
@@ -1470,7 +1507,7 @@ function GenerateLedesSection() {
       <div>
         <h3 className="font-semibold">Generate News Ledes</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Generate punchy 1-2 sentence news ledes for analyzed bills. Replaces the dry "This bill allows…" summary on cards.
+          Generate punchy 1-2 sentence news ledes for analyzed bills. Replaces the dry &ldquo;This bill allows…&rdquo; summary on cards.
         </p>
       </div>
       <label className="flex items-center gap-2 text-sm cursor-pointer text-muted-foreground">
@@ -1499,8 +1536,8 @@ function GenerateHeadlinesSection() {
     setResult(null)
     try {
       const data = await api.generateHeadlines(force)
-      setResult(data)
-    } catch (e: any) {
+      setResult({ generated: data?.generated ?? 0, total: data?.total ?? 0 })
+    } catch (e: unknown) {
       setResult({ generated: 0, total: 0 })
     } finally {
       setRunning(false)
@@ -1539,7 +1576,7 @@ function BackfillSponsorsSection() {
         <h3 className="font-semibold">Backfill Sponsors</h3>
         <p className="text-sm text-muted-foreground mt-0.5">
           Backfill sponsor names for the ~8,500 bulk-imported bills that have no sponsor set.
-          Scrapes the Legistar list page once to build a matter→GUID map, then fetches each bill's
+          Scrapes the Legistar list page once to build a matter→GUID map, then fetches each bill&rsquo;s
           detail page. Takes ~30–60 min for a full run.
         </p>
       </div>
@@ -1606,8 +1643,8 @@ function ScrapeCandidatesButton({ onDone }: { onDone: () => void }) {
             const src = data?.source_year && data.source_year !== year ? ` (from ${data.source_year} — ${year} page not found yet)` : ''
             setResult({ ok: true, message: `Added ${data?.added ?? 0}, skipped ${data?.skipped ?? 0}${src}` })
             onDone()
-          } catch (e: any) {
-            setResult({ ok: false, message: e.message || 'Scrape failed' })
+          } catch (e: unknown) {
+            setResult({ ok: false, message: errorMessage(e, 'Scrape failed') })
           } finally { setRunning(false) }
         }}
       >
@@ -1618,7 +1655,7 @@ function ScrapeCandidatesButton({ onDone }: { onDone: () => void }) {
 }
 
 function CandidateManagementSection() {
-  const [candidates, setCandidates] = useState<any[]>([])
+  const [candidates, setCandidates] = useState<CandidateRow[]>([])
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -1643,13 +1680,13 @@ function CandidateManagementSection() {
         await api.createCandidate({ ...form, election_year: Number(form.election_year) })
       }
       setForm(emptyForm); setShowForm(false); setEditingId(null); load()
-    } catch (e: any) {
-      alert(e.message)
+    } catch (e: unknown) {
+      alert(errorMessage(e))
     } finally { setSaving(false) }
   }
 
-  const handleEdit = (c: any) => {
-    setForm({ name: c.name, district: c.district, party: c.party ?? '', office_sought: c.office_sought ?? '', election_year: c.election_year, is_incumbent: !!c.is_incumbent, bio: c.bio ?? '', website_url: c.website_url ?? '', known_positions: c.known_positions ?? '' })
+  const handleEdit = (c: CandidateRow) => {
+    setForm({ name: c.name, district: c.district ?? '', party: c.party ?? '', office_sought: c.office_sought ?? '', election_year: c.election_year ?? new Date().getFullYear(), is_incumbent: !!c.is_incumbent, bio: c.bio ?? '', website_url: c.website_url ?? '', known_positions: c.known_positions ?? '' })
     setEditingId(c.id); setShowForm(true)
   }
 
@@ -1689,7 +1726,7 @@ function CandidateManagementSection() {
                 <label className="text-xs font-medium text-muted-foreground">{label}</label>
                 <input
                   type={type}
-                  value={(form as any)[field]}
+                  value={form[field as keyof typeof form] as string | number}
                   onChange={(e) => setForm((f) => ({ ...f, [field]: type === 'number' ? Number(e.target.value) : e.target.value }))}
                   className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40"
                 />
@@ -1701,7 +1738,7 @@ function CandidateManagementSection() {
             <textarea rows={2} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none" />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Known positions (AI uses this for predictions — e.g. "Supports affordable housing; opposes stadium subsidies")</label>
+            <label className="text-xs font-medium text-muted-foreground">Known positions (AI uses this for predictions — e.g. &ldquo;Supports affordable housing; opposes stadium subsidies&rdquo;)</label>
             <textarea rows={2} value={form.known_positions} onChange={(e) => setForm((f) => ({ ...f, known_positions: e.target.value }))} className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 resize-none" />
           </div>
           <label className="flex items-center gap-2 text-sm">
@@ -1751,9 +1788,9 @@ function SyncStatusesSection() {
     setRunning(true); setResult(null)
     try {
       const data = await api.syncBillStatuses()
-      setResult(`Checked ${data.checked} bills, updated ${data.updated}`)
-    } catch (e: any) {
-      setResult(`Error: ${e.message}`)
+      setResult(`Checked ${data?.checked ?? 0} bills, updated ${data?.updated ?? 0}`)
+    } catch (e: unknown) {
+      setResult(`Error: ${errorMessage(e)}`)
     } finally {
       setRunning(false)
     }

@@ -9,9 +9,11 @@
  * the API was unreachable, or returned a 500 — and that must NOT become a 404,
  * or a transient backend blip would tell crawlers a real bill had been removed.
  */
+import type { Bill } from '@/lib/types'
+
 export const MISSING = Symbol.for('bill.missing')
 
-export async function getBill(id: string): Promise<any | typeof MISSING | null> {
+export async function getBill(id: string): Promise<Bill | typeof MISSING | null> {
   try {
     const res = await fetch(
       `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`,

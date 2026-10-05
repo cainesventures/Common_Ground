@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import type { Bill } from '@/lib/types'
 import {
   Building2, DollarSign, Train, Shield, Scale, Leaf, Heart,
   BookOpen, Briefcase, Landmark, Home, Globe, FileText,
@@ -13,21 +14,12 @@ const ICONS: Record<string, LucideIcon> = {
   BookOpen, Briefcase, Landmark, Home, Globe, FileText,
 }
 
-export interface BillCardBill {
-  id: string
-  bill_number: string
-  title: string
-  plain_title?: string
-  headline?: string
-  lede?: string
-  status: string
-  impact_level?: string
-  summary?: string
-  tags?: string
-  introduced_date?: string
-  final_date?: string
-  next_hearing_date?: string
-}
+/**
+ * BillCard renders a bill row from any list endpoint, so it takes the shared
+ * Bill type directly. It used to declare a narrower local shape, which meant
+ * `Bill[]` from the API could not be handed to it without a cast.
+ */
+export type BillCardBill = Bill
 
 interface BillCardProps {
   bill: BillCardBill
@@ -57,7 +49,7 @@ export function BillCard({ bill, query = '', showDate = false, tab, citySlug = '
   const statusClass = STATUS_COLORS[bill.status] ?? STATUS_COLORS_FALLBACK
 
   let tags: string[] = []
-  try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
+  try { tags = Array.isArray(bill.tags) ? bill.tags : bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
 
   const category = getBillCategory(tags)
   const Icon = ICONS[category.icon] ?? FileText

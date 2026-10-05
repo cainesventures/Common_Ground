@@ -1,8 +1,69 @@
 import { getToken, clearToken } from './auth'
+import type {
+  ActionResult,
+  AdminStatsResponse,
+  AdminUsersResponse,
+  AgreementMatrixResponse,
+  BillDetailResponse,
+  BillListResponse,
+  CandidatesResponse,
+  CheckoutResponse,
+  CommitteeActivityResponse,
+  ContestedBillsResponse,
+  CouncilmemberBillsResponse,
+  CouncilmemberProfile,
+  CouncilmembersResponse,
+  CountResponse,
+  DonationConfigResponse,
+  DonationSessionResponse,
+  FacetsResponse,
+  HearingsResponse,
+  ImpactByYearResponse,
+  InsightsSummaryResponse,
+  LegislativeProfileResponse,
+  MeResponse,
+  MetricsResponse,
+  MonthCountsResponse,
+  MyVotesResponse,
+  OfficeDescriptionResponse,
+  PerspectiveResponse,
+  PerspectivesResponse,
+  PipelineStatsResponse,
+  PredictionsResponse,
+  RollCallResponse,
+  SponsorLeaderboardResponse,
+  SpotlightResponse,
+  StatusByYearResponse,
+  SystemHealthResponse,
+  TagByYearResponse,
+  TagCountsResponse,
+  ToggleTrackResponse,
+  TrackedBillIdsResponse,
+  TrackedBillsResponse,
+  BillVoteCountsResponse,
+  MemberVoteCountsResponse,
+  VoteHistoryResponse,
+  VotingRecordsResponse,
+  YearCountsResponse,
+} from './api-types'
 
 const API_URL = ''  // Use relative URLs — Next.js rewrites proxy to backend
 
-async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
+/**
+ * The single boundary where JSON from the backend enters the app.
+ *
+ * `T` is the expected body, declared per helper below against the response
+ * interfaces in `./api-types`. There is no runtime validation here — this is a
+ * compile-time contract that says what the route is documented to return, and
+ * the types were read off the `return {...}` statements in `app/api/*_routes.py`
+ * rather than inferred from call sites.
+ *
+ * **Resolves to `T | null`.** A 401 clears the token, bounces to `/` in the
+ * browser, and returns `null` — so every caller can get a null regardless of
+ * `T`. That was true before too, just invisible behind `any`, which is why the
+ * call sites are full of `?.` and `?? fallback`: those guards are load-bearing.
+ */
+async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T | null> {
   const token = getToken()
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -21,20 +82,22 @@ async function apiFetch(path: string, options: RequestInit = {}): Promise<any> {
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    const err: { detail?: string } = await res
+      .json()
+      .catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || `HTTP ${res.status}`)
   }
 
-  return res.json()
+  return res.json() as Promise<T>
 }
 
 export const api = {
   // ── Legislation ───────────────────────────────────────────────────────────
   getLegislation: (id: string) =>
-    apiFetch(`/api/legislation/${id}`),
+    apiFetch<BillDetailResponse>(`/api/legislation/${id}`),
 
   listLegislation: (limit = 20, offset = 0, level = '') =>
-    apiFetch(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),
+    apiFetch<BillListResponse>(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),
 
   getFacets: (params: { q?: string; level?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
     const p = new URLSearchParams()
@@ -47,7 +110,7 @@ export const api = {
     if (params.sponsor)  p.set('sponsor', params.sponsor)
     if (params.year)     p.set('year', String(params.year))
     if (params.month)    p.set('month', String(params.month))
-    return apiFetch(`/api/legislation/facets?${p}`)
+    return apiFetch<FacetsResponse>(`/api/legislation/facets?${p}`)
   },
 
   getTagCounts: (params?: { q?: string; level?: string; analyzed?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
@@ -61,7 +124,7 @@ export const api = {
     if (params?.year)     p.set('year', String(params.year))
     if (params?.month)    p.set('month', String(params.month))
     const qs = p.toString()
-    return apiFetch(`/api/legislation/tag-counts${qs ? `?${qs}` : ''}`)
+    return apiFetch<TagCountsResponse>(`/api/legislation/tag-counts${qs ? `?${qs}` : ''}`)
   },
 
   getYearCounts: (params?: { q?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string }) => {
@@ -73,7 +136,7 @@ export const api = {
     if (params?.status)   p.set('status', params.status)
     if (params?.sponsor)  p.set('sponsor', params.sponsor)
     const qs = p.toString()
-    return apiFetch(`/api/legislation/year-counts${qs ? `?${qs}` : ''}`)
+    return apiFetch<YearCountsResponse>(`/api/legislation/year-counts${qs ? `?${qs}` : ''}`)
   },
 
   getInsightsStatusByYear: (params?: { from_year?: number; to_year?: number; tag?: string }) => {
@@ -82,7 +145,7 @@ export const api = {
     if (params?.to_year)   p.set('to_year',   String(params.to_year))
     if (params?.tag)       p.set('tag',        params.tag)
     const qs = p.toString()
-    return apiFetch(`/api/insights/status-by-year${qs ? `?${qs}` : ''}`)
+    return apiFetch<StatusByYearResponse>(`/api/insights/status-by-year${qs ? `?${qs}` : ''}`)
   },
 
   getInsightsTagByYear: (params?: { from_year?: number; to_year?: number; top_n?: number }) => {
@@ -91,17 +154,17 @@ export const api = {
     if (params?.to_year)   p.set('to_year',   String(params.to_year))
     if (params?.top_n)     p.set('top_n',     String(params.top_n))
     const qs = p.toString()
-    return apiFetch(`/api/insights/tag-by-year${qs ? `?${qs}` : ''}`)
+    return apiFetch<TagByYearResponse>(`/api/insights/tag-by-year${qs ? `?${qs}` : ''}`)
   },
 
-  getInsightsSummary: () => apiFetch('/api/insights/summary'),
+  getInsightsSummary: () => apiFetch<InsightsSummaryResponse>('/api/insights/summary'),
 
   getInsightsImpactByYear: (params?: { from_year?: number; to_year?: number }) => {
     const p = new URLSearchParams()
     if (params?.from_year) p.set('from_year', String(params.from_year))
     if (params?.to_year)   p.set('to_year',   String(params.to_year))
     const qs = p.toString()
-    return apiFetch(`/api/insights/impact-by-year${qs ? `?${qs}` : ''}`)
+    return apiFetch<ImpactByYearResponse>(`/api/insights/impact-by-year${qs ? `?${qs}` : ''}`)
   },
 
   getInsightsSponsorLeaderboard: (params?: { year?: number; limit?: number }) => {
@@ -109,7 +172,7 @@ export const api = {
     if (params?.year)  p.set('year',  String(params.year))
     if (params?.limit) p.set('limit', String(params.limit))
     const qs = p.toString()
-    return apiFetch(`/api/insights/sponsor-leaderboard${qs ? `?${qs}` : ''}`)
+    return apiFetch<SponsorLeaderboardResponse>(`/api/insights/sponsor-leaderboard${qs ? `?${qs}` : ''}`)
   },
 
   getInsightsContestedBills: (params?: { year?: number; sort?: string; limit?: number }) => {
@@ -118,17 +181,17 @@ export const api = {
     if (params?.sort)  p.set('sort',  params.sort)
     if (params?.limit) p.set('limit', String(params.limit))
     const qs = p.toString()
-    return apiFetch(`/api/insights/contested-bills${qs ? `?${qs}` : ''}`)
+    return apiFetch<ContestedBillsResponse>(`/api/insights/contested-bills${qs ? `?${qs}` : ''}`)
   },
 
-  getInsightsVotingRecords: () => apiFetch('/api/insights/voting-records'),
+  getInsightsVotingRecords: () => apiFetch<VotingRecordsResponse>('/api/insights/voting-records'),
 
   getInsightsAgreementMatrix: (params?: { current_only?: boolean; min_shared?: number }) => {
     const p = new URLSearchParams()
     if (params?.current_only !== undefined) p.set('current_only', String(params.current_only))
     if (params?.min_shared) p.set('min_shared', String(params.min_shared))
     const qs = p.toString()
-    return apiFetch(`/api/insights/agreement-matrix${qs ? `?${qs}` : ''}`)
+    return apiFetch<AgreementMatrixResponse>(`/api/insights/agreement-matrix${qs ? `?${qs}` : ''}`)
   },
 
   getInsightsCommitteeActivity: (params?: { year?: number; top_n?: number }) => {
@@ -136,7 +199,7 @@ export const api = {
     if (params?.year)  p.set('year',  String(params.year))
     if (params?.top_n) p.set('top_n', String(params.top_n))
     const qs = p.toString()
-    return apiFetch(`/api/insights/committee-activity${qs ? `?${qs}` : ''}`)
+    return apiFetch<CommitteeActivityResponse>(`/api/insights/committee-activity${qs ? `?${qs}` : ''}`)
   },
 
   countLegislation: (params: { year?: number; month?: number; date_from?: string; date_to?: string; analyzed?: string }) => {
@@ -146,7 +209,7 @@ export const api = {
     if (params.date_from) p.set('date_from', params.date_from)
     if (params.date_to)   p.set('date_to',   params.date_to)
     if (params.analyzed)  p.set('analyzed',  params.analyzed)
-    return apiFetch(`/api/legislation/count?${p}`)
+    return apiFetch<CountResponse>(`/api/legislation/count?${p}`)
   },
 
   getMonthCounts: (year: number, params?: { q?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string }) => {
@@ -157,17 +220,17 @@ export const api = {
     if (params?.impact)   p.set('impact', params.impact)
     if (params?.status)   p.set('status', params.status)
     if (params?.sponsor)  p.set('sponsor', params.sponsor)
-    return apiFetch(`/api/legislation/month-counts?${p}`)
+    return apiFetch<MonthCountsResponse>(`/api/legislation/month-counts?${p}`)
   },
 
   searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false, billType = '', committee = '') => {
     const tagStr = Array.isArray(tag) ? tag.join(',') : tag
     const statusStr = Array.isArray(status) ? status.join(',') : status
-    return apiFetch(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}${billType ? `&bill_type=${encodeURIComponent(billType)}` : ''}${committee ? `&committee=${encodeURIComponent(committee)}` : ''}`)
+    return apiFetch<BillListResponse>(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}${billType ? `&bill_type=${encodeURIComponent(billType)}` : ''}${committee ? `&committee=${encodeURIComponent(committee)}` : ''}`)
   },
 
   getSpotlight: (limit = 8) =>
-    apiFetch(`/api/legislation/spotlight?limit=${limit}`),
+    apiFetch<SpotlightResponse>(`/api/legislation/spotlight?limit=${limit}`),
 
   getPipelineStats: (params: { status?: string; year?: string; month?: string; date_from?: string; date_to?: string }) => {
     const p = new URLSearchParams()
@@ -176,46 +239,46 @@ export const api = {
     if (params.month)     p.set('month',     params.month)
     if (params.date_from) p.set('date_from', params.date_from)
     if (params.date_to)   p.set('date_to',   params.date_to)
-    return apiFetch(`/api/legislation/pipeline-stats?${p}`)
+    return apiFetch<PipelineStatsResponse>(`/api/legislation/pipeline-stats?${p}`)
   },
 
   tagAllBills: () =>
-    apiFetch('/api/legislation/tag-all', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/tag-all', { method: 'POST' }),
 
   generatePlainTitles: () =>
-    apiFetch('/api/legislation/plain-titles', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/plain-titles', { method: 'POST' }),
 
   syncBillStatuses: () =>
-    apiFetch('/api/legislation/sync-statuses', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/sync-statuses', { method: 'POST' }),
 
   // ── Voting ────────────────────────────────────────────────────────────────
   castVote: (legislationId: string, vote: string, voterToken: string) =>
-    apiFetch(`/api/legislation/${legislationId}/vote`, {
+    apiFetch<BillVoteCountsResponse>(`/api/legislation/${legislationId}/vote`, {
       method: 'POST',
       body: JSON.stringify({ vote, voter_token: voterToken }),
     }),
 
   getVotes: (legislationId: string, voterToken?: string) =>
-    apiFetch(`/api/legislation/${legislationId}/votes${voterToken ? `?voter_token=${voterToken}` : ''}`),
+    apiFetch<BillVoteCountsResponse>(`/api/legislation/${legislationId}/votes${voterToken ? `?voter_token=${voterToken}` : ''}`),
 
   // ── Auth ──────────────────────────────────────────────────────────────────
-  getMe: () => apiFetch('/api/auth/me'),
+  getMe: () => apiFetch<MeResponse>('/api/auth/me'),
 
   googleLoginUrl: () => `${API_URL}/api/auth/google`,
 
-  logout: () => apiFetch('/api/auth/logout', { method: 'POST' }),
+  logout: () => apiFetch<ActionResult>('/api/auth/logout', { method: 'POST' }),
 
   // ── User ──────────────────────────────────────────────────────────────────
   getMyVotes: (limit = 20, offset = 0) =>
-    apiFetch(`/api/users/me/votes?limit=${limit}&offset=${offset}`),
+    apiFetch<MyVotesResponse>(`/api/users/me/votes?limit=${limit}&offset=${offset}`),
 
-  getTrackedBills: () => apiFetch('/api/users/me/tracked-bills'),
-  getTrackedBillIds: () => apiFetch('/api/users/me/tracked-bill-ids'),
-  toggleTrackBill: (id: string) => apiFetch(`/api/users/me/track/${id}`, { method: 'POST' }),
+  getTrackedBills: () => apiFetch<TrackedBillsResponse>('/api/users/me/tracked-bills'),
+  getTrackedBillIds: () => apiFetch<TrackedBillIdsResponse>('/api/users/me/tracked-bill-ids'),
+  toggleTrackBill: (id: string) => apiFetch<ToggleTrackResponse>(`/api/users/me/track/${id}`, { method: 'POST' }),
   updatePreferences: (prefs: { digest_enabled: boolean; digest_frequency?: string; digest_min_impact?: string }) =>
-    apiFetch('/api/users/me/preferences', { method: 'PATCH', body: JSON.stringify(prefs) }),
+    apiFetch<ActionResult>('/api/users/me/preferences', { method: 'PATCH', body: JSON.stringify(prefs) }),
   sendDigest: (lookbackDays = 7) =>
-    apiFetch(`/api/users/send-digest?lookback_days=${lookbackDays}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/users/send-digest?lookback_days=${lookbackDays}`, { method: 'POST' }),
 
   // ── Export ───────────────────────────────────────────────────────────────
   exportLegislation: async (params: {
@@ -254,31 +317,31 @@ export const api = {
   },
 
   backfillCouncilmemberEmails: () =>
-    apiFetch('/api/councilmembers/backfill-emails', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/councilmembers/backfill-emails', { method: 'POST' }),
 
   // ── Councilmember votes ───────────────────────────────────────────────────
   getCouncilmemberVotes: (memberId: string, voterToken: string) =>
-    apiFetch(`/api/councilmembers/${memberId}/votes?voter_token=${encodeURIComponent(voterToken)}`),
+    apiFetch<MemberVoteCountsResponse>(`/api/councilmembers/${memberId}/votes?voter_token=${encodeURIComponent(voterToken)}`),
   castCouncilmemberVote: (memberId: string, vote: string, voterToken: string) =>
-    apiFetch(`/api/councilmembers/${memberId}/vote`, {
+    apiFetch<MemberVoteCountsResponse>(`/api/councilmembers/${memberId}/vote`, {
       method: 'POST',
       body: JSON.stringify({ vote, voter_token: voterToken }),
     }),
   // ── Official roll call votes ──────────────────────────────────────────────
   getRollCall: (legislationId: string) =>
-    apiFetch(`/api/legislation/${legislationId}/roll-call`),
+    apiFetch<RollCallResponse>(`/api/legislation/${legislationId}/roll-call`),
   syncVotes: (legislationId: string) =>
-    apiFetch(`/api/legislation/${legislationId}/sync-votes`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${legislationId}/sync-votes`, { method: 'POST' }),
   backfillVoteRecords: (year?: number, month?: number) => {
     const p = new URLSearchParams()
     if (year)  p.set('year',  String(year))
     if (month) p.set('month', String(month))
     const qs = p.toString()
-    return apiFetch(`/api/legislation/backfill-vote-records${qs ? `?${qs}` : ''}`, { method: 'POST' })
+    return apiFetch<ActionResult>(`/api/legislation/backfill-vote-records${qs ? `?${qs}` : ''}`, { method: 'POST' })
   },
 
   // ── Metrics ───────────────────────────────────────────────────────────────
-  getSystemHealth: () => apiFetch('/api/metrics/health'),
+  getSystemHealth: () => apiFetch<SystemHealthResponse>('/api/metrics/health'),
 
   getMetrics: (params?: { year?: string; month?: string; date_from?: string; date_to?: string }) => {
     const p = new URLSearchParams()
@@ -287,121 +350,121 @@ export const api = {
     if (params?.date_from) p.set('date_from', params.date_from)
     if (params?.date_to)   p.set('date_to',   params.date_to)
     const qs = p.toString()
-    return apiFetch(`/api/metrics${qs ? `?${qs}` : ''}`)
+    return apiFetch<MetricsResponse>(`/api/metrics${qs ? `?${qs}` : ''}`)
   },
 
   // ── Donations ─────────────────────────────────────────────────────────────
-  getDonationConfig: () => apiFetch('/api/donations/config'),
+  getDonationConfig: () => apiFetch<DonationConfigResponse>('/api/donations/config'),
   createCheckout: (amount_usd: number) =>
-    apiFetch('/api/donations/checkout', { method: 'POST', body: JSON.stringify({ amount_usd }) }),
+    apiFetch<CheckoutResponse>('/api/donations/checkout', { method: 'POST', body: JSON.stringify({ amount_usd }) }),
   getDonationSession: (session_id: string) =>
-    apiFetch(`/api/donations/session/${session_id}`),
+    apiFetch<DonationSessionResponse>(`/api/donations/session/${session_id}`),
 
   // ── Ingestion (developer) ─────────────────────────────────────────────────
   ingestFederal: (congress = 118, limit = 20) =>
-    apiFetch(`/api/legislation/ingest/federal?congress=${congress}&limit=${limit}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/ingest/federal?congress=${congress}&limit=${limit}`, { method: 'POST' }),
 
   ingestState: (state: string, limit = 20) =>
-    apiFetch(`/api/legislation/ingest/state/${state}?limit=${limit}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/ingest/state/${state}?limit=${limit}`, { method: 'POST' }),
 
   ingestLocal: (city: string, limit = 20, bulk = false) =>
-    apiFetch(`/api/legislation/ingest/local/${city}?limit=${limit}&bulk=${bulk}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/ingest/local/${city}?limit=${limit}&bulk=${bulk}`, { method: 'POST' }),
 
   // ── Hearings ─────────────────────────────────────────────────────────────
   refreshHearings: () =>
-    apiFetch('/api/hearings/refresh', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/hearings/refresh', { method: 'POST' }),
 
   getUpcomingHearings: (days = 30) =>
-    apiFetch(`/api/hearings/upcoming?days=${days}`),
+    apiFetch<HearingsResponse>(`/api/hearings/upcoming?days=${days}`),
 
   // ── Elections ────────────────────────────────────────────────────────────
   getCandidates: (params?: { election_year?: number; district?: string }) => {
     const p = new URLSearchParams()
     if (params?.election_year) p.set('election_year', String(params.election_year))
     if (params?.district)      p.set('district', params.district)
-    return apiFetch(`/api/elections/candidates?${p}`)
+    return apiFetch<CandidatesResponse>(`/api/elections/candidates?${p}`)
   },
 
   createCandidate: (data: {
     name: string; district: string; party?: string; bio?: string;
     photo_url?: string; website_url?: string; office_sought?: string;
     election_year: number; is_incumbent?: boolean; known_positions?: string
-  }) => apiFetch('/api/elections/candidates', { method: 'POST', body: JSON.stringify(data) }),
+  }) => apiFetch<ActionResult>('/api/elections/candidates', { method: 'POST', body: JSON.stringify(data) }),
 
   updateCandidate: (id: string, data: object) =>
-    apiFetch(`/api/elections/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    apiFetch<ActionResult>(`/api/elections/candidates/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   deleteCandidate: (id: string) =>
-    apiFetch(`/api/elections/candidates/${id}`, { method: 'DELETE' }),
+    apiFetch<ActionResult>(`/api/elections/candidates/${id}`, { method: 'DELETE' }),
 
   getOfficeDescription: (office: string) =>
-    apiFetch(`/api/elections/office-description?office=${encodeURIComponent(office)}`),
+    apiFetch<OfficeDescriptionResponse>(`/api/elections/office-description?office=${encodeURIComponent(office)}`),
 
   scrapeCandidates: (election_year = 2027, overwrite = false) =>
-    apiFetch(`/api/elections/candidates/scrape?election_year=${election_year}&overwrite=${overwrite}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/elections/candidates/scrape?election_year=${election_year}&overwrite=${overwrite}`, { method: 'POST' }),
 
   getCandidatePredictions: (billId: string) =>
-    apiFetch(`/api/elections/predictions?bill_id=${encodeURIComponent(billId)}`),
+    apiFetch<PredictionsResponse>(`/api/elections/predictions?bill_id=${encodeURIComponent(billId)}`),
 
   clearCandidatePredictions: (params?: { bill_id?: string; candidate_id?: string }) => {
     const p = new URLSearchParams()
     if (params?.bill_id)      p.set('bill_id', params.bill_id)
     if (params?.candidate_id) p.set('candidate_id', params.candidate_id)
-    return apiFetch(`/api/elections/predictions?${p}`, { method: 'DELETE' })
+    return apiFetch<ActionResult>(`/api/elections/predictions?${p}`, { method: 'DELETE' })
   },
 
   // ── Councilmembers ────────────────────────────────────────────────────────
   getCouncilmembers: () =>
-    apiFetch('/api/councilmembers'),
+    apiFetch<CouncilmembersResponse>('/api/councilmembers'),
 
   getCouncilmember: (id: string, billsPage = 1, billsLimit = 20) =>
-    apiFetch(`/api/councilmembers/${id}?bills_page=${billsPage}&bills_limit=${billsLimit}`),
+    apiFetch<CouncilmemberProfile>(`/api/councilmembers/${id}?bills_page=${billsPage}&bills_limit=${billsLimit}`),
 
   getCouncilmemberProfile: (id: string) =>
-    apiFetch(`/api/councilmembers/${id}/legislative-profile`),
+    apiFetch<LegislativeProfileResponse>(`/api/councilmembers/${id}/legislative-profile`),
 
   getCouncilmemberBillsByOutcome: (id: string, outcome: string, page = 1, limit = 10) =>
-    apiFetch(`/api/councilmembers/${id}/bills?outcome=${outcome}&page=${page}&limit=${limit}`),
+    apiFetch<CouncilmemberBillsResponse>(`/api/councilmembers/${id}/bills?outcome=${outcome}&page=${page}&limit=${limit}`),
 
   scrapeCouncilmembers: () =>
-    apiFetch('/api/councilmembers/scrape', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/councilmembers/scrape', { method: 'POST' }),
 
   // ── Analysis ──────────────────────────────────────────────────────────────
   fetchBillDetails: (id: string) =>
-    apiFetch(`/api/legislation/${id}/fetch-details`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/fetch-details`, { method: 'POST' }),
 
   analyzeLegislation: (id: string) =>
-    apiFetch(`/api/legislation/${id}/analyze`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/analyze`, { method: 'POST' }),
 
   generateBillHeadline: (id: string) =>
-    apiFetch(`/api/legislation/${id}/generate-headline`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/generate-headline`, { method: 'POST' }),
 
   fetchBillMetadata: (id: string) =>
-    apiFetch(`/api/legislation/${id}/fetch-metadata`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/fetch-metadata`, { method: 'POST' }),
 
   generateBillPerspectives: (id: string) =>
-    apiFetch(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),
 
   fetchBillNews: (id: string) =>
-    apiFetch(`/api/legislation/${id}/fetch-news`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/fetch-news`, { method: 'POST' }),
 
   fetchNewsAll: () =>
-    apiFetch('/api/legislation/fetch-news-all', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/fetch-news-all', { method: 'POST' }),
 
   generateHeadlines: (force = false) =>
-    apiFetch(`/api/legislation/generate-headlines?force=${force}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/generate-headlines?force=${force}`, { method: 'POST' }),
 
   generateLedes: (force = false) =>
-    apiFetch(`/api/legislation/generate-ledes?force=${force}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/generate-ledes?force=${force}`, { method: 'POST' }),
 
   analyzeAll: (force = false, forcePerspectives = false) =>
-    apiFetch(`/api/legislation/analyze-all?force=${force}&force_perspectives=${forcePerspectives}`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/analyze-all?force=${force}&force_perspectives=${forcePerspectives}`, { method: 'POST' }),
 
   fetchDetailsAll: () =>
-    apiFetch('/api/legislation/fetch-details-all', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/fetch-details-all', { method: 'POST' }),
 
   generateAllPerspectivesBulk: () =>
-    apiFetch('/api/legislation/generate-all-perspectives', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/generate-all-perspectives', { method: 'POST' }),
 
   // Pipeline SSE path (used directly via fetch in admin, not apiFetch)
   pipelinePath: (params: { steps: string; force_analyze?: boolean; perspective_types?: string; year?: string; month?: string; date_from?: string; date_to?: string; status?: string }) => {
@@ -418,23 +481,23 @@ export const api = {
   },
 
   backfillCityContext: () =>
-    apiFetch('/api/legislation/backfill-city-context', { method: 'POST' }),
+    apiFetch<ActionResult>('/api/legislation/backfill-city-context', { method: 'POST' }),
 
   getPerspectives: (id: string) =>
-    apiFetch(`/api/legislation/${id}/perspectives`),
+    apiFetch<PerspectivesResponse>(`/api/legislation/${id}/perspectives`),
 
   generatePerspective: (id: string, perspectiveType: string, force = false) =>
-    apiFetch(`/api/legislation/${id}/perspectives/${perspectiveType}${force ? '?force=true' : ''}`, { method: 'POST' }),
+    apiFetch<PerspectiveResponse>(`/api/legislation/${id}/perspectives/${perspectiveType}${force ? '?force=true' : ''}`, { method: 'POST' }),
 
   generateAllPerspectives: (id: string) =>
-    apiFetch(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/perspectives/generate-all`, { method: 'POST' }),
 
   clearPerspectives: (id: string) =>
-    apiFetch(`/api/legislation/${id}/perspectives`, { method: 'DELETE' }),
+    apiFetch<ActionResult>(`/api/legislation/${id}/perspectives`, { method: 'DELETE' }),
 
   // ── Admin ────────────────────────────────────────────────────────────────
   adminStats: () =>
-    apiFetch('/api/admin/stats'),
+    apiFetch<AdminStatsResponse>('/api/admin/stats'),
 
   adminUsers: (params?: { limit?: number; offset?: number; sort?: string; order?: 'asc' | 'desc' }) => {
     const p = new URLSearchParams()
@@ -443,9 +506,9 @@ export const api = {
     if (params?.sort)                 p.set('sort', params.sort)
     if (params?.order)                p.set('order', params.order)
     const qs = p.toString()
-    return apiFetch(`/api/admin/users${qs ? `?${qs}` : ''}`)
+    return apiFetch<AdminUsersResponse>(`/api/admin/users${qs ? `?${qs}` : ''}`)
   },
 
   getCouncilmemberVoteHistory: (memberId: string, page = 1, pageSize = 20) =>
-    apiFetch(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
+    apiFetch<VoteHistoryResponse>(`/api/councilmembers/${memberId}/vote-history?page=${page}&page_size=${pageSize}`),
 }
