@@ -73,17 +73,25 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        # `npm install`, not `npm ci`. package-lock.json was generated on
-        # Windows, so the only platform binary it records for lightningcss
-        # (Tailwind v4's CSS engine) is lightningcss-win32-x64-msvc. `npm ci`
-        # installs exactly what the lockfile says and nothing else, so on a
-        # Linux runner the build dies with
+        run: npm ci
+
+      - name: Install the Linux lightningcss binary
+        # package-lock.json was generated on Windows and records only
+        # lightningcss-win32-x64-msvc for Tailwind v4's CSS engine. (Next's own
+        # @next/swc declares all 8 platforms, so it is unaffected — this is
+        # specific to how lightningcss ships its optional deps.) Neither `npm
+        # ci` nor `npm install` will add a platform package the lockfile does
+        # not name, so the Linux build dies with
         #   Cannot find module '../lightningcss.linux-x64-gnu.node'
-        # `npm install` re-resolves optional deps for the current platform.
         #
-        # The durable fix is a lockfile carrying every platform's optional deps;
-        # until then this keeps CI honest without rewriting it underneath Vercel.
-        run: npm install --no-audit --no-fund
+        # Adding just that one binary keeps the lockfile authoritative for
+        # everything else, rather than dropping the lockfile and letting CI
+        # resolve different versions than production ships. Keep the version in
+        # step with `lightningcss` in package-lock.json.
+        #
+        # Vercel is unaffected — its builds succeed today — so this is a CI-only
+        # workaround, not a production issue.
+        run: npm install --no-save --no-audit --no-fund lightningcss-linux-x64-gnu@1.31.1
 
       - name: Typecheck
         # Catches what `next build` would also catch, but reports every error at
