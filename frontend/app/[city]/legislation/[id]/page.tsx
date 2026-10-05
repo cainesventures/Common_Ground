@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import BillDetailClient from './BillDetailClient'
 import { siteUrl } from '@/lib/site'
 import { getBill, MISSING } from './get-bill'
+import { billGraph, jsonLdProps } from '@/lib/structured-data'
 
 const TITLE_MAX = 70
 
@@ -63,12 +64,31 @@ export default async function BillDetailPage({
 }: {
   params: Promise<{ city: string; id: string }>
 }) {
-  const { id } = await params
+  const { city, id } = await params
   const initialBill = await getBill(id)
   // layout.tsx is what actually makes this a 404; kept here too so the page is
   // correct on its own. A null is left alone -- the lookup failed for some
   // other reason and the client falls back to fetching, so a backend blip
   // cannot de-index a real bill.
   if (initialBill === MISSING) notFound()
-  return <BillDetailClient initialBill={initialBill} />
+
+  // Emitted here rather than in the client component so the markup is in the
+  // server-rendered HTML, which is the only version a crawler reads. Skipped
+  // when the lookup failed, so a backend blip publishes no partial entity.
+  const graph = initialBill
+    ? billGraph(initialBill, city, [
+        { name: 'Legislation', path: `/${city}/legislation` },
+        {
+          name: initialBill.bill_number || 'Bill',
+          path: `/${city}/legislation/${id}`,
+        },
+      ])
+    : null
+
+  return (
+    <>
+      {graph && <script {...jsonLdProps(graph)} />}
+      <BillDetailClient initialBill={initialBill} />
+    </>
+  )
 }

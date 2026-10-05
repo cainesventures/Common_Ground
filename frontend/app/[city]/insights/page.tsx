@@ -1,34 +1,24 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import type { Bill as BillRow } from '@/lib/types'
 import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
 import { api } from '@/lib/api'
 import DrillDownPanel, { DrillDownSearchParams } from '@/components/insights/DrillDownPanel'
 import ContestedVotesSection from '@/components/insights/ContestedVotesSection'
 // Type-only import — the runtime data still comes from a fetch of the static
 // JSON, so the 250KB dataset never enters the client bundle.
 import type { NarrativeData } from '@/lib/legislative-history'
+// Row shapes come from the API contract rather than being restated here.
+import type {
+  ImpactYearRow,
+  SponsorRow,
+  TagYearRow,
+  YearStatusRow,
+} from '@/lib/api-types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-interface YearStatusRow {
-  year: number
-  total: number
-  introduced: number
-  in_committee: number
-  died_in_committee: number
-  signed_into_law: number
-  failed: number
-  vetoed: number
-  withdrawn: number
-  tabled: number
-  other: number
-}
-
-interface TagYearRow {
-  year: number
-  [tag: string]: number
-}
 
 interface Summary {
   total_bills: number
@@ -45,22 +35,6 @@ interface Summary {
   last_fetched_at?: string | null
 }
 
-
-interface ImpactYearRow {
-  year: number
-  total: number
-  bill_type: { substantive: number; ceremonial: number; procedural: number; unknown: number }
-  impact_level: { high: number; medium: number; low: number }
-}
-
-interface SponsorRow {
-  sponsor: string
-  total: number
-  signed_into_law: number
-  not_passed: number
-  pass_rate: number
-  avg_impact_score: number | null
-}
 
 // ── Colors ───────────────────────────────────────────────────────────────────
 
@@ -146,16 +120,6 @@ const CHART_W = 700
 const CHART_H = 220
 const PAD = { top: 20, right: 16, bottom: 36, left: 48 }
 const PAGE_SIZE = 20
-
-interface BillRow {
-  id: string
-  bill_number: string
-  plain_title: string | null
-  title: string
-  status: string
-  introduced_date: string | null
-  impact_level: string | null
-}
 
 function bucketRow(row: YearStatusRow): Record<FunnelStage, number> {
   return {
@@ -630,7 +594,7 @@ function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
     setLoading(true)
     setDrillDown(null)
     api.getInsightsSponsorLeaderboard({ year: activeYear })
-      .then((d: any) => { setSponsors(d?.sponsors ?? []); setLoading(false) })
+      .then((d: { sponsors?: SponsorRow[] } | null) => { setSponsors(d?.sponsors ?? []); setLoading(false) })
       .catch(() => setLoading(false))
   }, [activeYear])
 
@@ -1027,6 +991,7 @@ export default function InsightsPage() {
   const [selectedYear, setSelectedYear] = useState<number | null>(null)
   const [tagFilter, setTagFilter]       = useState('')
   const [selectedTag, setSelectedTag]   = useState('')
+  const [loadState, setLoadState]       = useState<'loading' | 'ready' | 'error'>('loading')
 
   const loadStatusData = useCallback(() => {
     api.getInsightsStatusByYear({ tag: tagFilter || undefined })
@@ -1034,15 +999,30 @@ export default function InsightsPage() {
       .catch(() => {})
   }, [tagFilter])
 
+  // Every section below is gated on its data, so when these loads failed
+  // silently the whole dashboard rendered as a bare <h1> on an empty page.
+  // The summary load stands in for "is the backend reachable" — the secondary
+  // loads can still degrade quietly, since their sections self-hide.
+  const loadSummary = useCallback(() => {
+    setLoadState('loading')
+    api.getInsightsSummary()
+      .then(d => {
+        if (!d) throw new Error('empty response')
+        setSummary(d)
+        setLoadState('ready')
+      })
+      .catch(() => setLoadState('error'))
+  }, [])
+
   useEffect(() => {
-    api.getInsightsSummary().then(d => d && setSummary(d)).catch(() => {})
+    loadSummary()
     api.getInsightsTagByYear({ top_n: 10 }).then(d => { if (!d) return; setTagData(d.years ?? []); setTags(d.tags ?? []) }).catch(() => {})
     api.getInsightsImpactByYear().then(d => d && setImpactData(d.years ?? [])).catch(() => {})
     fetch('/data/legislative_history.json')
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.narrative) setNarrativeData(d) })
       .catch(() => {})
-  }, [])
+  }, [loadSummary])
 
   useEffect(() => { loadStatusData() }, [loadStatusData])
 
@@ -1073,6 +1053,38 @@ export default function InsightsPage() {
           </p>
         )}
       </div>
+
+      {loadState === 'loading' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-4 space-y-2">
+              <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+              <div className="h-7 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loadState === 'error' && (
+        <div className="border rounded-lg p-6 text-center space-y-3">
+          <p className="font-medium">Council Insights is temporarily unavailable.</p>
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t load the legislative data. This is usually brief.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <button
+              onClick={loadSummary}
+              className="inline-flex items-center justify-center rounded-lg px-4 h-9 text-sm font-medium bg-primary text-primary-foreground btn-primary-hover"
+            >
+              Try again
+            </button>
+            <Link href={`/${city}/legislation`} className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
+              Browse legislation
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Summary stats */}
       {summary && (

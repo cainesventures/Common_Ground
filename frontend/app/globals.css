@@ -1,22 +1,108 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* ── Design tokens ────────────────────────────────────────────────────────────
+   Every token below is referenced by Tailwind utility classes already in use
+   across the app (text-muted-foreground ×525, bg-muted ×183, bg-primary,
+   bg-card, border-input …). Tailwind v4 only emits a utility if its key exists
+   in @theme, so a token missing here means those classes compile to NOTHING —
+   which is what happened before this block existed: no secondary-text
+   hierarchy, transparent primary buttons, invisible skeletons, colorless
+   borders. If you add a token, add it to @theme AND to all four value blocks.
+
+   Contrast: --muted-foreground, --primary and --destructive are each chosen to
+   clear 4.5:1 against their own --background in both themes. In dark mode
+   --primary is a LIGHT blue with dark --primary-foreground, so that one token
+   stays legible as both `text-primary` and a `bg-primary` button face.
+   ──────────────────────────────────────────────────────────────────────────── */
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #5e6b7e; /* 5.41:1 on --background, 4.94:1 on --muted */
+
+  --primary: #2563eb; /* 5.17:1 on #ffffff */
+  --primary-foreground: #ffffff; /* 5.17:1 on #2563eb */
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+
+  --destructive: #dc2626; /* 4.83:1 on #ffffff */
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #3b82f6;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
+/* Dark values, shared by the OS preference and the manual .dark class. */
 @media (prefers-color-scheme: dark) {
   :root:not(.light) {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --card: #151515;
+    --card-foreground: #ededed;
+    --popover: #151515;
+    --popover-foreground: #ededed;
+
+    --muted: #1f1f1f;
+    --muted-foreground: #a1a1aa; /* 7.72:1 on --background, 6.43:1 on --muted */
+
+    --primary: #60a5fa; /* 7.79:1 on #0a0a0a */
+    --primary-foreground: #0b1220; /* 7.36:1 on #60a5fa */
+
+    --secondary: #1f1f1f;
+    --secondary-foreground: #ededed;
+    --accent: #1f1f1f;
+    --accent-foreground: #ededed;
+
+    --destructive: #f87171; /* 7.16:1 on #0a0a0a */
+    --destructive-foreground: #0b1220; /* 6.77:1 on #f87171 */
+
+    --border: #262626;
+    --input: #3f3f46;
+    --ring: #60a5fa;
   }
 }
 
@@ -24,12 +110,58 @@
 .dark {
   --background: #0a0a0a;
   --foreground: #ededed;
+
+  --card: #151515;
+  --card-foreground: #ededed;
+  --popover: #151515;
+  --popover-foreground: #ededed;
+
+  --muted: #1f1f1f;
+  --muted-foreground: #a1a1aa;
+
+  --primary: #60a5fa;
+  --primary-foreground: #0b1220;
+
+  --secondary: #1f1f1f;
+  --secondary-foreground: #ededed;
+  --accent: #1f1f1f;
+  --accent-foreground: #ededed;
+
+  --destructive: #f87171;
+  --destructive-foreground: #0b1220;
+
+  --border: #262626;
+  --input: #3f3f46;
+  --ring: #60a5fa;
 }
 
 /* Manual light mode override (force light even when OS is dark) */
 .light {
   --background: #ffffff;
   --foreground: #171717;
+
+  --card: #ffffff;
+  --card-foreground: #171717;
+  --popover: #ffffff;
+  --popover-foreground: #171717;
+
+  --muted: #f1f5f9;
+  --muted-foreground: #5e6b7e;
+
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172a;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  --border: #e2e8f0;
+  --input: #cbd5e1;
+  --ring: #3b82f6;
 }
 
 body {
@@ -132,6 +264,48 @@ body {
 }
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────────
+   Honours the OS setting for everything above: the hero stagger, the scroll
+   reveals, the fade/slide keyframes and the hover lifts. Elements that animate
+   in from opacity:0 must still end up visible, so these reset to the final
+   state rather than just dropping the animation.
+
+   Note this does not cover the JS-driven carousels (the 14s both-sides
+   slideshow and the 30s founders quote) — those check the same media query in
+   their own code, since CSS cannot stop a setInterval. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-hero > *,
+  .anim-fade-in,
+  .anim-slide-right {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .anim-scroll,
+  .anim-scroll.in-view {
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .btn-primary-hover,
+  .btn-outline-hover,
+  .bar-hover {
+    transition: none;
+  }
+  .btn-primary-hover:hover,
+  .btn-outline-hover:hover,
+  .bar-hover:hover {
+    transform: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Global focus rings — keyboard navigation */

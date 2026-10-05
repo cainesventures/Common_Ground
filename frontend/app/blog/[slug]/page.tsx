@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import ReactMarkdown from 'react-markdown'
 import { getAllSlugs, getPost, formatPostDate } from '@/lib/blog'
-import { ShareBar } from '@/components/blog/ShareBar'
+import { ShareBar } from '@/components/ShareBar'
 
 // Fully static: every post is prerendered; unknown slugs 404 without the server.
 export const dynamicParams = false
@@ -35,8 +35,14 @@ export async function generateMetadata({
       publishedTime: post.date,
       authors: [post.author],
       tags: post.tags,
+      images: [{ url: `/blog/${post.slug}/opengraph-image`, width: 1200, height: 630 }],
     },
-    twitter: { card: 'summary_large_image', title: post.title, description: post.summary },
+    twitter: {
+      card: 'summary_large_image',
+      title: post.title,
+      description: post.summary,
+      images: [`/blog/${post.slug}/opengraph-image`],
+    },
   }
 }
 
@@ -65,7 +71,7 @@ export default async function BlogPostPage({
   const shareUrl = `https://opencommonground.com/blog/${post.slug}`
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-12">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -98,7 +104,7 @@ export default async function BlogPostPage({
           <span>{post.reading_minutes} min read</span>
         </div>
         <div className="mt-5">
-          <ShareBar url={shareUrl} title={post.title} slug={post.slug} />
+          <ShareBar url={shareUrl} title={post.title} eventProps={{ slug: post.slug }} />
         </div>
       </header>
 
@@ -156,8 +162,8 @@ export default async function BlogPostPage({
           This is commentary by {post.author}. There&apos;s no comment section — if it sparked
           something, share it where the conversation already lives.
         </p>
-        <ShareBar url={shareUrl} title={post.title} slug={post.slug} />
+        <ShareBar url={shareUrl} title={post.title} eventProps={{ slug: post.slug }} />
       </footer>
-    </main>
+    </div>
   )
 }

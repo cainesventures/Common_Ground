@@ -9,15 +9,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { api } from '@/lib/api'
 import { getToken, clearToken, startGoogleSignIn } from '@/lib/auth'
 import { useAdminMode } from '@/lib/admin-mode'
-
-interface User {
-  id: string
-  display_name: string
-  avatar_url: string | null
-  email: string
-  subscription_tier?: string
-  is_admin?: boolean
-}
+import { ThemeToggle } from '@/components/ThemeToggle'
+import type { AuthUser as User } from '@/lib/types'
 
 function avatarSrc(user: User): string {
   if (user.avatar_url) return user.avatar_url
@@ -95,6 +88,12 @@ export function Navbar() {
   // regular-user experience without losing their auth.
   const showAdminTools = Boolean(user?.is_admin) && adminMode === 'admin'
 
+  // Section links stay highlighted on their detail pages — an exact match meant
+  // /philadelphia/legislation/123 lit up nothing, so the deepest pages (where
+  // most visitors land from search) showed no sense of place. Every navLink is a
+  // section root, so the `href + '/'` guard is enough to avoid /blog ~ /blogfoo.
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
+
   const navLinks = [
     { href: `${p}/legislation`, label: 'Legislation' },
     { href: `${p}/councilmembers`, label: 'Council' },
@@ -117,7 +116,7 @@ export function Navbar() {
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-6">
           {navLinks.map((l) => (
-            <Link key={l.href} href={l.href} className={`text-sm transition-colors ${pathname === l.href ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Link key={l.href} href={l.href} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
             </Link>
           ))}
@@ -133,8 +132,12 @@ export function Navbar() {
           </Link>
         </div>
 
-        {/* Right side: auth + hamburger */}
+        {/* Right side: theme + auth + hamburger */}
         <div className="flex items-center gap-3">
+          {/* Outside the md-only auth block so the toggle is reachable on mobile
+              too. Before this it existed only inside /profile, behind sign-in. */}
+          <ThemeToggle />
+
           {/* Auth — hidden on mobile to keep nav clean */}
           <div className="hidden md:flex items-center gap-3">
             {loading ? null : user ? (
@@ -208,8 +211,9 @@ export function Navbar() {
             <Link
               key={l.href}
               href={l.href}
+              aria-current={isActive(l.href) ? 'page' : undefined}
               className={`block px-3 py-2 rounded-md text-sm transition-colors ${
-                pathname === l.href ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                isActive(l.href) ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
               }`}
             >
               {l.label}

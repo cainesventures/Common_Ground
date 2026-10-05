@@ -4,7 +4,27 @@ import { useState } from 'react'
 import { usePostHog } from 'posthog-js/react'
 import { Share2, Link2, Check } from 'lucide-react'
 
-export function ShareBar({ url, title, slug }: { url: string; title: string; slug: string }) {
+/**
+ * Share targets for any page. Lived under components/blog/ and was used only by
+ * the blog, which meant bill pages — the dynamic OG images and 99% of the
+ * sitemap — had nothing but a bare copy-to-clipboard and no path to being
+ * shared anywhere.
+ *
+ * `event`/`eventProps` keep the analytics honest per surface: the blog still
+ * emits post_shared{slug}, bills emit bill_shared{bill_id} (the event that
+ * already existed for the old copy button), members emit member_shared.
+ */
+export function ShareBar({
+  url,
+  title,
+  event = 'post_shared',
+  eventProps,
+}: {
+  url: string
+  title: string
+  event?: string
+  eventProps?: Record<string, string>
+}) {
   const posthog = usePostHog()
   const [copied, setCopied] = useState(false)
   const enc = encodeURIComponent
@@ -17,7 +37,7 @@ export function ShareBar({ url, title, slug }: { url: string; title: string; slu
     { key: 'email', label: 'Email', href: `mailto:?subject=${enc(title)}&body=${enc(`${title}\n\n${url}`)}` },
   ]
 
-  const track = (network: string) => posthog?.capture('post_shared', { slug, network })
+  const track = (network: string) => posthog?.capture(event, { ...eventProps, network })
 
   const copy = async () => {
     try {
