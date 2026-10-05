@@ -50,7 +50,11 @@ jobs:
           JWT_SECRET: ci-not-a-real-secret
           APP_BASE_URL: http://localhost:8000
           AI_PROVIDER: ollama
-        run: pytest -q
+        # `python -m pytest`, not the bare `pytest` console script: only the
+        # module form puts the repo root on sys.path, and conftest.py imports
+        # `app`. The bare script fails with ModuleNotFoundError: No module
+        # named 'app'.
+        run: python -m pytest -q
 
   frontend:
     name: Frontend typecheck + build
@@ -69,7 +73,17 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install`, not `npm ci`. package-lock.json was generated on
+        # Windows, so the only platform binary it records for lightningcss
+        # (Tailwind v4's CSS engine) is lightningcss-win32-x64-msvc. `npm ci`
+        # installs exactly what the lockfile says and nothing else, so on a
+        # Linux runner the build dies with
+        #   Cannot find module '../lightningcss.linux-x64-gnu.node'
+        # `npm install` re-resolves optional deps for the current platform.
+        #
+        # The durable fix is a lockfile carrying every platform's optional deps;
+        # until then this keeps CI honest without rewriting it underneath Vercel.
+        run: npm install --no-audit --no-fund
 
       - name: Typecheck
         # Catches what `next build` would also catch, but reports every error at
