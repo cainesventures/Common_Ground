@@ -75,23 +75,36 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install the Linux lightningcss binary
-        # package-lock.json was generated on Windows and records only
-        # lightningcss-win32-x64-msvc for Tailwind v4's CSS engine. (Next's own
-        # @next/swc declares all 8 platforms, so it is unaffected — this is
-        # specific to how lightningcss ships its optional deps.) Neither `npm
-        # ci` nor `npm install` will add a platform package the lockfile does
-        # not name, so the Linux build dies with
-        #   Cannot find module '../lightningcss.linux-x64-gnu.node'
+      - name: Install Linux binaries for native deps
+        # package-lock.json was generated on Windows, so npm locked only the
+        # win32-x64-msvc variant of every native dependency — not because these
+        # packages are Windows-only, but because npm (by default) resolves
+        # optional platform packages only for the OS the install ran on. Every
+        # one of the four families below ships Linux builds on npm; the
+        # lockfile just never recorded them. `npm ci` installs exactly what the
+        # lockfile says and nothing else, so each of these failed the Linux
+        # build in turn as the prior one was fixed:
+        #   lightningcss          → Tailwind v4's CSS engine
+        #   @tailwindcss/oxide    → Tailwind v4's Rust core (used via next/font)
+        #   @img/sharp            → next/image's optimizer
+        #   @unrs/resolver-binding → used by eslint's resolver during `next build`
+        # (@next/swc is unaffected — it declares all 8 platforms in the lockfile.)
         #
-        # Adding just that one binary keeps the lockfile authoritative for
-        # everything else, rather than dropping the lockfile and letting CI
-        # resolve different versions than production ships. Keep the version in
-        # step with `lightningcss` in package-lock.json.
+        # Installing just these four binaries keeps the lockfile authoritative
+        # for every other dependency, rather than deleting it and letting CI
+        # resolve different versions than production ships. Keep each version
+        # in step with the base package's version in package-lock.json.
         #
-        # Vercel is unaffected — its builds succeed today — so this is a CI-only
-        # workaround, not a production issue.
-        run: npm install --no-save --no-audit --no-fund lightningcss-linux-x64-gnu@1.31.1
+        # Vercel is unaffected — its builds succeed today — so this is a
+        # CI-only workaround, not a production issue. The durable fix is
+        # regenerating package-lock.json on a machine (or in a container) where
+        # npm captures every platform, which is out of scope for this PR.
+        run: |
+          npm install --no-save --no-audit --no-fund \
+            lightningcss-linux-x64-gnu@1.31.1 \
+            @tailwindcss/oxide-linux-x64-gnu@4.2.1 \
+            @img/sharp-linux-x64@0.34.5 \
+            @unrs/resolver-binding-linux-x64-gnu@1.11.1
 
       - name: Typecheck
         # Catches what `next build` would also catch, but reports every error at
