@@ -5,8 +5,13 @@
 #   railway link           - link this directory to the Railway service
 #
 # SCHEDULED USE:
-#   .\scripts\schedule_publish.ps1  - register weekly Task Scheduler job (Friday 6am)
-#   Start-ScheduledTask -TaskName CommonGroundPublish  - run immediately
+#   .\scripts\schedule_publish.ps1  - register the Task Scheduler job (logon +
+#                                     startup + daily, gated to one publish per
+#                                     5 days). Needs an elevated prompt.
+#   .\scripts\schedule_publish.ps1 -Status  - why it did or did not run
+#   Start-ScheduledTask -TaskName CommonGroundPublish  - run now (gate applies)
+#
+# Every run, scheduled or manual, transcribes to logs\publish-<stamp>.log.
 #
 # MANUAL USE:
 #   .\publish.ps1                              - full pipeline
@@ -40,11 +45,30 @@ param(
     [switch]$SkipEnrich,
     [switch]$SkipNarrative,
     [switch]$SkipTwoLane,
-    [int]$MinDaysSinceLastRun = 0   # 0 = always run; set by scheduler wrapper to avoid duplicate runs
+    [int]$MinDaysSinceLastRun = 0,  # 0 = always run; set by scheduler wrapper to avoid duplicate runs
+    [int]$KeepLogs = 30             # how many publish logs to retain
 )
 
 $ErrorActionPreference = "Stop"
 $ROOT = "C:\Projects\Common_Ground"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+# Task Scheduler discards stdout, so an unattended run used to leave no trace
+# whatsoever: a successful publish, a gated no-op and a crash were all
+# indistinguishable afterwards. Everything below is transcribed to a file, and
+# the scheduled task reports its own exit code into the same directory.
+$LogDir = "$ROOT\logs"
+if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+$LogFile = Join-Path $LogDir ("publish-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+try { Start-Transcript -Path $LogFile -Append | Out-Null } catch { }
+
+# Keep the log directory from growing without bound.
+try {
+    Get-ChildItem -Path $LogDir -Filter "publish-*.log" -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -Skip $KeepLogs |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+} catch { }
 
 function Log($msg) {
     Write-Host "[$(Get-Date -Format 'HH:mm:ss')] $msg" -ForegroundColor Cyan
@@ -56,6 +80,7 @@ function Warn($msg) {
 
 function Fail($msg) {
     Write-Host "[ERROR] $msg" -ForegroundColor Red
+    try { Stop-Transcript | Out-Null } catch { }
     exit 1
 }
 
@@ -78,7 +103,11 @@ function Wait-Ollama {
 }
 
 # Load .env
-Get-Content "$ROOT\.env" | ForEach-Object {
+$EnvFile = "$ROOT\.env"
+if (-not (Test-Path $EnvFile)) {
+    Fail ".env not found at $EnvFile. Step 8 needs RAILWAY_TOKEN and step 9 needs the Cloudflare pair."
+}
+Get-Content $EnvFile | ForEach-Object {
     if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
         [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), "Process")
     }
@@ -87,13 +116,26 @@ Get-Content "$ROOT\.env" | ForEach-Object {
 Set-Location $ROOT
 
 # ── Minimum-interval gate (used by scheduler; skipped on manual runs) ─────────
+# Note the gate counts ANY publish, manual ones included, because .last_publish
+# is written by every successful run. That is deliberate -- a scheduled publish
+# hours after a manual one has nothing to do -- but it does mean a habit of
+# publishing by hand keeps the scheduled run permanently gated. The log line
+# below is what makes that visible instead of looking like a broken task.
 $LAST_RUN_FILE = "$ROOT\.last_publish"
 if ($MinDaysSinceLastRun -gt 0 -and (Test-Path $LAST_RUN_FILE)) {
-    $lastRun = [datetime](Get-Content $LAST_RUN_FILE)
-    $daysSince = ((Get-Date) - $lastRun).TotalDays
-    if ($daysSince -lt $MinDaysSinceLastRun) {
-        Write-Host "Last publish was $([math]::Round($daysSince,1)) days ago (< $MinDaysSinceLastRun days). Skipping."
-        exit 0
+    $lastRun = $null
+    try { $lastRun = [datetime](Get-Content $LAST_RUN_FILE -Raw).Trim() } catch {
+        Warn "Could not parse $LAST_RUN_FILE; treating this as never published."
+    }
+    if ($lastRun) {
+        $daysSince = ((Get-Date) - $lastRun).TotalDays
+        if ($daysSince -lt $MinDaysSinceLastRun) {
+            Log ("GATED - last publish was {0} days ago, minimum is {1}. Nothing to do." -f [math]::Round($daysSince,1), $MinDaysSinceLastRun)
+            Log "Run .\publish.ps1 with no -MinDaysSinceLastRun to publish regardless."
+            try { Stop-Transcript | Out-Null } catch { }
+            exit 0
+        }
+        Log ("Gate open - last publish was {0} days ago (minimum {1})." -f [math]::Round($daysSince,1), $MinDaysSinceLastRun)
     }
 }
 
@@ -109,16 +151,32 @@ if ($needsOllama) {
     }
 }
 
-# Railway auth check (non-fatal - we warn and skip if not logged in)
+# Railway auth check (non-fatal - we warn and skip if not logged in).
+#
+# RAILWAY_TOKEN from .env is what makes this work unattended; the browser login
+# expires about monthly, and without the token a scheduled run would skip the
+# redeploy every time. Check for it explicitly so the cause is in the log.
 $railwayOk = $false
+if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable("RAILWAY_TOKEN", "Process"))) {
+    Warn "RAILWAY_TOKEN is not set in .env - falling back to the browser login, which expires."
+}
+$prevEAP = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 try {
-    railway status 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { $railwayOk = $true }
-} catch { }
+    $railwayStatus = & railway status 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $railwayOk = $true
+    } else {
+        Warn "railway status failed: $(($railwayStatus | Out-String).Trim())"
+    }
+} catch {
+    Warn "railway status could not be run: $($_.Exception.Message)"
+}
+$ErrorActionPreference = $prevEAP
 if (-not $railwayOk) {
-    Warn "Railway CLI not logged in or project not linked."
-    Warn "Run: railway login && railway link"
-    Warn "Step 7 (redeploy) will be skipped this run."
+    Warn "Railway CLI not authenticated or project not linked."
+    Warn "Fix: set a persistent RAILWAY_TOKEN in .env, or run: railway login && railway link"
+    Warn "Step 8 (redeploy) will be SKIPPED - the DB uploaded in step 6 will NOT go live this run."
 }
 
 # ── Step 1: Fetch new bills from Legistar ────────────────────────────────────
@@ -262,7 +320,7 @@ if ($railwayOk) {
     Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
 }
 
-# ── Step 8: Purge the Cloudflare edge cache ──────────────────────────────────
+# ── Step 9: Purge the Cloudflare edge cache ──────────────────────────────────
 # Public API reads are cached at the edge for an hour (s-maxage=3600 set in
 # main.py). After a publish that cache still holds pre-publish data, so a purge
 # is what makes new bills and headlines show up immediately instead of an hour
@@ -325,6 +383,12 @@ Log ""
 Log "============================================================"
 Log " Publish complete!"
 Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
-Log " Railway (backend):  restores DB from B2 and restarts in ~3 min"
+if ($railwayOk) {
+    Log " Railway (backend):  restores DB from B2 and restarts in ~3 min"
+} else {
+    Log " Railway (backend):  SKIPPED - the new DB is in B2 but is NOT live"
+}
 Log " Cloudflare:         edge cache purged (or expires within 1h)"
+Log " Log file:           $LogFile"
 Log "============================================================"
+try { Stop-Transcript | Out-Null } catch { }
