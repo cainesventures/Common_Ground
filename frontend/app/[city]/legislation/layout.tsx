@@ -2,7 +2,8 @@ import type { Metadata } from 'next'
 import { getCityConfig } from '@/lib/city'
 import { siteUrl } from '@/lib/site'
 
-// The index page is a client component; this carries its metadata.
+// The index page is a server component now, but its metadata stays here so
+// the page itself does nothing but fetch and hand off to the client.
 // [id]/page.tsx sets its own canonical, so it does not inherit this one.
 export async function generateMetadata({
   params,
