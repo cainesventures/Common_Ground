@@ -9,6 +9,7 @@ import sys
 import os
 import json
 import logging
+import logging.handlers
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
@@ -48,7 +49,12 @@ def setup_logging(log_name: str) -> logging.Logger:
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
         handlers=[
-            logging.FileHandler(log_file, encoding="utf-8"),
+            # Rotating, not plain FileHandler: these workers append on every
+            # run and nothing ever truncated them -- scripts/worker.py's log
+            # reached 206 MB that way. 10 MB x 3 caps each at ~40 MB.
+            logging.handlers.RotatingFileHandler(
+                log_file, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+            ),
             stream_handler,
         ],
     )

@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 
+import asyncio
 import logging
 import sys
 import time
@@ -195,17 +196,52 @@ async def health_db(db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail="Database unavailable")
 
 
+# A cold Ollama has to pull a model into the GPU before it can answer, which
+# takes far longer than any health check should wait. Past that, report the
+# provider as unreachable rather than keeping the caller hanging.
+AI_HEALTH_TIMEOUT_SECONDS = 10
+
+
 @app.get("/health/ai")
 async def health_ai():
-    """Check AI provider configuration and connectivity."""
+    """Check AI provider configuration and connectivity.
+
+    `provider.complete` is a blocking network call. Awaiting it directly in an
+    async route blocked the whole event loop for its full duration: with no
+    model resident, one request to this endpoint made /health and every /api
+    read hang for a minute or more, so a monitor polling it could take the
+    backend down rather than measure it. Hand it to a worker thread and bound
+    the wait.
+
+    The timeout frees this request, not the thread behind it -- there is no way
+    to cancel a blocking call -- so the model load finishes in the background
+    and the next check finds it warm.
+    """
     from app.services.ai_provider import get_ai_provider
     try:
         provider = get_ai_provider()
-        # Actually test connectivity with a minimal prompt
-        provider.complete(system_prompt="Reply with the word OK only.", user_prompt="ping")
-        return {"status": "ok", "provider": type(provider).__name__}
     except Exception as e:
-        return {"status": "error", "provider": type(get_ai_provider()).__name__ if True else "", "reason": str(e)}
+        return {"status": "error", "provider": "", "reason": str(e)}
+
+    provider_name = type(provider).__name__
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(
+                provider.complete,
+                system_prompt="Reply with the word OK only.",
+                user_prompt="ping",
+            ),
+            timeout=AI_HEALTH_TIMEOUT_SECONDS,
+        )
+        return {"status": "ok", "provider": provider_name}
+    except asyncio.TimeoutError:
+        return {
+            "status": "error",
+            "provider": provider_name,
+            "reason": f"no response within {AI_HEALTH_TIMEOUT_SECONDS}s (model may be loading)",
+        }
+    except Exception as e:
+        return {"status": "error", "provider": provider_name, "reason": str(e)}
 
 
 

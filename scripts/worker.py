@@ -21,6 +21,7 @@ import sys
 import os
 import json
 import logging
+import logging.handlers
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -43,7 +44,12 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        # Rotating, not plain FileHandler: this ran in append mode from May to
+        # October and reached 206 MB, which is a lot of disk for diagnostics
+        # nobody reads past the last run. 10 MB x 3 caps it at ~40 MB.
+        logging.handlers.RotatingFileHandler(
+            LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+        ),
         _stream_handler,
     ],
 )
