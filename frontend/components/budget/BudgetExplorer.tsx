@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useTabs } from '@/lib/use-tabs'
 import type { BudgetData, BudgetFund } from '@/lib/budget'
 import { adjust, MODE_LABEL, type BudgetMode } from '@/lib/budget-adjust'
 import { FUND_INFO, CLASS_INFO, deptNote } from '@/lib/budget-glossary'
@@ -38,6 +39,7 @@ export function BudgetExplorer({ data, fundOrder }: { data: BudgetData; fundOrde
   const [fund, setFund] = useState('GENERAL FUND')
   const [mode, setMode] = useState<BudgetMode>('nominal')
   const [view, setView] = useState<View>('breakdown')
+  const viewTabs = useTabs(VIEWS.map((v) => v.id), view, setView)
 
   // per-view state
   const [year, setYear] = useState(lastFY)
@@ -108,11 +110,11 @@ export function BudgetExplorer({ data, fundOrder }: { data: BudgetData; fundOrde
       {fundDesc && <p className="text-sm text-muted-foreground mb-5 max-w-2xl">{fundDesc}</p>}
 
       {/* View tabs */}
-      <div className="flex gap-1 border-b mb-6">
+      <div {...viewTabs.tablistProps} aria-label="Budget views" className="flex gap-1 border-b mb-6">
         {VIEWS.map((v) => (
           <button
             key={v.id}
-            onClick={() => setView(v.id)}
+            {...viewTabs.tabProps(v.id)}
             className={`px-4 py-2 text-sm -mb-px border-b-2 transition-colors ${
               view === v.id
                 ? 'border-blue-500 text-foreground font-medium'
@@ -125,25 +127,31 @@ export function BudgetExplorer({ data, fundOrder }: { data: BudgetData; fundOrde
       </div>
 
       {view === 'breakdown' && (
+        <div {...viewTabs.panelProps('breakdown')}>
         <BreakdownView
           fund={fund} year={year} setYear={setYear} firstFY={firstFY} lastFY={lastFY}
           fundByYear={fundByYear} complete={data.years.find((y) => y.fiscalYear === year)?.complete ?? true}
           adj={adj} mode={mode} expanded={expanded} setExpanded={setExpanded} showAll={showAll} setShowAll={setShowAll}
         />
+        </div>
       )}
 
       {view === 'compare' && (
+        <div {...viewTabs.panelProps('compare')}>
         <CompareView
           fund={fund} yearA={yearA} yearB={yearB} setYearA={setYearA} setYearB={setYearB}
           firstFY={firstFY} lastFY={lastFY} fundByYear={fundByYear} adj={adj} mode={mode}
         />
+        </div>
       )}
 
       {view === 'track' && (
+        <div {...viewTabs.panelProps('track')}>
         <TrackView
           fund={fund} deptNames={deptNames} activeDept={activeDept} setDept={setDept}
           data={data} adj={adj} mode={mode}
         />
+        </div>
       )}
 
       {/* Spending-class glossary */}

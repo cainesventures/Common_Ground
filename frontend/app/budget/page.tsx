@@ -35,7 +35,7 @@ export default function BudgetPage() {
   }
 
   return (
-    <main className="max-w-4xl mx-auto px-4 py-12">
+    <div className="max-w-4xl mx-auto px-4 py-12">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
       <header className="mb-8">
@@ -63,6 +63,6 @@ export default function BudgetPage() {
           Census figures — recent years are estimates.
         </p>
       </footer>
-    </main>
+    </div>
   )
 }

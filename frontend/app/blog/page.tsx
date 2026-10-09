@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { getAllPosts, formatPostDate } from '@/lib/blog'
-import { ShareBar } from '@/components/blog/ShareBar'
+import { ShareBar } from '@/components/ShareBar'
 
 export const metadata: Metadata = {
   title: 'Blog — Open Common Ground',
@@ -22,7 +22,7 @@ export default function BlogIndexPage() {
   const posts = getAllPosts()
 
   return (
-    <main className="max-w-3xl mx-auto px-4 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-12">
       <header className="mb-10">
         <div className="type-eyebrow text-muted-foreground mb-2">The Blog</div>
         <h1 className="type-display mb-3">Reading the record</h1>
@@ -67,7 +67,7 @@ export default function BlogIndexPage() {
                   <ShareBar
                     url={`https://opencommonground.com/blog/${post.slug}`}
                     title={post.title}
-                    slug={post.slug}
+                    eventProps={{ slug: post.slug }}
                   />
                 </div>
               </article>
@@ -75,6 +75,6 @@ export default function BlogIndexPage() {
           ))}
         </ul>
       )}
-    </main>
+    </div>
   )
 }

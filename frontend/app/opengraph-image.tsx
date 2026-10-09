@@ -55,7 +55,9 @@ export default async function Image() {
             maxWidth: '800px',
           }}
         >
-          Track Philadelphia City Council bills with AI summaries, and the case for and against what's in play.
+          {/* Literal ’ rather than &rsquo;: this renders through satori, not the
+              HTML parser, so keeping it a real character leaves no doubt. */}
+          Track Philadelphia City Council bills with AI summaries, and the case for and against what’s in play.
         </div>
         <div
           style={{

@@ -3,23 +3,24 @@
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
+import type { Bill } from '@/lib/types'
+import type { CandidatesResponse } from '@/lib/api-types'
+
+type Candidate = CandidatesResponse['candidates'][number]
 
 const DISCLAIMER =
   'AI-generated speculation for civic engagement only. Predictions are not factual representations ' +
   "of any candidate's positions. They are generated from publicly available party and background " +
   'information and should not be taken as statements by or about any candidate.'
 
-interface Candidate {
-  id: string
-  name: string
-  district: string
-  party?: string
-  bio?: string
-  photo_url?: string
-  website_url?: string
-  office_sought?: string
-  election_year: number
-  is_incumbent?: boolean
+/** `/api/elections/office-description` — static civics copy per office. */
+interface OfficeInfo {
+  what_it_does?: string
+  key_responsibilities?: string[]
+  term_length?: string
+  salary_approx?: string
+  good_candidate_traits?: string[]
 }
 
 interface Prediction {
@@ -57,8 +58,8 @@ function BillPredictSelector({ onPredictions }: {
   onPredictions: (data: { predictions: Prediction[]; bill_title: string; disclaimer: string }) => void
 }) {
   const [query, setQuery]           = useState('')
-  const [results, setResults]       = useState<any[]>([])
-  const [selectedBill, setSelected] = useState<any>(null)
+  const [results, setResults]       = useState<Bill[]>([])
+  const [selectedBill, setSelected] = useState<Bill | null>(null)
   const [searching, setSearching]   = useState(false)
   const [predicting, setPredicting] = useState(false)
   const [error, setError]           = useState<string | null>(null)
@@ -84,9 +85,14 @@ function BillPredictSelector({ onPredictions }: {
     setPredicting(true); setError(null)
     try {
       const data = await api.getCandidatePredictions(selectedBill.id)
-      onPredictions({ predictions: data.predictions ?? [], bill_title: data.bill_title ?? selectedBill.plain_title ?? selectedBill.title, disclaimer: data.disclaimer })
-    } catch (e: any) {
-      setError(e.message || 'Prediction failed.')
+      if (!data) { setError('Prediction failed.'); return }
+      onPredictions({
+        predictions: data.predictions ?? [],
+        bill_title: data.bill_title ?? selectedBill.plain_title ?? selectedBill.title,
+        disclaimer: data.disclaimer,
+      })
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Prediction failed.'))
     } finally {
       setPredicting(false)
     }
@@ -98,7 +104,7 @@ function BillPredictSelector({ onPredictions }: {
         <input
           type="text"
           placeholder="Search for a bill…"
-          value={selectedBill ? (selectedBill.plain_title || selectedBill.title) : query}
+          value={selectedBill ? (selectedBill.plain_title || selectedBill.title || '') : query}
           onChange={(e) => handleQueryChange(e.target.value)}
           onFocus={() => { if (selectedBill) { setSelected(null); setQuery('') } }}
           className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -161,7 +167,7 @@ function PredictionResults({ predictions, billTitle }: { predictions: Prediction
                 {p.is_incumbent && <span className="ml-1.5 text-xs text-muted-foreground">(incumbent)</span>}
               </p>
               <p className="text-xs text-muted-foreground">{p.district}{p.party ? ` · ${p.party}` : ''}</p>
-              <p className="text-sm text-muted-foreground italic mt-1">"{p.reasoning}"</p>
+              <p className="text-sm text-muted-foreground italic mt-1">&ldquo;{p.reasoning}&rdquo;</p>
             </div>
           </div>
         ))}
@@ -174,7 +180,7 @@ function PredictionResults({ predictions, billTitle }: { predictions: Prediction
 
 function OfficeDescription({ office }: { office: string }) {
   const [open, setOpen] = useState(false)
-  const [data, setData] = useState<any>(null)
+  const [data, setData] = useState<OfficeInfo | null>(null)
   const [loading, setLoading] = useState(false)
 
   const load = () => {
@@ -208,7 +214,7 @@ function OfficeDescription({ office }: { office: string }) {
             <>
               <p className="text-muted-foreground leading-relaxed">{data.what_it_does}</p>
               <div className="grid sm:grid-cols-2 gap-3">
-                {data.key_responsibilities?.length > 0 && (
+                {data.key_responsibilities && data.key_responsibilities.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold mb-1">Key responsibilities</p>
                     <ul className="space-y-0.5">
@@ -218,7 +224,7 @@ function OfficeDescription({ office }: { office: string }) {
                     </ul>
                   </div>
                 )}
-                {data.good_candidate_traits?.length > 0 && (
+                {data.good_candidate_traits && data.good_candidate_traits.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold mb-1">What makes a good candidate</p>
                     <ul className="space-y-0.5">
@@ -294,7 +300,7 @@ export default function ElectionsPage() {
 
   // Group candidates by district
   const byDistrict = candidates.reduce<Record<string, Candidate[]>>((acc, c) => {
-    const key = c.district
+    const key = c.district ?? 'Unknown district'
     if (!acc[key]) acc[key] = []
     acc[key].push(c)
     return acc

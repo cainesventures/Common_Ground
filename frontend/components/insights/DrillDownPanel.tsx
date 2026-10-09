@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import type { Bill as BillRow } from '@/lib/types'
 import Link from 'next/link'
 import { api } from '@/lib/api'
 
@@ -27,16 +28,6 @@ interface Props {
   searchParams: DrillDownSearchParams
   viewAllHref: string
   onClose: () => void
-}
-
-interface BillRow {
-  id: string
-  bill_number: string
-  plain_title: string
-  headline: string
-  status: string
-  impact_level: string
-  introduced_date: string
 }
 
 export default function DrillDownPanel({ title, searchParams, viewAllHref, onClose }: Props) {
@@ -69,7 +60,7 @@ export default function DrillDownPanel({ title, searchParams, viewAllHref, onClo
       false,
       searchParams.billType ?? '',
       searchParams.committee ?? '',
-    ).then((d: any) => {
+    ).then((d) => {
       setBills(d?.results ?? [])
       setTotal(d?.total ?? 0)
       setLoading(false)

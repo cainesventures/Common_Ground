@@ -9,6 +9,11 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { usePostHog } from 'posthog-js/react'
+// Shared with the bill page, which passes `leg.perspectives` straight in. A
+// stricter local copy used to live here, so the two types disagreed on
+// nullability and the handoff only compiled because the bill was `any`.
+import type { Perspective } from '@/lib/types'
+import { errorMessage } from '@/lib/utils'
 
 const GROUP_COLORS: Record<string, string> = {
   Political:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -84,14 +89,6 @@ function timeAgo(isoDate: string): string {
   return `${Math.floor(months / 12)}y ago`
 }
 
-interface Perspective {
-  perspective_type: string
-  position: string
-  key_arguments: string[] | string
-  concerns?: string
-  assessment?: string
-  generated_at?: string
-}
 
 function PerspectivesTally({
   perspectives, pending, billId, isAdmin, generating, generate, isBusy,
@@ -307,11 +304,12 @@ export function PerspectivesPanel({
       if (cancelRef.current) break
       try {
         const data = await api.generatePerspective(billId, ptype)
-        if (data?.perspective_type) {
+        const generatedType = data?.perspective_type
+        if (data && generatedType) {
           setPerspectives((prev) => {
-            const filtered = prev.filter((p) => p.perspective_type !== data.perspective_type)
+            const filtered = prev.filter((p) => p.perspective_type !== generatedType)
             return [...filtered, {
-              perspective_type: data.perspective_type,
+              perspective_type: generatedType,
               position: data.position,
               key_arguments: data.key_arguments,
               concerns: data.concerns,
@@ -321,8 +319,8 @@ export function PerspectivesPanel({
           })
           setPending((prev) => prev.filter((t) => t !== ptype))
         }
-      } catch (err: any) {
-        console.warn(`Failed to generate ${ptype}:`, err?.message)
+      } catch (err: unknown) {
+        console.warn(`Failed to generate ${ptype}:`, errorMessage(err))
       }
       done++
       setBulkProgress({ done, total: toGenerate.length })
@@ -341,8 +339,8 @@ export function PerspectivesPanel({
       setPerspectives([])
       setPending(await api.getPerspectives(billId).then((d) => d?.pending_types ?? []))
       onLoad?.(0)
-    } catch (err: any) {
-      setGenerateError(err?.message ?? 'Failed to clear perspectives.')
+    } catch (err: unknown) {
+      setGenerateError(errorMessage(err, 'Failed to clear perspectives.'))
     } finally {
       setBulkRunning(null)
     }
@@ -353,11 +351,12 @@ export function PerspectivesPanel({
     setGenerateError(null)
     try {
       const data = await api.generatePerspective(billId, perspType, force)
-      if (data?.perspective_type) {
+      const generatedType = data?.perspective_type
+      if (data && generatedType) {
         setPerspectives((prev) => {
-          const filtered = prev.filter((p) => p.perspective_type !== data.perspective_type)
+          const filtered = prev.filter((p) => p.perspective_type !== generatedType)
           const next = [...filtered, {
-            perspective_type: data.perspective_type,
+            perspective_type: generatedType,
             position: data.position,
             key_arguments: data.key_arguments,
             concerns: data.concerns,
@@ -369,8 +368,8 @@ export function PerspectivesPanel({
         })
         setPending((prev) => prev.filter((t) => t !== perspType))
       }
-    } catch (err: any) {
-      setGenerateError(err?.message ?? 'Generation failed — Ollama may not be installed or could not start.')
+    } catch (err: unknown) {
+      setGenerateError(errorMessage(err, 'Generation failed — Ollama may not be installed or could not start.'))
     } finally {
       setGenerating(null)
     }

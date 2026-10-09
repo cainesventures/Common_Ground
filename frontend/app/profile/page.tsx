@@ -8,10 +8,11 @@ import { Badge } from '@/components/ui/badge'
 import { api } from '@/lib/api'
 import { isLoggedIn, clearToken } from '@/lib/auth'
 import { useTheme } from '@/components/ThemeToggle'
+import type { AuthUser } from '@/lib/types'
 
 export default function ProfilePage() {
   const router = useRouter()
-  const [user, setUser] = useState<any>(null)
+  const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
   const { theme, setTheme } = useTheme()
 

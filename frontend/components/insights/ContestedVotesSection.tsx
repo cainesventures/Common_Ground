@@ -1,45 +1,15 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import type {
+  AgreementMatrixResponse as MatrixData,
+  ContestedBillRow,
+  VotingMemberRow,
+} from '@/lib/api-types'
 import { api } from '@/lib/api'
 import { lastName } from '@/lib/names'
 
 // ── Types (mirror /api/insights vote analytics responses) ────────────────────
-
-interface ContestedBillRow {
-  id: string
-  bill_number: string
-  title: string
-  status: string
-  impact_score: number | null
-  year: number | null
-  yeas: number
-  nays: number
-  dissenters: string[]
-}
-
-interface VotingMemberRow {
-  voter_name: string
-  short_name: string
-  is_current: boolean
-  councilmember_id: string | null
-  district: string | null
-  party: string | null
-  total_votes: number
-  yeas: number
-  nays: number
-  abstains: number
-  absents: number
-  presents: number
-  contested_votes: number
-  dissent_rate: number
-}
-
-interface MatrixData {
-  voters: { voter_name: string; short_name: string; is_current: boolean; contested_votes: number }[]
-  matrix: (number | null)[][]
-  min_shared: number
-}
 
 const CURRENT_YEAR = new Date().getFullYear()
 const YEARS = Array.from({ length: CURRENT_YEAR - 2000 + 1 }, (_, i) => CURRENT_YEAR - i)

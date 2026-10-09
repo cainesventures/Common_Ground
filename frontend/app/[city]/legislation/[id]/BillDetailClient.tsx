@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
+import type { ActionResult, VoteTally } from '@/lib/api-types'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -14,6 +15,19 @@ import { STATUS_COLORS, STATUS_COLORS_FALLBACK, IMPACT_COLORS, VOTE_COLORS as VO
 import { fmtStatus } from '@/lib/utils'
 import { CITY } from '@/lib/city'
 import { LoginModal } from '@/components/LoginModal'
+import { ShareBar } from '@/components/ShareBar'
+import { siteUrl } from '@/lib/site'
+import { useTabs } from '@/lib/use-tabs'
+import type { Bill, Councilmember, DistrictGeoJSON, Perspective, VoteRecord } from '@/lib/types'
+
+/** Does this bill have any news links? Cheap check for the tab filter, which
+ *  runs before the full parse below. */
+function hasNewsLinks(leg: Bill): boolean {
+  const raw = leg.news_links
+  if (!raw) return false
+  if (Array.isArray(raw)) return raw.length > 0
+  return raw !== '[]'
+}
 
 const LEVEL_LABELS: Record<string, string> = {
   federal: 'Federal',
@@ -92,7 +106,7 @@ const VOTE_COLORS: Record<string, string> = {
 
 function RollCallSection({ legislationId }: { legislationId: string }) {
   const { city } = useParams<{ city: string }>()
-  const [records, setRecords] = useState<any[]>([])
+  const [records, setRecords] = useState<VoteRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -166,7 +180,7 @@ const CITIZEN_TO_LEGISTAR: Record<string, string> = {
 
 function RepVoteCallout({ legislationId, members, yourVote }: {
   legislationId: string
-  members: any[]
+  members: Councilmember[]
   yourVote: string | null
 }) {
   const { city } = useParams<{ city: string }>()
@@ -184,7 +198,7 @@ function RepVoteCallout({ legislationId, members, yourVote }: {
       api.getRollCall(legislationId),
     ]).then(([result, rollCallData]) => {
       if (typeof result === 'string') return
-      const rollCall: any[] = rollCallData?.data ?? []
+      const rollCall: VoteRecord[] = rollCallData?.data ?? []
       const memberLastName = result.member.name.split(' ').pop()?.toLowerCase() ?? ''
       const matchedVote = rollCall.find((r) => {
         const lastName = r.voter_name.split(',')[0].trim().toLowerCase()
@@ -242,18 +256,18 @@ function pipTest(lat: number, lng: number, ring: number[][]): boolean {
   }
   return inside
 }
-function districtFromGeoJSON(lat: number, lng: number, geojson: any): number | null {
+function districtFromGeoJSON(lat: number, lng: number, geojson: DistrictGeoJSON): number | null {
   for (const f of (geojson.features ?? [])) {
     const p = f?.properties ?? {}
     const num = Number(p?.DISTRICT ?? p?.District ?? p?.district ?? p?.DIST_NUM ?? p?.districtNum ?? NaN)
     if (isNaN(num)) continue
-    const rings: number[][][] = f.geometry?.type === 'Polygon' ? [f.geometry.coordinates[0]]
-      : f.geometry?.type === 'MultiPolygon' ? f.geometry.coordinates.map((c: any) => c[0]) : []
+    const rings: number[][][] = f.geometry?.type === 'Polygon' ? [(f.geometry.coordinates as number[][][])[0]]
+      : f.geometry?.type === 'MultiPolygon' ? (f.geometry.coordinates as number[][][][]).map((c) => c[0]) : []
     for (const ring of rings) { if (pipTest(lat, lng, ring)) return num }
   }
   return null
 }
-async function resolveCouncilmember(address: string, members: any[]): Promise<{ member: any; district: string } | string> {
+async function resolveCouncilmember(address: string, members: Councilmember[]): Promise<{ member: Councilmember; district: string } | string> {
   const geoAbort = new AbortController()
   const geoTimeout = setTimeout(() => geoAbort.abort(), 8000)
   const geoRes = await fetch(
@@ -268,20 +282,20 @@ async function resolveCouncilmember(address: string, members: any[]): Promise<{ 
   const geojson = await gjRes.json()
   const num = districtFromGeoJSON(lat, lng, geojson)
   if (!num) return 'Could not match that address to a Philadelphia district.'
-  const member = members.find((m: any) => m.district === `District ${num}`)
+  const member = members.find((m) => m.district === `District ${num}`)
   if (!member) return `Found District ${num} but no matching councilmember on file.`
   return { member, district: `District ${num}` }
 }
 
 const ADDRESS_KEY = 'cg_user_address'
 
-function ContactMyCouncilmember({ members, billTitle, billNumber }: { members: any[]; billTitle: string; billNumber: string }) {
+function ContactMyCouncilmember({ members, billTitle, billNumber }: { members: Councilmember[]; billTitle: string; billNumber: string }) {
   const [address, setAddress] = useState(() => (typeof window !== 'undefined' ? localStorage.getItem(ADDRESS_KEY) ?? '' : ''))
   const [showPrompt, setShowPrompt] = useState(false)
   const [inputVal, setInputVal] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [member, setMember] = useState<any>(null)
+  const [member, setMember] = useState<Councilmember | null>(null)
 
   const resolveAndOpen = async (addr: string) => {
     setLoading(true); setError(null)
@@ -355,7 +369,7 @@ function ContactMyCouncilmember({ members, billTitle, billNumber }: { members: a
   )
 }
 
-function openGmail(member: any, billTitle: string, billNumber: string) {
+function openGmail(member: Councilmember, billTitle: string, billNumber: string) {
   const subject = `Philadelphia City Council — ${billNumber}`
   const body = `Dear ${member.name},
 
@@ -468,13 +482,13 @@ function StatusTimeline({ status }: { status: string }) {
 
 function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[]; sponsor?: string }) {
   const { city } = useParams<{ city: string }>()
-  const [bills, setBills] = useState<any[]>([])
+  const [bills, setBills] = useState<Bill[]>([])
 
   useEffect(() => {
     const firstTag = tags[0]
     if (!firstTag && !sponsor) return
 
-    const fetches: Promise<any[]>[] = []
+    const fetches: Promise<Bill[]>[] = []
     if (firstTag) {
       fetches.push(
         api.searchLegislation('', 6, 0, '', '', firstTag, '', 0, 0, '', '')
@@ -493,7 +507,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
 
     Promise.all(fetches).then((results) => {
       const seen = new Set([billId])
-      const merged: any[] = []
+      const merged: Bill[] = []
       for (const list of results) {
         for (const b of list) {
           if (!seen.has(b.id)) { seen.add(b.id); merged.push(b) }
@@ -534,7 +548,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
   )
 }
 
-function SponsorLinks({ sponsor, members }: { sponsor: string; members: any[] }) {
+function SponsorLinks({ sponsor, members }: { sponsor: string; members: Councilmember[] }) {
   const { city } = useParams<{ city: string }>()
   if (!sponsor) return null
   // Split multiple sponsors by comma
@@ -587,18 +601,18 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'perspectives', label: 'Perspectives' },
 ]
 
-export default function BillDetailClient({ initialBill = null }: { initialBill?: any }) {
+export default function BillDetailClient({ initialBill = null }: { initialBill?: Bill | null }) {
   const { city, id } = useParams<{ city: string; id: string }>()
   const searchParams = useSearchParams()
   // Seeded from the server so the bill renders during SSR instead of falling
   // into the `if (loading) return null` branch below, which is what left
   // crawlers with an empty page. The client still refetches on mount to pick up
   // per-user state (tracking, admin) and any newer data.
-  const [leg, setLeg] = useState<any>(initialBill)
-  const [members, setMembers] = useState<any[]>([])
+  const [leg, setLeg] = useState<Bill | null>(initialBill)
+  const [members, setMembers] = useState<Councilmember[]>([])
   const [loading, setLoading] = useState(!initialBill)
   const [tracked, setTracked] = useState(false)
-  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
+  const [voteCounts, setVoteCounts] = useState<VoteTally>({ support: 0, neutral: 0, oppose: 0, total: 0 })
   const [isAdmin, setIsAdmin] = useState(false)
   const [copied, setCopied] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
@@ -624,11 +638,25 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     })
   }
   const loggedIn = isLoggedIn()
+  // Built from the canonical origin, not window.location, so the value is the
+  // same on the server render and after hydration.
+  const shareUrl = siteUrl(`/${city}/legislation/${id}`)
 
-  const loadData = useCallback(() => {
+  // page.tsx already fetched this bill server-side (ISR, revalidate 3600) and
+  // handed it down as initialBill — and getBill returns the same `data.data`
+  // shape api.getLegislation does. Re-fetching it on mount threw that away and
+  // cost a second full payload, full_text included, on every one of the ~8,700
+  // bill pages. So the seed satisfies the first load; only the auxiliary
+  // per-user calls go out. An admin refresh still forces a real refetch.
+  const seedAvailable = useRef(Boolean(initialBill))
+
+  const loadData = useCallback((opts?: { force?: boolean }) => {
+    const useSeed = seedAvailable.current && !opts?.force
+    seedAvailable.current = false
+
     // Phase 1: load bill (includes perspectives + vote_records inline)
     Promise.all([
-      api.getLegislation(id),
+      useSeed ? Promise.resolve({ data: initialBill }) : api.getLegislation(id),
       api.getCouncilmembers().catch(() => ({ members: [] })),
       loggedIn ? api.getTrackedBillIds().catch(() => ({ ids: [] })) : Promise.resolve({ ids: [] }),
       loggedIn ? api.getMe().catch(() => null) : Promise.resolve(null),
@@ -653,7 +681,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [id, loggedIn])
+  }, [id, loggedIn, initialBill])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -681,6 +709,22 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     }
   }, [id, posthog])
 
+  // Several tabs hide themselves when they have nothing to show, so arrow-key
+  // navigation has to run over what is actually rendered, not all of TABS.
+  //
+  // Computed before the early returns below, and null-safe for that reason:
+  // useTabs is a hook, so it has to be called on every render in the same
+  // order — including the loading and not-found renders.
+  const visibleTabs = TABS.filter((tab) => {
+    if (!leg) return tab.key === 'summary'
+    if (tab.key === 'text') return !!(leg.full_text && leg.full_text !== leg.description)
+    const isOpenBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '')
+    if (tab.key === 'perspectives') return isOpenBill || perspectivesCount > 0
+    if (tab.key === 'news') return isOpenBill || hasNewsLinks(leg)
+    return true
+  })
+  const billTabs = useTabs(visibleTabs.map((t) => t.key), activeTab, setActiveTab)
+
   if (loading) return null
 
   if (!leg) return (
@@ -689,14 +733,14 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     </div>
   )
 
-  const statusColor = STATUS_COLORS[leg.status] ?? STATUS_COLORS_FALLBACK
+  const statusColor = (leg.status ? STATUS_COLORS[leg.status] : undefined) ?? STATUS_COLORS_FALLBACK
   const impactColor = leg.impact_level ? IMPACT_COLORS[leg.impact_level] : null
 
   let tags: string[] = []
-  try { tags = leg.tags ? JSON.parse(leg.tags) : [] } catch { tags = [] }
+  try { tags = Array.isArray(leg.tags) ? leg.tags : leg.tags ? JSON.parse(leg.tags) : [] } catch { tags = [] }
 
   let newsLinks: { title: string; url: string; source: string; published: string }[] = []
-  try { newsLinks = leg.news_links ? JSON.parse(leg.news_links) : [] } catch { newsLinks = [] }
+  try { newsLinks = Array.isArray(leg.news_links) ? (leg.news_links as typeof newsLinks) : leg.news_links ? JSON.parse(leg.news_links) : [] } catch { newsLinks = [] }
 
   type ContextSection = { label: string; stats: Record<string, string>; source: string }
   let cityContext: ContextSection[] = []
@@ -750,7 +794,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       <div>
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <Badge variant="outline" className="text-xs">
-            {LEVEL_LABELS[leg.level] ?? leg.level}
+            {(leg.level ? LEVEL_LABELS[leg.level] : undefined) ?? leg.level}
           </Badge>
           <Badge variant="outline" className={`text-xs ${statusColor}`}>
             {leg.status ? fmtStatus(leg.status) : ''}
@@ -906,14 +950,12 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       />
 
       {/* Tab bar — shifts down when sticky header is showing (navbar 56px + sticky header ~48px = 104px) */}
-      <div className={`flex border-b gap-0 sticky ${stickyVisible ? 'top-[6.5rem]' : 'top-14'} bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-[top] duration-150`}>
-        {TABS.filter((tab) => {
-          if (tab.key === 'text') return !!(leg.full_text && leg.full_text !== leg.description)
-          const isActive = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase())
-          if (tab.key === 'perspectives') return isActive || perspectivesCount > 0
-          if (tab.key === 'news') return isActive || newsLinks.length > 0
-          return true
-        }).map((tab) => {
+      <div
+        {...billTabs.tablistProps}
+        aria-label="Bill sections"
+        className={`flex border-b gap-0 sticky ${stickyVisible ? 'top-[6.5rem]' : 'top-14'} bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-[top] duration-150`}
+      >
+        {visibleTabs.map((tab) => {
           const badge =
             tab.key === 'perspectives' && perspectivesCount > 0 ? perspectivesCount :
             tab.key === 'news'         && newsLinks.length > 0   ? newsLinks.length :
@@ -922,7 +964,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           return (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              {...billTabs.tabProps(tab.key)}
               className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
                 activeTab === tab.key
                   ? 'border-primary text-primary'
@@ -946,17 +988,17 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 
       {/* ── Summary tab ─────────────────────────────────────── */}
       {activeTab === 'summary' && (
-        <div className="space-y-6">
+        <div {...billTabs.panelProps('summary')} className="space-y-6">
           {/* Upcoming Hearing Banner — most time-sensitive, first */}
           {leg.next_hearing_date && (
             <HearingBanner
               date={leg.next_hearing_date}
-              time={leg.next_hearing_time}
-              body={leg.next_hearing_body}
-              location={leg.next_hearing_location}
-              meetingUrl={leg.next_hearing_url}
-              billTitle={leg.plain_title || leg.title}
-              billNumber={leg.bill_number}
+              time={leg.next_hearing_time ?? undefined}
+              body={leg.next_hearing_body ?? undefined}
+              location={leg.next_hearing_location ?? undefined}
+              meetingUrl={leg.next_hearing_url ?? undefined}
+              billTitle={leg.plain_title || leg.title || ''}
+              billNumber={leg.bill_number ?? ''}
             />
           )}
 
@@ -973,13 +1015,13 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           {members.length > 0 && (
             <ContactMyCouncilmember
               members={members}
-              billTitle={leg.plain_title || leg.title}
-              billNumber={leg.bill_number}
+              billTitle={leg.plain_title || leg.title || ''}
+              billNumber={leg.bill_number ?? ''}
             />
           )}
 
           {/* Related bills — discovery, shown right after the summary */}
-          <RelatedBills billId={id} tags={tags} sponsor={leg.sponsor} />
+          <RelatedBills billId={id} tags={tags} sponsor={leg.sponsor ?? undefined} />
 
           {/* Philadelphia Context */}
           {cityContext.length > 0 && (
@@ -1017,8 +1059,8 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       */}
       {/* Mirrors the tab's own visibility rule above, so a bill with nothing to
           show does not carry an empty heading around in hidden markup. */}
-      {(['introduced', 'in_committee'].includes(leg.status?.toLowerCase()) || perspectivesCount > 0) && (
-        <div className={activeTab === 'perspectives' ? 'space-y-4' : 'hidden'}>
+      {(['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '') || perspectivesCount > 0) && (
+        <div {...billTabs.panelProps('perspectives')} className={activeTab === 'perspectives' ? 'space-y-4' : 'hidden'}>
           <div>
             <h2 className="text-lg font-semibold">AI Perspectives</h2>
             <p className="text-xs text-muted-foreground mt-0.5">Simulated viewpoints generated by AI — not real people</p>
@@ -1035,7 +1077,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 
       {/* ── Votes tab ────────────────────────────────────────── */}
       {activeTab === 'votes' && (
-        <div className="space-y-6">
+        <div {...billTabs.panelProps('votes')} className="space-y-6">
           <RollCallSection legislationId={id} />
           <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} />
           <RepVoteCallout legislationId={id} members={members} yourVote={yourVote} />
@@ -1045,7 +1087,8 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 
       {/* ── News tab ─────────────────────────────────────────── */}
       {activeTab === 'news' && (
-        newsLinks.length > 0 ? (
+        <div {...billTabs.panelProps('news')}>
+        {newsLinks.length > 0 ? (
           <div className="space-y-2">
             {newsLinks.map((article, i) => (
               <a
@@ -1070,12 +1113,13 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           </div>
         ) : (
           <p className="text-sm text-muted-foreground py-8 text-center">No news coverage found for this bill.</p>
-        )
+        )}
+        </div>
       )}
 
       {/* ── Text tab ─────────────────────────────────────────── */}
       {activeTab === 'text' && (
-        <div className="space-y-5">
+        <div {...billTabs.panelProps('text')} className="space-y-5">
           {leg.description && !leg.summary && (
             <div className="border rounded-lg p-5 space-y-1">
               <h2 className="text-sm font-semibold">Description</h2>
@@ -1109,8 +1153,24 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         </div>
       )}
 
+      {/*
+        Full share targets, placed after the content rather than in the header
+        toolbar — this is where a reader who actually finished the bill is. The
+        compact copy-link icon stays up top for the quick case. Until now the
+        icon was the only option anywhere, which left the dynamic OG image for
+        this page with essentially no way of being used.
+      */}
+      <div className="border-t pt-5">
+        <ShareBar
+          url={shareUrl}
+          title={leg.plain_title || leg.headline || leg.title || `Bill ${leg.bill_number ?? ''}`}
+          event="bill_shared"
+          eventProps={{ bill_id: id }}
+        />
+      </div>
+
       {/* Admin floating panel — always visible */}
-      {isAdmin && <AdminFloatingPanel billId={id} leg={leg} onRefresh={loadData} />}
+      {isAdmin && leg && <AdminFloatingPanel billId={id} leg={leg} onRefresh={() => loadData({ force: true })} />}
 
       <Link href={`/${city}/legislation`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
         ← All legislation
@@ -1124,20 +1184,20 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 type AdminAction = {
   label: string
   runningLabel: string
-  fn: () => Promise<any>
+  fn: () => Promise<ActionResult | null>
   disabled?: boolean
   disabledReason?: string
   warn?: boolean
 }
 
-function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: any; onRefresh: () => void }) {
+function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: Bill; onRefresh: () => void }) {
   const [open, setOpen] = useState(false)
   const [running, setRunning] = useState<string | null>(null)
   const [results, setResults] = useState<Record<string, { ok: boolean; message: string }>>({})
 
-  const run = async (key: string, fn: () => Promise<any>) => {
+  const run = async (key: string, fn: () => Promise<ActionResult | null>) => {
     setRunning(key)
-    setResults((r) => ({ ...r, [key]: undefined as any }))
+    setResults((r) => { const next = { ...r }; delete next[key]; return next })
     try {
       const data = await fn()
       let msg = 'Done'
@@ -1147,8 +1207,8 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
       if (key === 'news') msg = `Found ${data?.articles_found ?? 0} articles`
       setResults((r) => ({ ...r, [key]: { ok: true, message: msg } }))
       onRefresh()
-    } catch (err: any) {
-      setResults((r) => ({ ...r, [key]: { ok: false, message: err?.message ?? 'Failed' } }))
+    } catch (err: unknown) {
+      setResults((r) => ({ ...r, [key]: { ok: false, message: err instanceof Error ? err.message : 'Failed' } }))
     } finally {
       setRunning(null)
     }
@@ -1156,9 +1216,9 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
 
   const isBusy = running !== null
 
-  const isActiveBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase())
+  const isActiveBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '')
 
-  const actions: { key: string; label: string; runningLabel: string; fn: () => Promise<any>; warn?: boolean; disabled?: boolean; disabledReason?: string }[] = [
+  const actions: { key: string; label: string; runningLabel: string; fn: () => Promise<ActionResult | null>; warn?: boolean; disabled?: boolean; disabledReason?: string }[] = [
     {
       key: 'details',
       label: 'Fetch Full Text & Sponsors',
@@ -1195,9 +1255,9 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
     { label: 'Sponsor',      ok: !!leg.sponsor },
     { label: 'Analyzed',     ok: !!leg.analyzed_at },
     { label: 'Summary',      ok: !!leg.summary },
-    { label: 'Tags',         ok: !!leg.tags && leg.tags !== '[]' },
+    { label: 'Tags',         ok: !!leg.tags && leg.tags !== '[]' && (!Array.isArray(leg.tags) || leg.tags.length > 0) },
     { label: 'Plain title',  ok: !!leg.plain_title },
-    { label: 'News',         ok: !!leg.news_links && leg.news_links !== '[]' },
+    { label: 'News',         ok: !!leg.news_links && leg.news_links !== '[]' && (!Array.isArray(leg.news_links) || leg.news_links.length > 0) },
     { label: 'City context', ok: !!leg.supplementary_data },
   ]
 
@@ -1276,11 +1336,11 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: a
 
 // ── Combined Sentiment Bar ────────────────────────────────────────────────────
 
-function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { perspectives: { position: string }[]; voteCounts: Record<string, number> }) {
+function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { perspectives: Perspective[]; voteCounts: VoteTally }) {
   const perspCounts = (() => {
     const p = { support: 0, neutral: 0, oppose: 0 } as Record<string, number>
     for (const persp of perspectivesProp ?? []) {
-      const pos = persp.position === 'mixed' ? 'neutral' : persp.position
+      const pos = persp.position === 'mixed' ? 'neutral' : persp.position ?? ''
       if (pos in p) p[pos]++
     }
     return p
@@ -1335,8 +1395,8 @@ function _getOrCreateVoterToken(): string {
   return token
 }
 
-function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: string; onCountsChange?: (c: Record<string, number>) => void; onVoteChange?: (v: string | null) => void; inline?: boolean }) {
-  const [counts, setCounts] = useState<Record<string, number>>({ support: 0, neutral: 0, oppose: 0 })
+function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: string; onCountsChange?: (c: VoteTally) => void; onVoteChange?: (v: string | null) => void; inline?: boolean }) {
+  const [counts, setCounts] = useState<VoteTally>({ support: 0, neutral: 0, oppose: 0, total: 0 })
   const [myVote, setMyVote] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
@@ -1344,7 +1404,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
   const voterToken = typeof window !== 'undefined' ? _getOrCreateVoterToken() : ''
   const posthog = usePostHog()
 
-  const updateCounts = useCallback((c: Record<string, number>) => {
+  const updateCounts = useCallback((c: VoteTally) => {
     setCounts(c)
     onCountsChange?.(c)
   }, [onCountsChange])

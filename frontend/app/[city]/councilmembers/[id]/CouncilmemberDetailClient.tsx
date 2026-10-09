@@ -11,6 +11,11 @@ import { fmtStatus } from '@/lib/utils'
 import { isLoggedIn } from '@/lib/auth'
 import { CITY } from '@/lib/city'
 import { LoginModal } from '@/components/LoginModal'
+import type { Bill, Councilmember, CouncilmemberProfile, MemberVoteRecord } from '@/lib/types'
+import { ShareBar } from '@/components/ShareBar'
+import { useTabs } from '@/lib/use-tabs'
+import type { LegislativeProfile as Profile } from '@/lib/api-types'
+import { siteUrl } from '@/lib/site'
 
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -154,29 +159,6 @@ function SponsorActivityChart({ sponsorName }: { sponsorName: string }) {
 
 // ── Legislative profile (bill analysis) ────────────────────────────────────────
 
-interface Profile {
-  outcomes: { total: number; signed: number; failed_vetoed: number; died_in_committee: number; active: number; pass_rate: number | null }
-  top_tags: { tag: string; count: number }[]
-  bill_types: Record<string, number>
-  impact: { levels: Record<string, number>; avg_score: number | null }
-  committees: { committee: string; count: number }[]
-  median_days_to_passage: number | null
-  voting: {
-    total_votes: number; absent: number; dissents: number; attendance_rate: number | null
-    dissent_bills: DissentBill[]
-  }
-}
-
-interface DissentBill {
-  id: string
-  bill_number: string
-  title: string
-  status: string
-  action_date: string | null
-  yeas: number
-  nays: number
-}
-
 const OUTCOME_SEGMENTS: { key: keyof Profile['outcomes']; label: string; color: string }[] = [
   { key: 'signed',            label: 'Signed into law',  color: '#22c55e' },
   { key: 'active',            label: 'Active',           color: '#3b82f6' },
@@ -188,7 +170,7 @@ function OutcomeBillList({ memberId, outcome, total, label }: {
   memberId: string; outcome: string; total: number; label: string
 }) {
   const { city } = useParams<{ city: string }>()
-  const [bills, setBills] = useState<any[]>([])
+  const [bills, setBills] = useState<Bill[]>([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const LIMIT = 10
@@ -560,7 +542,7 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
   )
 }
 
-function ContactSection({ member }: { member: any }) {
+function ContactSection({ member }: { member: Councilmember }) {
   const [phoneCopied, setPhoneCopied] = useState(false)
 
   const subject = `${CITY.fullCouncilName} — Constituent Message`
@@ -636,7 +618,7 @@ const VOTE_BADGE: Record<string, string> = {
 
 function VoteHistorySection({ memberId }: { memberId: string }) {
   const { city } = useParams<{ city: string }>()
-  const [records, setRecords]   = useState<any[]>([])
+  const [records, setRecords]   = useState<MemberVoteRecord[]>([])
   const [total, setTotal]       = useState(0)
   const [page, setPage]         = useState(1)
   const [loading, setLoading]   = useState(true)
@@ -747,13 +729,14 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const BILLS_PER_PAGE = 20
 
-export default function CouncilmemberDetailClient({ initialData = null }: { initialData?: any }) {
+export default function CouncilmemberDetailClient({ initialData = null }: { initialData?: CouncilmemberProfile | null }) {
   const { city, id } = useParams<{ city: string; id: string }>()
   // Seeded from the server so the profile renders during SSR rather than
   // hitting the skeleton branch below, which is all a crawler used to receive.
-  const [data, setData]           = useState<any>(initialData)
+  const [data, setData]           = useState<CouncilmemberProfile | null>(initialData)
   const [loading, setLoading]     = useState(!initialData)
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
+  const memberTabs = useTabs(TABS.map((t) => t.key), activeTab, setActiveTab)
   const [billsPage, setBillsPage]     = useState(1)
   const [billsLoading, setBillsLoading] = useState(false)
 
@@ -771,7 +754,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
     setBillsLoading(true)
     try {
       const d = await api.getCouncilmember(id, page, BILLS_PER_PAGE)
-      setData((prev: any) => ({ ...prev, bills: d?.bills }))
+      setData((prev) => (prev ? { ...prev, bills: d?.bills ?? prev.bills } : prev))
       setBillsPage(page)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch { /* ignore */ }
@@ -800,10 +783,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
     <div className="text-center py-16 text-muted-foreground">Council member not found.</div>
   )
 
-  const { member, bills } = data as {
-    member: any & { term_start?: number; years_serving?: number; next_election?: number }
-    bills: any
-  }
+  const { member, bills } = data
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -843,11 +823,11 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
       </div>
 
       {/* ── Tab bar ── */}
-      <div className="flex border-b overflow-x-auto scrollbar-hide">
+      <div {...memberTabs.tablistProps} aria-label="Council member sections" className="flex border-b overflow-x-auto scrollbar-hide">
         {TABS.map((tab) => (
           <button
             key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
+            {...memberTabs.tabProps(tab.key)}
             className={`px-4 py-2.5 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
               activeTab === tab.key
                 ? 'border-primary text-foreground'
@@ -866,7 +846,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
 
       {/* ── Overview tab ── */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <div {...memberTabs.panelProps('overview')} className="space-y-6">
           {/* Stats grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="border rounded-lg p-4 text-center">
@@ -886,7 +866,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
               </div>
             )}
             <div className="border rounded-lg p-4 text-center">
-              <p className="text-2xl font-bold">{member.district === 'At-Large' ? '–' : member.district.replace('District ', '')}</p>
+              <p className="text-2xl font-bold">{member.district === 'At-Large' ? '–' : (member.district ?? '').replace('District ', '')}</p>
               <p className="text-xs text-muted-foreground mt-1">{member.district === 'At-Large' ? 'At-Large' : 'District'}</p>
             </div>
           </div>
@@ -912,7 +892,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
 
       {/* ── Bills tab ── */}
       {activeTab === 'bills' && (
-        <div className="space-y-3">
+        <div {...memberTabs.panelProps('bills')} className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Bills sponsored by {member.name.split(' ')[0]}
             {bills?.total > 0 ? ` · ${bills.total} total` : ''}
@@ -926,7 +906,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
           ) : (
             <>
               <div className={`space-y-2 transition-opacity ${billsLoading ? 'opacity-50' : 'opacity-100'}`}>
-                {bills.results.map((bill: any) => (
+                {bills.results.map((bill) => (
                   <Link
                     key={bill.id}
                     href={`/${city}/legislation/${bill.id}`}
@@ -949,7 +929,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
                           {bill.impact_level}
                         </span>
                       )}
-                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${STATUS_COLORS[bill.status] ?? 'bg-gray-100 text-gray-700'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full capitalize ${(bill.status ? STATUS_COLORS[bill.status] : undefined) ?? 'bg-gray-100 text-gray-700'}`}>
                         {bill.status ? fmtStatus(bill.status) : ''}
                       </span>
                     </div>
@@ -986,7 +966,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
 
       {/* ── Votes tab ── */}
       {activeTab === 'votes' && (
-        <div className="space-y-6">
+        <div {...memberTabs.panelProps('votes')} className="space-y-6">
           <VoteHistorySection memberId={id} />
           <SponsorActivityChart sponsorName={member.name} />
         </div>
@@ -994,8 +974,21 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
 
       {/* ── Map tab ── */}
       {activeTab === 'map' && (
-        <DistrictMap district={member.district} />
+        <div {...memberTabs.panelProps('map')}>
+          <DistrictMap district={member.district ?? ''} />
+        </div>
       )}
+
+      {/* These pages had no share affordance at all, despite having their own
+          dynamic OG image route. */}
+      <div className="border-t pt-5">
+        <ShareBar
+          url={siteUrl(`/${city}/councilmembers/${member.id}`)}
+          title={`${member.name} — Philadelphia City Council`}
+          event="member_shared"
+          eventProps={{ member_id: member.id }}
+        />
+      </div>
 
       <Link href={`/${city}/councilmembers`} className="inline-block text-sm text-muted-foreground hover:text-foreground transition-colors pt-2">
         ← All council members

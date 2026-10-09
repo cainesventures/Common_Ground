@@ -1,30 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { MetricsResponse } from '@/lib/api-types'
+
+type Metrics = MetricsResponse['metrics']
+import { errorMessage } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { api } from '@/lib/api'
 import { getAdminMode } from '@/lib/admin-mode'
-
-interface Metrics {
-  bills: {
-    total: number
-    analyzed: number
-    local: number
-    with_news: number
-    analysis_rate_pct: number
-  }
-  perspectives: {
-    total: number
-    by_position: Record<string, number>
-  }
-  users: {
-    total: number
-    digest_opted_in: number
-  }
-  tracking: {
-    total_saves: number
-  }
-}
 
 const POSITION_COLORS: Record<string, string> = {
   support:  'bg-green-500',
@@ -59,7 +42,7 @@ export default function DashboardPage() {
         return null
       })
       .then((data) => data && setMetrics(data?.metrics ?? null))
-      .catch((e) => setError(e.message))
+      .catch((e: unknown) => setError(errorMessage(e)))
       .finally(() => setLoading(false))
   }, [router])
 
@@ -86,7 +69,7 @@ export default function DashboardPage() {
 
   const VALID_POSITIONS = new Set(['support', 'oppose', 'neutral', 'mixed'])
   const normalizedPositions: Record<string, number> = {}
-  for (const [pos, count] of Object.entries(metrics.perspectives.by_position)) {
+  for (const [pos, count] of Object.entries(metrics.perspectives.by_position ?? {})) {
     const p = pos.toLowerCase()
     let key: string
     if (VALID_POSITIONS.has(p)) key = p
@@ -121,7 +104,7 @@ export default function DashboardPage() {
             value={(metrics.bills.total - metrics.bills.analyzed).toLocaleString()}
             sub="not yet analyzed"
           />
-          <StatCard label="With News" value={metrics.bills.with_news.toLocaleString()} />
+          <StatCard label="With News" value={(metrics.bills.with_news ?? 0).toLocaleString()} />
         </div>
 
         {/* Analysis progress bar */}
@@ -187,8 +170,8 @@ export default function DashboardPage() {
           <StatCard label="Registered Users" value={metrics.users.total.toLocaleString()} />
           <StatCard
             label="Digest Opt-ins"
-            value={metrics.users.digest_opted_in.toLocaleString()}
-            sub={metrics.users.total ? `${Math.round(metrics.users.digest_opted_in / metrics.users.total * 100)}% of users` : undefined}
+            value={(metrics.users.digest_opted_in ?? 0).toLocaleString()}
+            sub={metrics.users.total ? `${Math.round((metrics.users.digest_opted_in ?? 0) / metrics.users.total * 100)}% of users` : undefined}
           />
           <StatCard label="Total Bill Saves" value={metrics.tracking.total_saves.toLocaleString()} />
         </div>

@@ -7,6 +7,23 @@ import { api } from '@/lib/api'
 import { startGoogleSignIn } from '@/lib/auth'
 import { BillCard, type BillCardBill } from '@/components/BillCard'
 
+/**
+ * Tracks prefers-reduced-motion. CSS handles the keyframes (see globals.css),
+ * but the two carousels on this page advance on a timer, and no media query can
+ * stop a setInterval — so they read this and simply do not auto-advance.
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setReduced(mq.matches)
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return reduced
+}
+
 function useInView(ref: RefObject<HTMLElement | null>, threshold = 0.15) {
   const [inView, setInView] = useState(false)
   useEffect(() => {
@@ -103,6 +120,10 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const pausedRef = useRef(false)
   const billIdxRef = useRef(billIdx)
+  const reducedMotion = usePrefersReducedMotion()
+  // Hover-pause alone is unreachable by keyboard and touch, so autoplay also
+  // needs a real control. This is the explicit one; pausedRef stays for hover.
+  const [paused, setPaused] = useState(false)
 
   useEffect(() => { billIdxRef.current = billIdx }, [billIdx])
 
@@ -120,6 +141,9 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
 
   useEffect(() => {
     if (items.length === 0) return
+    // Never auto-advance when the visitor asked for reduced motion, or when
+    // they paused it — they can still step through with the arrows and dots.
+    if (reducedMotion || paused) return
     // Slower than the old 10s: a visitor now has two arguments to read on each
     // slide instead of one quoted sentence.
     intervalRef.current = setInterval(() => {
@@ -127,7 +151,7 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
       goToBill((billIdxRef.current + 1) % items.length)
     }, 14000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [items, goToBill])
+  }, [items, goToBill, reducedMotion, paused])
 
   if (items.length === 0) return null
 
@@ -179,7 +203,7 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
         <div className="flex items-center justify-between px-6 sm:px-10 py-3 border-t border-white/10">
           <button
             onClick={() => goToBill((billIdx - 1 + items.length) % items.length)}
-            className="text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1"
+            className="text-xs text-white/70 hover:text-white transition-colors flex items-center gap-1"
           >
             ← Prev bill
           </button>
@@ -193,12 +217,24 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
               />
             ))}
           </div>
-          <button
-            onClick={nextBill}
-            className="text-xs text-white/40 hover:text-white/70 transition-colors flex items-center gap-1"
-          >
-            Next bill →
-          </button>
+          <div className="flex items-center gap-3">
+            {!reducedMotion && (
+              <button
+                onClick={() => setPaused((p) => !p)}
+                aria-pressed={paused}
+                aria-label={paused ? 'Resume automatic slideshow' : 'Pause automatic slideshow'}
+                className="text-xs text-white/70 hover:text-white transition-colors"
+              >
+                {paused ? '▶ Play' : '❚❚ Pause'}
+              </button>
+            )}
+            <button
+              onClick={nextBill}
+              className="text-xs text-white/70 hover:text-white transition-colors flex items-center gap-1"
+            >
+              Next bill →
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -215,8 +251,10 @@ const FOUNDERS_QUOTES = [
 function FoundersQuote() {
   const [idx, setIdx] = useState(0)
   const [visible, setVisible] = useState(true)
+  const reducedMotion = usePrefersReducedMotion()
 
   useEffect(() => {
+    if (reducedMotion) return
     const interval = setInterval(() => {
       setVisible(false)
       setTimeout(() => {
@@ -225,7 +263,7 @@ function FoundersQuote() {
       }, 400)
     }, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [reducedMotion])
 
   const quote = FOUNDERS_QUOTES[idx]
   return (
@@ -248,6 +286,7 @@ export default function CityLandingClient() {
   const [billCount, setBillCount] = useState<number | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
+  const [contentState, setContentState] = useState<'loading' | 'ready' | 'error'>('loading')
 
   const howItWorksRef = useRef<HTMLDivElement>(null)
   const featuresRef = useRef<HTMLDivElement>(null)
@@ -258,13 +297,32 @@ export default function CityLandingClient() {
     e.preventDefault()
     const q = searchQuery.trim()
     setSearching(true)
-    if (q) router.push(`/legislation?q=${encodeURIComponent(q)}`)
-    else router.push('/legislation')
+    // Keep the city prefix: a bare /legislation took a 308 redirect hop through
+    // next.config.ts and dropped whichever city the visitor was browsing.
+    const base = `/${city}/legislation`
+    router.push(q ? `${base}?q=${encodeURIComponent(q)}` : base)
   }
 
+  // On success this component unmounts, so this timer never matters. It only
+  // fires when navigation stalled or failed and we are still on the landing
+  // page — previously `searching` was set true and never cleared, leaving the
+  // hero input permanently disabled with a reload as the only way out.
   useEffect(() => {
+    if (!searching) return
+    const t = setTimeout(() => setSearching(false), 5000)
+    return () => clearTimeout(t)
+  }, [searching])
+
+  // Both content sections are gated on a non-empty array, so when these loads
+  // failed silently the homepage degraded to a static brochure with no trace —
+  // the slideshow and bill list simply vanished. Tracked together because they
+  // fill one visual slot: if either succeeds we show what we have, and only a
+  // total failure surfaces a message.
+  const loadContent = useCallback(() => {
+    setContentState('loading')
+
     // Try high-impact first, fall back to any analyzed bills
-    api.searchLegislation('', 4, 0, 'local', 'true', '', 'high')
+    const bills = api.searchLegislation('', 4, 0, 'local', 'true', '', 'high')
       .then((data) => {
         const results = data?.results ?? []
         if (results.length >= 2) {
@@ -274,14 +332,21 @@ export default function CityLandingClient() {
             .then((d) => setRecentBills(d?.results ?? []))
         }
       })
-      .catch(() => {})
-    api.getSpotlight(8)
-      .then((data) => setSpotlight(data?.results ?? []))
-      .catch(() => {})
+
+    const spot = api.getSpotlight(8).then((data) => setSpotlight(data?.results ?? []))
+
+    Promise.allSettled([bills, spot]).then((results) => {
+      setContentState(results.every((r) => r.status === 'rejected') ? 'error' : 'ready')
+    })
+  }, [])
+
+  useEffect(() => {
+    loadContent()
+    // The hero pill degrades gracefully on its own — it just omits the count.
     api.getPipelineStats({})
       .then((data) => setBillCount(data?.total ?? null))
       .catch(() => {})
-  }, [])
+  }, [loadContent])
 
   return (
     <div className="space-y-20 pb-20">
@@ -311,12 +376,18 @@ export default function CityLandingClient() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
               </svg>
             )}
+            {/*
+              No autoFocus here. It put focus mid-page on load, which jumped
+              past the skip link (so the skip link was never the first Tab
+              stop), scrolled the hero out of view on phones, and started a
+              screen reader inside a form instead of at the top of the page.
+            */}
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search bills by title, topic, or number…"
-              autoFocus
+              aria-label="Search Philadelphia City Council bills"
               disabled={searching}
               className="w-full rounded-lg border border-input bg-background pl-10 pr-12 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
             />
@@ -347,6 +418,37 @@ export default function CityLandingClient() {
 
       {/* ── Founders Quote ── */}
       <FoundersQuote />
+
+      {/* Placeholder for the two live sections below while they load / on failure */}
+      {contentState === 'loading' && (
+        <section className="max-w-3xl mx-auto space-y-3" aria-hidden="true">
+          <div className="h-3 w-48 bg-muted rounded animate-pulse" />
+          <div className="h-56 bg-muted rounded-xl animate-pulse" />
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-24 bg-muted rounded-lg animate-pulse" />
+          ))}
+        </section>
+      )}
+
+      {contentState === 'error' && (
+        <section className="max-w-3xl mx-auto border rounded-xl px-6 py-8 text-center space-y-3">
+          <p className="font-medium">We can&apos;t load today&apos;s bills right now.</p>
+          <p className="text-sm text-muted-foreground">
+            This is usually brief. Everything else on the site still works.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <button
+              onClick={loadContent}
+              className="inline-flex items-center justify-center rounded-lg px-4 h-9 text-sm font-medium bg-primary text-primary-foreground btn-primary-hover"
+            >
+              Try again
+            </button>
+            <Link href={`/${city}/legislation`} className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
+              Browse legislation
+            </Link>
+          </div>
+        </section>
+      )}
 
       {/* ── Both Sides Slideshow ── */}
       {spotlight.length > 0 && (
@@ -424,7 +526,7 @@ export default function CityLandingClient() {
             </div>
             <div className="space-y-2 text-xs">
               <div className="bg-muted/60 rounded p-2 text-muted-foreground line-through leading-snug">
-                An Ordinance amending Title 14 of The Philadelphia Code, entitled "Zoning and Planning," by…
+                An Ordinance amending Title 14 of The Philadelphia Code, entitled &ldquo;Zoning and Planning,&rdquo; by…
               </div>
               <div className="flex items-center justify-center text-muted-foreground/40 text-base">↓</div>
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-green-800 dark:text-green-300 font-medium leading-snug">

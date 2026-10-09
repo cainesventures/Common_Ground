@@ -1,10 +1,14 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+// Type-only: the runtime module is still loaded lazily via import('leaflet')
+// below, so this adds nothing to the bundle.
+import type * as L from 'leaflet'
 
 interface MemberLabel {
   name: string
-  district: string   // "District 2" or "At-Large"
+  /** "District 2" or "At-Large"; nullable, matching the member record. */
+  district?: string | null
 }
 
 interface Props {
@@ -25,7 +29,7 @@ const DISTRICT_COLORS = [
   '#edc948', '#76b7b2', '#ff9da7', '#9c755f', '#bab0ac',
 ]
 
-function getDistrictNum(props: Record<string, any>): number | null {
+function getDistrictNum(props: Record<string, unknown>): number | null {
   const val = props?.DISTRICT ?? props?.District ?? props?.district ??
               props?.DIST_NUM ?? props?.districtNum ?? props?.OBJECTID ?? null
   if (val === null || val === undefined) return null
@@ -35,7 +39,7 @@ function getDistrictNum(props: Record<string, any>): number | null {
 
 export function DistrictMap({ district, members = [], height = 320 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const mapRef = useRef<any>(null)
+  const mapRef = useRef<L.Map | null>(null)
   const [fetchError, setFetchError] = useState(false)
 
   const showAll = district === 'all'
@@ -47,7 +51,7 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
   const memberByDistrict: Record<number, string> = {}
   if (showAll && members.length > 0) {
     for (const m of members) {
-      const n = parseInt(m.district.replace(/\D/g, ''), 10)
+      const n = parseInt((m.district ?? '').replace(/\D/g, ''), 10)
       if (!isNaN(n)) memberByDistrict[n] = m.name
     }
   }
@@ -60,12 +64,12 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
     import('leaflet').then((L) => {
       if (!mounted || !containerRef.current) return
 
-      const container = containerRef.current as any
+      const container = containerRef.current as HTMLDivElement & { _leaflet_id?: number }
       if (container._leaflet_id) container._leaflet_id = undefined
       if (mapRef.current) { mapRef.current.remove(); mapRef.current = null }
       if (!document.body.contains(containerRef.current)) return
 
-      try { (containerRef.current as any)._leaflet_id = undefined } catch { /* ignore */ }
+      try { container._leaflet_id = undefined } catch { /* ignore */ }
       const map = L.map(containerRef.current, {
         center: PHILLY_CENTER,
         zoom: 11,
@@ -126,9 +130,10 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
           }).addTo(map)
 
           if (!showAll && districtNum !== null) {
-            const targetLayers: any[] = []
-            layer.eachLayer((lyr: any) => {
-              if (getDistrictNum(lyr.feature?.properties ?? {}) === districtNum) targetLayers.push(lyr)
+            const targetLayers: L.Polygon[] = []
+            layer.eachLayer((lyr) => {
+              const poly = lyr as L.Polygon & { feature?: { properties?: Record<string, unknown> } }
+              if (getDistrictNum(poly.feature?.properties ?? {}) === districtNum) targetLayers.push(poly)
             })
             if (targetLayers.length > 0) {
               map.fitBounds(targetLayers[0].getBounds(), { padding: [32, 32] })

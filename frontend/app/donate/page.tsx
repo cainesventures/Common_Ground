@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { api } from '@/lib/api'
+import { errorMessage } from '@/lib/utils'
 
 const AMOUNTS = [1, 5, 10, 20, 50]
 const MIN = 1
@@ -44,8 +45,8 @@ export default function DonatePage() {
       } else {
         setError('Could not start checkout. Please try again.')
       }
-    } catch (e: any) {
-      setError(e.message ?? 'Something went wrong.')
+    } catch (e: unknown) {
+      setError(errorMessage(e, 'Something went wrong.'))
     } finally {
       setLoading(false)
     }

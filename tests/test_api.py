@@ -25,16 +25,17 @@ def test_health_db_endpoint(client):
 
 
 def test_health_ai_no_key(client, monkeypatch):
-    """When ANTHROPIC_API_KEY is empty, /health/ai returns a warning."""
-    from app import config as cfg
-    monkeypatch.setattr(cfg.get_settings(), "anthropic_api_key", "")
-    # Reload settings cache so main.py picks up the change
-    import main
-    monkeypatch.setattr(main, "settings", cfg.get_settings())
+    """/health/ai always makes a live call to the configured provider (see
+    main.py) and reports ok or error -- there is no third "warning" outcome in
+    the route, and the provider it calls is AI_PROVIDER (ollama by default),
+    not anthropic_api_key, so patching that setting does not change what this
+    exercises. This asserts the one thing that is actually true regardless of
+    environment: the endpoint always returns 200 with a real status, even when
+    no provider is reachable (as on a CI runner, which has no AI provider at
+    all -- that is an "error" outcome, not a test failure)."""
     r = client.get("/health/ai")
-    # Accept either warning (no key) or ok (key was set in env)
     assert r.status_code == 200
-    assert r.json()["status"] in ("ok", "warning")
+    assert r.json()["status"] in ("ok", "error")
 
 
 # ---------------------------------------------------------------------------

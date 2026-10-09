@@ -90,7 +90,13 @@ def build_sitemap(db_path: str) -> ElementTree:
         (f"{BASE_URL}/budget",                              "0.7",  "monthly", now),
         (f"{BASE_URL}/blog",                                "0.7",  "weekly",  now),
         (f"{BASE_URL}/about",                               "0.6",  "monthly", now),
+        (f"{BASE_URL}/elections",                           "0.6",  "weekly",  now),
         (f"{BASE_URL}/donate",                              "0.5",  "monthly", now),
+        # Low priority but indexable, and both were simply missing before.
+        # /pricing and /legal are thin pages, not private ones — the genuinely
+        # private routes carry NOINDEX in the app and stay out of here.
+        (f"{BASE_URL}/pricing",                             "0.3",  "yearly",  now),
+        (f"{BASE_URL}/legal",                               "0.3",  "yearly",  now),
     ]
 
     for url, priority, freq, lastmod in static:

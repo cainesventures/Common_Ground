@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import type { MyVoteRow as VoteRecord } from '@/lib/api-types'
+import type { Bill as TrackedBill } from '@/lib/types'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
@@ -40,38 +42,6 @@ function ExportButtons() {
       </button>
     </div>
   )
-}
-
-interface TrackedBill {
-  id: string
-  bill_number: string
-  title: string
-  plain_title?: string
-  status: string
-  level: string
-  impact_level?: string
-  impact_score?: number
-  bill_type?: string
-  tags?: string
-  summary?: string
-  description?: string
-  analyzed_at?: string
-  tracked_at?: string
-}
-
-interface VoteRecord {
-  vote: string
-  voted_at: string | null
-  legislation: {
-    id: string
-    title: string | null
-    plain_title: string | null
-    bill_number: string | null
-    status: string | null
-    level: string | null
-    tags?: string | null
-    impact_level?: string | null
-  } | null
 }
 
 function VoteBar({ support, oppose, neutral }: { support: number; oppose: number; neutral: number }) {
@@ -238,7 +208,7 @@ export default function MyBillsPage() {
                 const impactColor = bill.impact_level ? IMPACT_COLORS[bill.impact_level] : null
                 const statusColor = STATUS_COLORS[bill.status] ?? STATUS_COLORS_FALLBACK
                 let tags: string[] = []
-                try { tags = bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
+                try { tags = Array.isArray(bill.tags) ? bill.tags : bill.tags ? JSON.parse(bill.tags) : [] } catch { tags = [] }
 
                 return (
                   <div key={bill.id} className="relative border rounded-lg hover:border-primary/60 hover:bg-muted/20 transition-all">

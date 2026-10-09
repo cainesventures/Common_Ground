@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { isLoggedIn, getUserHint } from '@/lib/auth'
 
 export default function LoginPage() {
@@ -69,7 +70,7 @@ export default function LoginPage() {
 
         <p className="text-center text-xs text-muted-foreground">
           By signing in you agree to our{' '}
-          <a href="/legal" className="underline hover:text-foreground">Terms & Privacy Policy</a>.
+          <Link href="/legal" className="underline hover:text-foreground">Terms &amp; Privacy Policy</Link>.
         </p>
       </div>
     </div>
