@@ -29,6 +29,7 @@ import type {
   PerspectiveResponse,
   PerspectivesResponse,
   PipelineStatsResponse,
+  PublicStatsResponse,
   PredictionsResponse,
   RollCallResponse,
   SponsorLeaderboardResponse,
@@ -231,6 +232,16 @@ export const api = {
 
   getSpotlight: (limit = 8) =>
     apiFetch<SpotlightResponse>(`/api/legislation/spotlight?limit=${limit}`),
+
+  /**
+   * Public bill count + data freshness for the hero pill.
+   *
+   * The pill used to call getPipelineStats, which requires the dev tier, so it
+   * 401'd for every visitor who was not the owner. This one needs no auth and
+   * sits under an edge-cached prefix.
+   */
+  getPublicStats: () =>
+    apiFetch<PublicStatsResponse>('/api/legislation/stats'),
 
   getPipelineStats: (params: { status?: string; year?: string; month?: string; date_from?: string; date_to?: string }) => {
     const p = new URLSearchParams()

@@ -20,7 +20,7 @@
 #  3. scripts/generate_two_lane.py    - the case for / against for newly active bills (Ollama)
 #  4. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
 #  5. scripts/generate_sitemap.py     - regenerate static sitemap.xml
-#  6. litestream replicate            - upload CONTENT DB snapshot to Backblaze B2 (path "db")
+#  6. ANALYZE + litestream replicate  - refresh SQLite planner stats, then upload CONTENT DB snapshot to Backblaze B2 (path "db")
 #  7. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
 #  8. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
 #  9. cloudflare purge                - drop cached API reads so the new data is served immediately
@@ -176,6 +176,20 @@ if ($LASTEXITCODE -ne 0) { Fail "Sitemap generation failed." }
 Log "Sitemap updated."
 
 # ── Step 6: Upload DB to Backblaze B2 ────────────────────────────────────────
+# ANALYZE first, inside the same DB file that is about to be snapshotted.
+#
+# ix_legislation_public (migration d9f4b6c80a15) is a partial index, and SQLite
+# will only choose it over a plainer index when sqlite_stat1 exists -- without
+# statistics the planner reads `analyzed_at IS NOT NULL` as a range scan, picks
+# the wrong index, and the /search count stays at ~79ms instead of 0.25ms.
+# sqlite_stat1 is an ordinary table, so it rides along inside the snapshot to
+# B2 and production inherits whatever was current at upload time. Steps 1-3 add
+# bills, which is exactly what makes the old statistics stale, so this belongs
+# here rather than in the migration alone.
+Log "Step 6/9 - Refreshing query planner statistics (ANALYZE)..."
+python -c "import sqlite3; c=sqlite3.connect('common_ground_test.db'); c.execute('ANALYZE'); c.commit(); c.close(); print('ANALYZE complete')"
+if ($LASTEXITCODE -ne 0) { Fail "ANALYZE failed." }
+
 Log "Step 6/9 - Uploading DB to Backblaze B2..."
 & "C:\tools\litestream.exe" replicate -config "$ROOT\litestream.yml" -once -force-snapshot
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }

@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import re
 from typing import List, Optional
 from datetime import datetime
+from sqlalchemy import Column, Float, Integer, MetaData, Table, literal_column
 from sqlalchemy.orm import Session
 from app.models import Legislation, Councilmember, BillVoteRecord
 from app.integrations.congress_gov import CongressGovIntegration
@@ -12,6 +14,61 @@ from app.integrations.legistar import LegistarClient
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Matches a run of letters/digits. Everything else is a separator, which is the
+# whole point -- see _fts_match.
+_FTS_TOKEN_RE = re.compile(r"[^\W_]+", re.UNICODE)
+
+# legislation_fts is a virtual table, so it has no ORM model. This is the
+# minimum needed to join against it and order by its rank: `rowid` to join on
+# and `rank` to sort by. Both are columns FTS5 exposes on every fts5 table.
+# Its own MetaData keeps it out of the app's create_all -- the table is created
+# by migration e1a7d35c92b4, which also installs the triggers that keep it in
+# step with `legislation`.
+_legislation_fts = Table(
+    "legislation_fts",
+    MetaData(),
+    Column("rowid", Integer),
+    Column("rank", Float),
+)
+
+
+def _fts_match(query: str) -> Optional[str]:
+    """Turn a user's search box into a safe FTS5 MATCH expression.
+
+    FTS5's query language is not a string literal: punctuation is syntax, and
+    the error is a 500 rather than zero results. Every one of these is a real
+    thing a visitor to this site would type, and every one of them raises:
+
+        O'Neill      -> fts5: syntax error near "'"      (a councilmember)
+        260330-A     -> no such column: A                (a bill number)
+        14-1000      -> no such column: 1000             (a code section)
+        "unclosed    -> unterminated string
+        a:b          -> no such column: a
+        speed AND    -> fts5: syntax error near ""
+
+    So the input is never passed through. It is reduced to alphanumeric tokens,
+    each quoted as a literal, combined with AND. A trailing `*` on the final
+    token gives prefix matching, so a half-typed "camer" still finds "camera".
+
+    Quoting is what makes this safe: inside double quotes FTS5 treats the
+    content as a literal string, and a `"` in the input cannot escape because
+    the tokenizer dropped it before we got here.
+
+    Returns None when nothing usable survives (e.g. a query of only
+    punctuation), which the caller treats as "no text filter" rather than
+    "match nothing" -- consistent with how an empty q has always behaved.
+    """
+    tokens = _FTS_TOKEN_RE.findall(query or "")
+    if not tokens:
+        return None
+    # Bound the term count so a pathological paste cannot build a huge query
+    # tree. The Query(max_length=200) on the route caps input length already.
+    tokens = tokens[:12]
+    quoted = [f'"{t}"' for t in tokens]
+    quoted[-1] = f'{quoted[-1]}*'
+    return " AND ".join(quoted)
+
 
 # Canonical tag vocabulary. AI must pick from this list only.
 # Mirrors the categories in frontend/lib/bill-categories.ts.
@@ -60,6 +117,14 @@ _CATEGORY_TAGS_SET = set(CATEGORY_TAGS)
 _NO_TITLE = "(no title)"
 # Statuses where the bill is still in play; anything else gets past tense.
 _HEADLINE_ACTIVE = {"introduced", "in_committee"}
+# Statuses where the bill died. These need their own instruction, not a shared
+# "it concluded" one: 459 of the 1,782 bills in these states carry headlines
+# asserting that a rule is in force -- "Muzzle Mandate Takes Effect Immediately
+# Citywide" on a bill that lapsed, "Council Approves Measure Capping 2004 Real
+# Estate Tax Increases" on a bill nobody approved. The old prompt said the bill
+# "concluded (lapsed)", and a model reads "concluded" as "finished
+# successfully". Saying "never became law" is the fix.
+_HEADLINE_NEVER_ENACTED = {"lapsed", "failed", "vetoed"}
 
 
 def _headline_source(bill) -> str:
@@ -100,16 +165,33 @@ def _ai_headline(bill, provider) -> str:
     # Present tense on a bill that lapsed in 2003 reads as breaking news. Ledes
     # already refuse to invent detail; headlines did not, and drifted the same
     # way — inventing neighborhoods, motives and outcomes.
-    tense = (
-        "Use present tense; this bill is still pending."
-        if status in _HEADLINE_ACTIVE
-        else (
-            f"This bill is NOT pending — it concluded ({pretty_status}). Use PAST "
-            "tense. Never imply it is happening now, taking effect, or about to be "
-            "voted on. Never use words like today, tonight, now, immediately, "
-            "this week, or next month."
+    if status in _HEADLINE_ACTIVE:
+        tense = "Use present tense; this bill is still pending."
+    elif status in _HEADLINE_NEVER_ENACTED:
+        # The outcome has to be stated as an outcome. "It concluded (lapsed)"
+        # reads to a model as "it finished", i.e. it passed, and the result was
+        # headlines announcing rules that never existed.
+        tense = (
+            f"CRITICAL — this bill NEVER BECAME LAW. Its status is "
+            f"\"{pretty_status}\": it died without being enacted, and nothing in "
+            "it is in force or ever was.\n"
+            "So the headline must NOT state or imply that any rule, requirement, "
+            "ban, fine, tax, permit or penalty exists, applies, was approved, was "
+            "mandated, or took effect. Do not write that the City or Council "
+            "\"approves\", \"mandates\", \"requires\", \"bans\", \"cracks down\", "
+            "\"sets\", \"caps\" or \"allows\" anything, because it did not.\n"
+            "Write it as the proposal it was, in PAST tense: what was PROPOSED, "
+            "SOUGHT or INTRODUCED. Good shapes: \"Council proposed...\", "
+            "\"A failed bill would have...\", \"Council sought to...\".\n"
+            "Never use today, tonight, now, immediately, this week, next month, "
+            "takes effect, or set to."
         )
-    )
+    else:
+        tense = (
+            f"This bill is NOT pending — it concluded ({pretty_status}). Use PAST "
+            "tense. Never imply it is about to be voted on, or use words like "
+            "today, tonight, this week, or next month."
+        )
 
     system = (
         "You write newspaper headlines for Philadelphia city council bills.\n\n"
@@ -500,12 +582,32 @@ class LegislationIngestionService:
         not_posted_for: Optional[str] = None,
     ):
         """Search for legislation with optional filters."""
-        from sqlalchemy import extract
+        from sqlalchemy import extract, func, text
         base_query = self.db.query(Legislation)
-        if query:
+        # Full-text search over the readable fields, via legislation_fts
+        # (migration e1a7d35c92b4).
+        #
+        # The premise of the site is that `title` is unreadable -- "An
+        # Ordinance amending Title 14..." -- while `headline`, `plain_title`
+        # and `summary` are the versions a human would recognise. Searching
+        # only `title` and `bill_number` meant "pothole" and "Navy Yard"
+        # returned nothing at all. Adding the other three as `LIKE '%term%'`
+        # fixed recall but cost a full scan per query (67ms on the count,
+        # since a leading wildcard cannot use an index); FTS5 answers the same
+        # query in 0.5ms, matches whole words rather than substrings, and
+        # gives a relevance rank to order by.
+        fts_expr = _fts_match(query) if query else None
+        if fts_expr:
+            # A subquery on rowid rather than a join: it leaves base_query a
+            # plain entity query, so the count and the paging below need no
+            # special handling.
             base_query = base_query.filter(
-                (Legislation.title.ilike(f"%{query}%")) |
-                (Legislation.bill_number.ilike(f"%{query}%"))
+                text(
+                    "legislation.rowid IN ("
+                    " SELECT rowid FROM legislation_fts"
+                    " WHERE legislation_fts MATCH :fts_filter"
+                    ")"
+                ).bindparams(fts_filter=fts_expr)
             )
         if level:
             base_query = base_query.filter(Legislation.level == level)
@@ -514,12 +616,28 @@ class LegislationIngestionService:
         if analyzed is True:
             # Completeness gate: only surface bills that have full_text + analysis + headline.
             # Bills analyzed on title alone (no full_text) are excluded from public results.
+            #
+            # The two emptiness checks are raw SQL, and that is deliberate. This
+            # gate is backed by the partial index ix_legislation_public
+            # (migration d9f4b6c80a15), and SQLite will only use a partial index
+            # when the query's WHERE clause *provably implies* the index
+            # predicate. `Legislation.full_text != ""` compiles to
+            # `full_text != ?` with '' bound at execution time, and SQLite
+            # cannot prove a bound parameter equals '' -- so it falls back to
+            # re-checking every row against the table, which on an 8,680-row
+            # table of 6.5KB-wide rows cost 70ms on the site's busiest query.
+            # Spelled as literals the predicate matches and the same count runs
+            # in well under a millisecond.
+            #
+            # Keep these character-identical to the index predicate in
+            # d9f4b6c80a15. If one changes, change both, or the index silently
+            # stops being used and only the latency tells you.
             base_query = base_query.filter(
                 Legislation.analyzed_at.isnot(None),
                 Legislation.full_text.isnot(None),
-                Legislation.full_text != "",
+                text("legislation.full_text != ''"),
                 Legislation.headline.isnot(None),
-                Legislation.headline != "",
+                text("legislation.headline != ''"),
             )
         elif analyzed is False:
             base_query = base_query.filter(Legislation.analyzed_at.is_(None))
@@ -579,23 +697,139 @@ class LegislationIngestionService:
             posted_ids = {r[0] for r in posted_rows}
             if posted_ids:
                 base_query = base_query.filter(~Legislation.id.in_(posted_ids))
-        total = base_query.count()
-        from sqlalchemy.orm import defer, selectinload
+        # `base_query.count()` wraps the query in
+        # `SELECT count(*) FROM (SELECT <all 48 columns incl. full_text> ...)`.
+        # SQLite materialises that inner SELECT, so the count paid for the bill
+        # text of every matching row -- and counting a named column rather than
+        # `*` forces a table lookup per index entry even when a covering index
+        # exists. `func.count()` renders a bare `count(*)` against the table,
+        # which the partial index can answer from the index alone:
+        #
+        #     count via .count()            70-79 ms
+        #     count(*) + matching predicate  ~0.2 ms
+        # Counted as a fresh `count(*)` over an explicit FROM, reusing the
+        # WHERE this function has accumulated. Two separate reasons it is
+        # written this way rather than as `base_query.count()`:
+        #
+        # 1. `base_query.count()` wraps the query in
+        #    `SELECT count(*) FROM (SELECT <all 48 columns incl. full_text>)`.
+        #    SQLite materialises that subquery, so the count paid to read the
+        #    bill text of every matching row: 70-79ms, the single largest cost
+        #    in the endpoint. A bare `count(*)` against the table is answered
+        #    from ix_legislation_public in about 0.2ms.
+        # 2. `with_entities(func.count())` on its own drops the FROM clause,
+        #    because SQLAlchemy infers FROM from the mapped entities it can
+        #    see and a `text()` filter is opaque to it. A search whose only
+        #    filter was the FTS subquery compiled to `SELECT count(*) WHERE
+        #    legislation.rowid IN (...)` -- no FROM -- and SQLite answered
+        #    "no such column: legislation.rowid". That is exactly
+        #    `/api/legislation/search?q=foo` with no `level`: a 500 on an
+        #    ordinary request. `select_from()` cannot be chained after
+        #    criterion exists, hence rebuilding from `whereclause`.
+        #
+        # Note `count(*)` and not `count(id)`: naming a column makes SQLite
+        # fetch each row to prove it non-null, which throws away the covering
+        # index and costs ~17ms instead of ~0.2ms.
+        count_query = self.db.query(func.count()).select_from(Legislation)
+        if base_query.whereclause is not None:
+            count_query = count_query.filter(base_query.whereclause)
+        total = count_query.scalar() or 0
+
+        # A text search is ordered by how well the bill matches; everything
+        # else by recency. Date ordering on a text search is why "tenant"
+        # used to open with bills about cigarettes and tax refunds -- they
+        # mentioned tenants in passing and happened to be recent.
+        #
+        # The rank comes from a JOIN, not a correlated subquery. A subquery of
+        # the form `ORDER BY (SELECT rank FROM legislation_fts WHERE ... MATCH
+        # ... AND rowid = legislation.rowid)` re-runs the whole match once per
+        # candidate row, which is invisible on a narrow term and ruinous on a
+        # broad one: a query of "a:b" matches 6,211 bills and took **29.7
+        # seconds**, i.e. a one-request denial of service that any visitor
+        # could type by accident. Joined, the match is evaluated once and the
+        # same query is a couple of milliseconds.
+        page_query = base_query
+        if fts_expr:
+            page_query = page_query.join(
+                _legislation_fts,
+                _legislation_fts.c.rowid == literal_column("legislation.rowid"),
+            ).filter(
+                text("legislation_fts MATCH :fts_join").bindparams(fts_join=fts_expr)
+            )
+            # FTS5 rank is "more negative is better", so ascending puts the
+            # best match first.
+            order_by = [_legislation_fts.c.rank.asc(), Legislation.introduced_date.desc()]
+        else:
+            order_by = [Legislation.introduced_date.desc()]
+        from sqlalchemy.orm import defer
         results = (
-            base_query
-            # Defer the large text columns not needed in list view
+            page_query
+            # Defer the large text columns not needed in list view.
+            #
+            # `perspectives` used to be selectinload-ed here, which pulled
+            # every perspective row -- key_arguments, concerns, assessment, all
+            # of it -- for all 20 bills on the page, so that the route could
+            # call len() on the list and report an integer. There are 16,217 of
+            # these rows. See `page_metadata` for the replacement: the count
+            # now comes from a GROUP BY that loads no text at all.
+            #
+            # Nothing may touch `leg.perspectives` or `leg.full_text` on these
+            # results. Both are now unloaded, so reading either triggers a
+            # per-row lazy SELECT and quietly restores the cost this removes.
+            # `description` is no longer deferred: the search response returns
+            # it, and deferring a column the caller always reads just turns one
+            # SELECT into twenty. It is 4 characters wide on every row.
             .options(
                 defer(Legislation.full_text),
-                defer(Legislation.description),
                 defer(Legislation.supplementary_data),
-                selectinload(Legislation.perspectives),
             )
-            .order_by(Legislation.introduced_date.desc())
+            .order_by(*order_by)
             .offset(offset)
             .limit(limit)
             .all()
         )
         return results, total
+
+    def page_metadata(self, bill_ids: List[str]) -> dict:
+        """Perspective count and full-text presence for one page of results.
+
+        Both facts are cheap in SQL and expensive through the ORM. The caller
+        wants a number and a boolean; loading the perspective bodies or the
+        bill text to derive them reads megabytes to produce a few bytes.
+        `full_text` averages 6.5KB and runs to 221KB on the budget ordinances,
+        and it is deferred on the search query precisely so it is not shipped
+        to Python -- so `bool(leg.full_text)` must not be how we answer this.
+
+        Returns {bill_id: {"perspective_count": int, "has_full_text": bool}}.
+        """
+        if not bill_ids:
+            return {}
+        from sqlalchemy import func
+        from app.models import BillPerspective
+
+        counts = dict(
+            self.db.query(BillPerspective.bill_id, func.count(BillPerspective.id))
+            .filter(BillPerspective.bill_id.in_(bill_ids))
+            .group_by(BillPerspective.bill_id)
+            .all()
+        )
+        # length() rather than `!= ''` so the comparison stays on the SQLite
+        # side and the column value is never transferred.
+        text_present = dict(
+            self.db.query(
+                Legislation.id,
+                func.coalesce(func.length(Legislation.full_text), 0) > 0,
+            )
+            .filter(Legislation.id.in_(bill_ids))
+            .all()
+        )
+        return {
+            bid: {
+                "perspective_count": counts.get(bid, 0),
+                "has_full_text": bool(text_present.get(bid, False)),
+            }
+            for bid in bill_ids
+        }
 
     def generate_ledes(self, force: bool = False, ids: list[str] = None) -> dict:
         """Generate punchy news ledes for active analyzed bills.

@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.models import ContentBase, UserBase, Legislation
+from app.models import ContentBase, UserBase, Legislation, fts
 from app.models.database import get_db
 
 
@@ -32,6 +32,13 @@ def test_db():
     # bind routing isn't needed because the metadata creates all tables here.
     ContentBase.metadata.create_all(bind=engine)
     UserBase.metadata.create_all(bind=engine)
+
+    # legislation_fts is a virtual table, so create_all does not know about it.
+    # Without it every search carrying a `q` returns a 500 here while passing
+    # in production, which is exactly backwards for a test suite. Same DDL the
+    # migration runs -- see app/models/fts.py.
+    with engine.begin() as conn:
+        fts.create_all(conn.exec_driver_sql, populate=False)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:

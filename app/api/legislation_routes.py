@@ -31,31 +31,21 @@ def _sse_stream(gen):
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/legislation", tags=["legislation"])
 
-_GENERIC_DESCRIPTIONS = {'bill', 'ordinance', 'resolution', 'motion', 'order', ''}
-
-def _display_description(leg) -> str | None:
-    """Return the best available short description for a bill card."""
-    if leg.description and leg.description.strip().lower() not in _GENERIC_DESCRIPTIONS:
-        return leg.description
-    if leg.full_text:
-        text = leg.full_text
-        # Skip boilerplate up to "Tally", then skip the title duplicate
-        idx = text.lower().find("tally")
-        if idx != -1:
-            text = text[idx + len("tally"):]
-            # After Tally, the title is repeated — jump to the first WHEREAS/SECTION/BE IT
-            for marker in ("WHEREAS", "SECTION", "BE IT"):
-                m = text.find(marker)
-                if m != -1:
-                    text = text[m:]
-                    break
-            else:
-                # No known marker found — skip first paragraph as fallback
-                para_end = text.find("\n\n")
-                if para_end != -1:
-                    text = text[para_end:].lstrip()
-        return text[:300].strip() or None
-    return None
+#
+# `_display_description` used to live here. It took a bill's `description`,
+# found it generic, and synthesised a card description by scanning `full_text`
+# for "Tally"/"WHEREAS"/"SECTION". It was called once per row in the search
+# response, and both columns are deferred on that query -- so it lazy-loaded
+# the bill text for all 20 rows of every search, averaging 6.5KB and reaching
+# 221KB on the budget ordinances, and made the defer purely decorative.
+#
+# It was removed rather than optimised because the value it produced was
+# unused. `description` is the literal string "bill" on all 8,680 rows, so the
+# full-text branch always ran; and nothing renders the result -- BillCard shows
+# `headline` and `lede || summary`, and /my-bills reads `summary` first, which
+# is present on 8,676 of 8,680 bills. The search route now returns the
+# `description` column as it is.
+#
 
 VALID_STATES = {
     "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA",
@@ -730,6 +720,10 @@ async def search_legislation(
             bill_type=bill_type or None, committee=committee or None,
             not_posted_for=not_posted_for or None,
         )
+        # One GROUP BY for the whole page instead of loading every perspective
+        # body to call len() on it, and a SQL length() instead of pulling the
+        # bill text in to cast it to a boolean.
+        meta = service.page_metadata([leg.id for leg in results])
         return {
             "success": True,
             "total": total,
@@ -747,7 +741,7 @@ async def search_legislation(
                     "status": leg.status,
                     "level": leg.level,
                     "tags": leg.tags,
-                    "description": _display_description(leg),
+                    "description": leg.description,
                     "summary": leg.summary,
                     "impact_level": leg.impact_level,
                     "impact_score": leg.impact_score,
@@ -757,12 +751,12 @@ async def search_legislation(
                     "final_date": leg.final_date.isoformat() if leg.final_date else None,
                     "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
                     # Completeness fields for admin pipeline view
-                    "full_text": bool(leg.full_text) if leg.full_text else False,
+                    "full_text": meta[leg.id]["has_full_text"],
                     "sponsor": leg.sponsor or None,
                     "committee": leg.committee or None,
                     "metadata_fetched_at": leg.metadata_fetched_at.isoformat() if leg.metadata_fetched_at else None,
                     "news_fetched_at": leg.news_fetched_at.isoformat() if leg.news_fetched_at else None,
-                    "perspective_count": len(leg.perspectives),
+                    "perspective_count": meta[leg.id]["perspective_count"],
                 }
                 for leg in results
             ]
@@ -770,6 +764,50 @@ async def search_legislation(
     except Exception as e:
         logger.error(f"Error searching legislation (q={q!r}): {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/stats")
+async def public_stats(db: Session = Depends(get_db)):
+    """Bill count and data freshness, for the homepage hero pill.
+
+    The pill used to read these from `/pipeline-stats`, which is behind
+    `require_dev_tier` and in NEVER_EDGE_CACHE -- so for every anonymous
+    visitor the call 401'd, the `.catch(() => {})` swallowed it, and the pill
+    fell back to the word "Free". Nobody who did not own the site ever saw the
+    bill count.
+
+    `last_updated` is the newest `analyzed_at`: the last time the enrichment
+    pipeline actually processed a bill. It is deliberately not `now()` -- the
+    pill claimed "Updated today" as a hardcoded string, which was false on
+    every day the publish did not run, which is most of them.
+
+    Two scalar aggregates, no auth, under a cached prefix.
+    """
+    from sqlalchemy import func
+
+    # Two queries, not one. Combined, SQLite has to walk rows to resolve the
+    # max() and the whole thing costs ~57ms on every homepage load; split, each
+    # is an index-only scan of ix_legislation_level_analyzed (migration
+    # d9f4b6c80a15) and both land under a millisecond.
+    #
+    # count() with no argument renders `count(*)`. `count(Legislation.id)`
+    # names a column, which makes SQLite fetch each row to prove it non-null
+    # and throws away the covering index -- the same trap as the search count.
+    total = (
+        db.query(func.count())
+        .select_from(Legislation)
+        .filter(Legislation.level == "local")
+        .scalar()
+    )
+    last_analyzed = (
+        db.query(func.max(Legislation.analyzed_at))
+        .filter(Legislation.level == "local")
+        .scalar()
+    )
+    return {
+        "total": total or 0,
+        "last_updated": last_analyzed.isoformat() if last_analyzed else None,
+    }
 
 
 @router.get("/spotlight")
@@ -792,8 +830,20 @@ async def spotlight_bills(
     """
     import random
 
+    # Columns, not entities. This loads the six fields the slideshow renders
+    # instead of 80 whole Legislation rows -- which included `full_text`,
+    # averaging 6.5KB and peaking at 221KB on the budget ordinances, so a cold
+    # edge read roughly half a megabyte to return eight snippets. This is the
+    # homepage's own endpoint, so it is the first query of most real visits.
     bills = (
-        db.query(Legislation)
+        db.query(
+            Legislation.id,
+            Legislation.headline,
+            Legislation.lede,
+            Legislation.bill_number,
+            Legislation.case_for,
+            Legislation.case_against,
+        )
         .filter(
             Legislation.level == "local",
             Legislation.status.in_(["introduced", "in_committee"]),
