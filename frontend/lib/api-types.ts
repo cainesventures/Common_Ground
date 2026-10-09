@@ -112,6 +112,19 @@ export interface PipelineStatsResponse {
   completeness?: CompletenessRow[]
 }
 
+/**
+ * `GET /api/legislation/stats` — the public, unauthenticated counterpart to
+ * PipelineStatsResponse, for the homepage hero pill.
+ *
+ * `last_updated` is the newest `analyzed_at` in the corpus, i.e. the last time
+ * the enrichment pipeline ran, not the time of the request. Null if nothing
+ * has been analyzed.
+ */
+export interface PublicStatsResponse {
+  total: number
+  last_updated: string | null
+}
+
 // ── Votes ────────────────────────────────────────────────────────────────────
 
 /** One tally bucket, as `_tally()` builds it. */

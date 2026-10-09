@@ -70,6 +70,9 @@ class OllamaProvider(AIProvider):
         # 2-3 paragraphs, ~400 tokens; this leaves headroom without unbounded
         # generation behind a client that has already given up.
         self._num_predict = int(os.getenv("AI_NUM_PREDICT") or 800)
+        # 0 = let Ollama choose (its default scales with VRAM: 4k/32k/256k).
+        # Set it for short tasks to keep the KV cache small -- see _options.
+        self._num_ctx = int(os.getenv("AI_NUM_CTX") or 0)
         self._pause_poll_seconds = int(os.getenv("AI_PAUSE_POLL_SECONDS") or 20)
         self._pause_max_seconds = int(os.getenv("AI_PAUSE_MAX_SECONDS") or 1800)
         self._game_checked_at = 0.0
@@ -148,6 +151,21 @@ class OllamaProvider(AIProvider):
         options: dict = {"num_predict": self._num_predict}
         if self._num_thread > 0:
             options["num_thread"] = self._num_thread
+        # Context window, per request rather than per server.
+        #
+        # OLLAMA_CONTEXT_LENGTH would pin this globally, but the pipelines need
+        # different amounts: a headline is built from at most ~340 characters,
+        # while the two-lane generator and `analyze` feed in whole bills. A
+        # global value low enough to keep headline KV cache small would quietly
+        # truncate those.
+        #
+        # It matters because KV cache is the part of VRAM that scales with
+        # context, and VRAM headroom is the binding constraint on an 8GB card
+        # shared with the desktop: llama3.1:8b at 4096 tokens holds ~537MB of
+        # f16 KV on top of ~4.7GB of weights, which peaked at 6.0GB of 8.1GB.
+        # Halving the context halves that share.
+        if self._num_ctx > 0:
+            options["num_ctx"] = self._num_ctx
         # num_gpu is set only when CPU mode is explicitly requested. Deciding it
         # from free VRAM was self-defeating: our own model load consumes the
         # very headroom being measured, so a concurrent check saw "not enough

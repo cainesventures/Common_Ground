@@ -33,7 +33,12 @@ export default async function OGImage({ params }: { params: Promise<{ city: stri
     if (res.ok) {
       const data = await res.json()
       const bill = data?.data
-      title = bill?.plain_title || bill?.title || title
+      // Same chain as generateMetadata and the page H1. Without `headline`
+      // this fell through to the legal title on 93% of bills, so a link shared
+      // to Bluesky or Facebook rendered a card reading "An Ordinance amending
+      // Title 14 of The Philadelphia Code…" — the single worst place to show
+      // legalese, since the card is all most people ever see of the bill.
+      title = bill?.plain_title || bill?.headline || bill?.title || title
       billNumber = bill?.bill_number ?? ''
       impactLevel = bill?.impact_level ?? ''
       status = bill?.status ?? ''

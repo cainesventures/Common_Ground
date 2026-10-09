@@ -278,12 +278,40 @@ function FoundersQuote() {
   )
 }
 
+/**
+ * Turns the corpus's newest `analyzed_at` into the freshness line in the hero
+ * pill.
+ *
+ * The pill read "Updated today" as a hardcoded string. Publishing is a manual
+ * local pipeline, so that claim was false on every day it did not run — six
+ * days stale at the time this was written, while the page insisted otherwise.
+ * A site whose whole proposition is "here is what your Council is doing right
+ * now" cannot afford to be caught lying about its own freshness, so this says
+ * what is actually true, including when the answer is unflattering.
+ */
+function freshnessLabel(lastUpdated: string | null): string {
+  if (!lastUpdated) return 'Updated regularly'
+  const then = new Date(lastUpdated)
+  if (Number.isNaN(then.getTime())) return 'Updated regularly'
+
+  // Compare calendar days in local time, not elapsed hours: an update at 11pm
+  // read back at 1am is "yesterday" to a reader, not "today".
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const days = Math.round((startOfDay(new Date()) - startOfDay(then)) / 86_400_000)
+
+  if (days <= 0) return 'Updated today'
+  if (days === 1) return 'Updated yesterday'
+  if (days < 7) return `Updated ${days} days ago`
+  return `Updated ${then.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+}
+
 export default function CityLandingClient() {
   const router = useRouter()
   const { city } = useParams<{ city: string }>()
   const [recentBills, setRecentBills] = useState<BillCardBill[]>([])
   const [spotlight, setSpotlight] = useState<SpotlightItem[]>([])
   const [billCount, setBillCount] = useState<number | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [contentState, setContentState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -343,8 +371,17 @@ export default function CityLandingClient() {
   useEffect(() => {
     loadContent()
     // The hero pill degrades gracefully on its own — it just omits the count.
-    api.getPipelineStats({})
-      .then((data) => setBillCount(data?.total ?? null))
+    //
+    // This was getPipelineStats, which is behind require_dev_tier, so it 401'd
+    // for everyone but the owner and the catch below hid it: every real
+    // visitor saw the pill's fallback word "Free" where the bill count should
+    // have been. getPublicStats needs no auth and also carries the freshness
+    // date, which the pill previously hardcoded as "Updated today".
+    api.getPublicStats()
+      .then((data) => {
+        setBillCount(data?.total ?? null)
+        setLastUpdated(data?.last_updated ?? null)
+      })
       .catch(() => {})
   }, [loadContent])
 
@@ -357,7 +394,7 @@ export default function CityLandingClient() {
 
         <div className="relative z-10 anim-hero">
           <div className="inline-block bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200 dark:border-blue-700">
-            Philadelphia City Council · {billCount ? `${billCount.toLocaleString()} bills tracked` : 'Free'} · Updated today
+            Philadelphia City Council · {billCount ? `${billCount.toLocaleString()} bills tracked` : 'Free'} · {freshnessLabel(lastUpdated)}
           </div>
           <h1 className="type-display text-4xl sm:text-5xl mb-5">
             Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?

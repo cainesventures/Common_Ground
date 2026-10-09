@@ -127,3 +127,110 @@ def test_bot_token_read_is_not_cacheable(client):
     once made a protected response publicly cacheable."""
     r = client.get("/api/councilmembers", headers={"X-Bot-Token": "faketoken"})
     assert "s-maxage" not in r.headers.get("cache-control", "").lower()
+
+
+# ---------------------------------------------------------------------------
+# Rate-limit identity
+#
+# These guard a bug that is invisible in development and total in production:
+# every browser call reaches the backend through Vercel's /api/* rewrite, so
+# `request.client.host` is the proxy for every visitor alike and the whole site
+# shared one 30/minute bucket on /search. The fix is only a key function, so
+# nothing fails loudly if it regresses -- hence tests.
+# ---------------------------------------------------------------------------
+
+def _fake_request(headers, peer="10.0.0.1"):
+    class _Client:
+        host = peer
+
+    class _Request:
+        def __init__(self):
+            self.headers = headers
+            self.client = _Client()
+
+    return _Request()
+
+
+def test_rate_limit_key_prefers_original_client():
+    """The leftmost X-Forwarded-For entry is the visitor; the rest are hops."""
+    from app.rate_limit import client_identifier
+    req = _fake_request({"x-forwarded-for": "203.0.113.7, 198.51.100.2, 172.16.0.1"})
+    assert client_identifier(req) == "203.0.113.7"
+
+
+def test_rate_limit_key_distinguishes_two_visitors_behind_one_proxy():
+    """The actual regression: same peer, different visitors, different keys."""
+    from app.rate_limit import client_identifier
+    peer = "76.76.21.21"  # stands in for the Vercel edge
+    a = _fake_request({"x-forwarded-for": "203.0.113.7"}, peer=peer)
+    b = _fake_request({"x-forwarded-for": "203.0.113.8"}, peer=peer)
+    assert client_identifier(a) != client_identifier(b)
+
+
+def test_rate_limit_key_falls_back_to_peer():
+    """No forwarding header -- local dev, or a direct call to Railway."""
+    from app.rate_limit import client_identifier
+    assert client_identifier(_fake_request({})) == "10.0.0.1"
+    # Present but useless headers must not win over the peer.
+    assert client_identifier(_fake_request({"x-forwarded-for": " , ,"})) == "10.0.0.1"
+
+
+# ---------------------------------------------------------------------------
+# Search query sanitising
+#
+# FTS5's query language treats punctuation as syntax, so an unsanitised search
+# box is a 500 generator. Each input below raised OperationalError when passed
+# to MATCH directly, and each is something a real visitor would type -- a
+# councilmember's name, a bill number, a code section.
+# ---------------------------------------------------------------------------
+
+import pytest
+
+
+@pytest.mark.parametrize("raw", [
+    "O'Neill",          # fts5: syntax error near "'"
+    "260330-A",         # no such column: A
+    "14-1000",          # no such column: 1000
+    '"unclosed',        # unterminated string
+    "a:b",              # no such column: a
+    "speed AND",        # syntax error near ""
+    "NEAR(",
+    "-foo",
+    "tax*",
+    '" OR 1=1 --',
+])
+def test_fts_match_never_emits_invalid_syntax(raw):
+    """The sanitised expression must be executable against a real fts5 table."""
+    import sqlite3
+    from app.services.legislation_service import _fts_match
+
+    expr = _fts_match(raw)
+    assert expr is not None, raw
+
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE VIRTUAL TABLE t USING fts5(a, tokenize='porter unicode61')")
+    con.execute("INSERT INTO t(a) VALUES ('nothing to see here')")
+    # The assertion is that this does not raise.
+    con.execute("SELECT count(*) FROM t WHERE t MATCH ?", (expr,)).fetchone()
+
+
+@pytest.mark.parametrize("raw", ["", "   ", "!!!", "---", None])
+def test_fts_match_returns_none_for_empty_input(raw):
+    """No usable tokens means no text filter, not 'match nothing'."""
+    from app.services.legislation_service import _fts_match
+    assert _fts_match(raw) is None
+
+
+def test_fts_match_builds_prefix_and_terms():
+    from app.services.legislation_service import _fts_match
+    assert _fts_match("speed camera") == '"speed" AND "camera"*'
+    # A hyphenated bill number splits into its parts, which is how fts5
+    # tokenised it on the way in, so both halves still match the row.
+    assert _fts_match("251022-A") == '"251022" AND "A"*'
+
+
+def test_fts_match_caps_term_count():
+    """A pasted wall of text must not build an unbounded query tree."""
+    from app.services.legislation_service import _fts_match
+    expr = _fts_match(" ".join(f"word{i}" for i in range(50)))
+    assert expr.count(" AND ") == 11  # 12 terms

@@ -532,7 +532,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
             <div className="flex-1 min-w-0">
               <p className="text-xs font-mono text-muted-foreground">{b.bill_number}</p>
               <p className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors mt-0.5">
-                {b.plain_title || b.title}
+                {b.headline || b.plain_title || b.title}
               </p>
               {b.summary && (
                 <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{b.summary}</p>
@@ -673,7 +673,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         if (bill) {
           posthog?.capture('bill_viewed', {
             bill_id: id,
-            title: bill.plain_title || bill.title,
+            title: bill.plain_title || bill.headline || bill.title,
             impact_level: bill.impact_level,
             tags: bill.tags,
           })
@@ -736,6 +736,27 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
   const statusColor = (leg.status ? STATUS_COLORS[leg.status] : undefined) ?? STATUS_COLORS_FALLBACK
   const impactColor = leg.impact_level ? IMPACT_COLORS[leg.impact_level] : null
 
+  /**
+   * The plain-English title, in the same order of preference the bill cards
+   * and the <title> tag already use.
+   *
+   * `headline` was missing from this chain, and it is the field that actually
+   * exists: 8,663 of 8,680 bills have one, against 608 with a `plain_title`.
+   * So 93% of bill pages fell through to the raw legal title and opened with
+   * "Amending Philadelphia Code Section 17-107 to add Stadium Concessions
+   * Employees as a class…" -- while the card the reader clicked said "City
+   * Contractors Must Pay Stadium Concession Workers Prevailing Wages" and the
+   * browser tab said the same, because generateMetadata in page.tsx had the
+   * fallback right. Only the page itself was still speaking legalese.
+   *
+   * Order matters: `plain_title` is a purpose-written short title and wins
+   * where it exists; `headline` is news-style and covers nearly everything
+   * else; the legal title is the last resort and is shown as "Official:"
+   * underneath whenever one of the readable forms is standing in for it.
+   */
+  const readableTitle = leg.plain_title || leg.headline
+  const displayTitle = readableTitle || leg.title
+
   let tags: string[] = []
   try { tags = Array.isArray(leg.tags) ? leg.tags : leg.tags ? JSON.parse(leg.tags) : [] } catch { tags = [] }
 
@@ -772,7 +793,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${statusColor}`}>
             {leg.status ? fmtStatus(leg.status) : ''}
           </span>
-          <p className="text-sm font-semibold truncate flex-1">{leg.plain_title || leg.title}</p>
+          <p className="text-sm font-semibold truncate flex-1">{displayTitle}</p>
           <div className="flex items-center gap-1 shrink-0">
             <button onClick={handleShare} className="p-1.5 text-muted-foreground hover:text-primary transition-colors" aria-label="Copy link">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -814,9 +835,9 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 
         <div className="flex items-start gap-3">
           <div className="flex-1">
-            {leg.plain_title
+            {readableTitle
               ? <>
-                  <h1 ref={titleRef} className="text-2xl font-bold leading-snug">{leg.plain_title}</h1>
+                  <h1 ref={titleRef} className="text-2xl font-bold leading-snug">{readableTitle}</h1>
                   <p className="text-xs text-muted-foreground/70 mt-1 leading-snug">
                     <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Official:</span>
                     {leg.title}
@@ -997,7 +1018,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
               body={leg.next_hearing_body ?? undefined}
               location={leg.next_hearing_location ?? undefined}
               meetingUrl={leg.next_hearing_url ?? undefined}
-              billTitle={leg.plain_title || leg.title || ''}
+              billTitle={displayTitle || ''}
               billNumber={leg.bill_number ?? ''}
             />
           )}
@@ -1015,7 +1036,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           {members.length > 0 && (
             <ContactMyCouncilmember
               members={members}
-              billTitle={leg.plain_title || leg.title || ''}
+              billTitle={displayTitle || ''}
               billNumber={leg.bill_number ?? ''}
             />
           )}
