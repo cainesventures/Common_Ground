@@ -9,7 +9,12 @@ pydantic==2.12.5
 pydantic-settings==2.7.1
 python-dotenv==1.0.0
 httpx==0.28.1
-requests==2.31.0
+# Security bump from 2.31.0: CVE-2024-35195 (certificate verification bypass
+# when a Session is reused after verify=False) and CVE-2024-47081 (.netrc
+# credential leak to a malicious URL). Nothing in this repo imports requests
+# directly -- it is pulled in by resend and google-genai -- so the pin exists
+# to keep those off a vulnerable version rather than for our own use.
+requests==2.32.5
 anthropic==0.84.0
 alembic==1.13.1
 pytest==7.4.4
