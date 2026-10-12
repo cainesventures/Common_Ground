@@ -1783,7 +1783,9 @@ async def stream_backfill_sponsors(
 
 class VoteRequest(BaseModel):
     vote: str
-    voter_token: str
+    # Optional, and no longer the identity -- see LegislationVote in
+    # app/models. Retained as an audit trail of which browser cast the vote.
+    voter_token: Optional[str] = None
 
     @field_validator("vote")
     @classmethod
@@ -1794,7 +1796,9 @@ class VoteRequest(BaseModel):
 
     @field_validator("voter_token")
     @classmethod
-    def valid_uuid(cls, v: str) -> str:
+    def valid_uuid(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
         try:
             _uuid.UUID(v)
         except ValueError:
@@ -1843,9 +1847,14 @@ async def cast_vote(
 ):
     """Cast or update a Support / Oppose / Neutral vote on a piece of legislation.
 
-    Requires authentication. Votes are deduplicated by ``voter_token`` (a UUID
-    the client generates once and persists in localStorage). Submitting again
-    with the same token updates the existing vote rather than adding a new one.
+    Requires authentication. One vote per account per bill; voting again
+    updates that row.
+
+    Dedup used to key on ``voter_token``, a UUID the client generates and
+    persists in localStorage. That stopped a cooperating browser from voting
+    twice but not a caller who sent a fresh UUID each time -- at the 10/minute
+    limit, one account could add ~14k votes a day to a single bill. The
+    account is the ballot now.
     """
     leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
     if not leg:
@@ -1856,15 +1865,15 @@ async def cast_vote(
             db.query(LegislationVote)
             .filter(
                 LegislationVote.legislation_id == legislation_id,
-                LegislationVote.voter_token == body.voter_token,
+                LegislationVote.user_id == current_user.id,
             )
             .first()
         )
 
         if existing:
             existing.vote = body.vote
-            if not existing.user_id:
-                existing.user_id = current_user.id
+            if body.voter_token:
+                existing.voter_token = body.voter_token
         else:
             db.add(LegislationVote(
                 id=f"vote_{_uuid.uuid4().hex[:12]}",
@@ -1891,24 +1900,28 @@ async def cast_vote(
 @router.get("/{legislation_id}/votes")
 async def get_votes(
     legislation_id: str,
-    voter_token: str | None = Query(None, description="Your voter token (UUID) to retrieve your current vote"),
+    voter_token: str | None = Query(None, deprecated=True, description="Ignored; retained so older clients keep working."),
     db: Session = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
     """Get vote tallies for a piece of legislation.
 
-    Pass ``voter_token`` to also receive the caller's current vote.
+    ``your_vote`` is resolved from the session. Looking it up by
+    ``voter_token`` let anyone read back a stranger's vote by replaying their
+    token, so the parameter is now accepted and ignored -- a client build
+    cached before this change keeps working rather than 422-ing.
     """
     leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
     if not leg:
         raise HTTPException(status_code=404, detail="Legislation not found")
 
     your_vote = None
-    if voter_token:
+    if current_user:
         row = (
             db.query(LegislationVote)
             .filter(
                 LegislationVote.legislation_id == legislation_id,
-                LegislationVote.voter_token == voter_token,
+                LegislationVote.user_id == current_user.id,
             )
             .first()
         )
@@ -2593,8 +2606,17 @@ async def clear_perspectives(
 async def get_perspectives(
     legislation_id: str,
     db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
 ):
-    """Get all generated perspectives for a bill."""
+    """Get all generated perspectives for a bill. Dev-tier only.
+
+    Was public, and was the reader-facing panel's data source. The panel is
+    gone; this stays for the admin pipeline view, which still lists and
+    regenerates perspectives. Gating it rather than deleting it keeps the
+    16,217 stored rows reachable as the research asset they are, without
+    leaving an unauthenticated route to text that never passed the grounding
+    checks.
+    """
     leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
     if not leg:
         raise HTTPException(status_code=404, detail="Legislation not found")
@@ -2816,7 +2838,6 @@ async def get_legislation(
         leg = (
             db.query(Legislation)
             .options(
-                joinedload(Legislation.perspectives),
                 _sil(Legislation.vote_records),
             )
             .filter(Legislation.id == legislation_id)
@@ -2825,17 +2846,14 @@ async def get_legislation(
         if not leg:
             raise HTTPException(status_code=404, detail="Legislation not found")
 
-        perspectives_data = [
-            {
-                "id": p.id,
-                "perspective_type": p.perspective_type,
-                "position": p.position,
-                "key_arguments": p.key_arguments,
-                "concerns": p.concerns,
-                "assessment": p.assessment,
-            }
-            for p in leg.perspectives
-        ]
+        # The 17-persona bodies are no longer sent to readers -- see the note on
+        # "perspective_count" below. Only the count is, and it is a COUNT(*)
+        # rather than a joinedload of every text block on the bill.
+        perspective_count = (
+            db.query(func.count(BillPerspective.id))
+            .filter(BillPerspective.bill_id == leg.id)
+            .scalar() or 0
+        )
 
         return {
             "success": True,
@@ -2870,15 +2888,33 @@ async def get_legislation(
                 "next_hearing_body":     leg.next_hearing_body,
                 "next_hearing_location": leg.next_hearing_location,
                 "next_hearing_url":      leg.next_hearing_url,
-                "perspectives": perspectives_data,
-                "perspective_count": len(perspectives_data),
+                # The persona bodies are deliberately absent.
+                #
+                # They were sent on every bill payload and rendered into the
+                # server HTML (hidden behind a tab with CSS, so a crawler read
+                # them) on 2,073 bills. None of them ever passed the grounding
+                # checks the case-for/case-against text passes, measured stance
+                # accuracy was 69% on clear-cut bills, and over 180 days two
+                # people opened one. The rows are kept -- the eval harness uses
+                # them -- but nothing reader-facing reads them any more.
+                #
+                # The count stays: the admin pipeline view filters on it.
+                "perspective_count": perspective_count,
                 # The case for / the case against. two_lane_state tells the
                 # page why there is no case when there is none, so it can show
-                # nothing rather than an empty panel. two_lane_insights is
-                # provenance for debugging and is deliberately not sent.
+                # nothing rather than an empty panel.
                 "case_for": leg.case_for,
                 "case_against": leg.case_against,
                 "two_lane_state": leg.two_lane_state,
+                # What the bill actually does. Was internal provenance for the
+                # grounding checks and deliberately withheld; it is now the
+                # factual block shown above the arguments, and on concluded
+                # bills it is the only writing on the page beyond the summary
+                # -- the replacement for the persona panel that was removed.
+                # Generated by scripts/generate_insights.py and checked for
+                # ungrounded figures and self-contradiction like every other
+                # stage.
+                "two_lane_insights": leg.two_lane_insights,
             }
         }
     except HTTPException:

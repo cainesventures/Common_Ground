@@ -257,14 +257,28 @@ function Metric({ value, label, sub, onClick, expanded }: {
   )
 }
 
-function LegislativeProfile({ memberId, memberName }: { memberId: string; memberName: string }) {
+/**
+ * Seeded from the server (see page.tsx). The fetch is kept only as a fallback
+ * for when the server lookup failed, so a blip degrades to the old
+ * client-rendered behaviour instead of hiding the block.
+ *
+ * The seed is what removes this component from the page's CLS: it used to
+ * render null until its own fetch resolved, then insert several hundred pixels
+ * above the approval panel and contact details.
+ */
+function LegislativeProfile({ memberId, memberName, initialProfile = null }: {
+  memberId: string
+  memberName: string
+  initialProfile?: Profile | null
+}) {
   const { city } = useParams<{ city: string }>()
-  const [p, setP] = useState<Profile | null>(null)
+  const [p, setP] = useState<Profile | null>(initialProfile)
   const [openPanel, setOpenPanel] = useState<'signed' | 'active' | 'dissents' | null>(null)
 
   useEffect(() => {
+    if (initialProfile) return
     api.getCouncilmemberProfile(memberId).then((d) => d && setP(d.profile)).catch(() => {})
-  }, [memberId])
+  }, [memberId, initialProfile])
 
   if (!p || p.outcomes.total === 0) return null
 
@@ -458,13 +472,15 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
     return t
   })()
 
+  // Not gated on the voter token: the tallies are public and `your_vote` comes
+  // from the session, so a reader with localStorage blocked still sees the
+  // approval figure rather than an empty one.
   useEffect(() => {
-    if (!voterToken) return
-    api.getCouncilmemberVotes(memberId, voterToken).then((d) => {
+    api.getCouncilmemberVotes(memberId).then((d) => {
       if (d?.counts) setCounts(d.counts)
       if (d?.your_vote !== undefined) setMyVote(d.your_vote)
     }).catch(() => {})
-  }, [memberId, voterToken])
+  }, [memberId])
 
   const handleVote = async (vote: string) => {
     if (!isLoggedIn()) { setShowLogin(true); return }
@@ -729,7 +745,10 @@ const TABS: { key: TabKey; label: string }[] = [
 
 const BILLS_PER_PAGE = 20
 
-export default function CouncilmemberDetailClient({ initialData = null }: { initialData?: CouncilmemberProfile | null }) {
+export default function CouncilmemberDetailClient({ initialData = null, initialProfile = null }: {
+  initialData?: CouncilmemberProfile | null
+  initialProfile?: Profile | null
+}) {
   const { city, id } = useParams<{ city: string; id: string }>()
   // Seeded from the server so the profile renders during SSR rather than
   // hitting the skeleton branch below, which is all a crawler used to receive.
@@ -880,7 +899,7 @@ export default function CouncilmemberDetailClient({ initialData = null }: { init
           )}
 
           {/* Legislative profile / bill analysis */}
-          <LegislativeProfile memberId={member.id} memberName={member.name} />
+          <LegislativeProfile memberId={member.id} memberName={member.name} initialProfile={initialProfile} />
 
           {/* Citizen approval */}
           <CouncilmemberVotePanel memberId={member.id} memberName={member.name} />

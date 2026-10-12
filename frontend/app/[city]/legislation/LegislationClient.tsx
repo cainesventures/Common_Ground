@@ -106,7 +106,6 @@ export default function LegislationClient({
   const [selectedSponsors, setSelectedSponsors] = useState<string[]>(f.sponsors)
   const [analyzedOnly,    setAnalyzedOnly]    = useState(f.analyzedOnly)
   const [hasVotesOnly,    setHasVotesOnly]    = useState(f.hasVotesOnly)
-  const [hasPerspectivesOnly, setHasPerspectivesOnly] = useState(f.hasPerspectivesOnly)
   const [selectedCategories, setSelectedCategories] = useState<string[]>(f.categories)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [filtersExpanded, setFiltersExpanded] = useState(true)
@@ -134,17 +133,16 @@ export default function LegislationClient({
     if (selectedSponsors.length) p.set('sponsor', selectedSponsors.join(','))
     if (!analyzedOnly)        p.set('analyzed', '0')
     if (hasVotesOnly)         p.set('has_votes', '1')
-    if (hasPerspectivesOnly)  p.set('has_perspectives', '1')
     if (selectedCategories.length) p.set('category', selectedCategories.join(','))
     if (page > 1)             p.set('page',    String(page))
     const qs = p.toString()
     const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`
     window.history.replaceState(null, '', url)
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsors, analyzedOnly, hasVotesOnly, hasPerspectivesOnly, selectedCategories, page])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, selectedSponsors, analyzedOnly, hasVotesOnly, selectedCategories, page])
 
   const fetchBills = useCallback(async (
     q: string, year: number | null, month: number | null, tags: string[],
-    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsors: string[], hasVotes: boolean, hasPerspectives: boolean, categories: string[]
+    level: string, statuses: string[], impact: string, analyzed: boolean, pageNum: number, sponsors: string[], hasVotes: boolean, categories: string[]
   ) => {
     setLoading(true)
     setError('')
@@ -155,7 +153,7 @@ export default function LegislationClient({
       const data = await api.searchLegislation(
         q, PAGE_SIZE, offset, level,
         analyzed ? 'true' : '',
-        allTags, impact, year ?? 0, month ?? 0, statuses, sponsors.join(','), hasVotes, hasPerspectives
+        allTags, impact, year ?? 0, month ?? 0, statuses, sponsors.join(','), hasVotes
       )
       setBills(data?.results ?? [])
       setTotal(data?.total ?? 0)
@@ -182,7 +180,7 @@ export default function LegislationClient({
       if (seededRef.current) {
         seededRef.current = false
       } else {
-        fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories)
+        fetchBills(query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, selectedCategories)
       }
       api.getFacets({
         q: query || undefined,
@@ -205,7 +203,7 @@ export default function LegislationClient({
       }).catch(() => {})
     }, 250)
     return () => { if (fetchTimerRef.current) clearTimeout(fetchTimerRef.current) }
-  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, hasPerspectivesOnly, selectedCategories, fetchBills])
+  }, [query, selectedYear, selectedMonth, selectedTags, selectedLevel, selectedStatuses, selectedImpact, analyzedOnly, page, selectedSponsors, hasVotesOnly, selectedCategories, fetchBills])
 
   useEffect(() => {
     const categoryTags = selectedCategories.flatMap(cat => CATEGORY_TAGS[cat] ?? [])
@@ -234,7 +232,7 @@ export default function LegislationClient({
 
   const reset = (overrides: Partial<{
     year: number | null; month: number | null; tags: string[]; level: string;
-    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsors: string[]; hasVotes: boolean; hasPerspectives: boolean; categories: string[]
+    statuses: string[]; impact: string; analyzed: boolean; q: string; sponsors: string[]; hasVotes: boolean; categories: string[]
   }> = {}) => {
     setPage(1)
     if ('year'            in overrides) { setSelectedYear(overrides.year!); setSelectedMonth(null) }
@@ -246,7 +244,6 @@ export default function LegislationClient({
     if ('analyzed'        in overrides) setAnalyzedOnly(overrides.analyzed!)
     if ('sponsors'        in overrides) setSelectedSponsors(overrides.sponsors!)
     if ('hasVotes'        in overrides) setHasVotesOnly(overrides.hasVotes!)
-    if ('hasPerspectives' in overrides) setHasPerspectivesOnly(overrides.hasPerspectives!)
     if ('categories'      in overrides) setSelectedCategories(overrides.categories!)
     if ('q'               in overrides) { setQuery(overrides.q!); setQueryInput(overrides.q!) }
   }
@@ -257,7 +254,6 @@ export default function LegislationClient({
     setSelectedTags([]); setSelectedLevel('local')
     setSelectedStatuses([]); setSelectedImpact('')
     setSelectedSponsors([]); setHasVotesOnly(false)
-    setHasPerspectivesOnly(false)
     setSelectedCategories([])
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
@@ -278,7 +274,6 @@ export default function LegislationClient({
     selectedTags.length > 0,
     !analyzedOnly,
     hasVotesOnly,
-    hasPerspectivesOnly,
     selectedCategories.length > 0,
     selectedYear !== null,
   ].filter(Boolean).length
@@ -296,7 +291,6 @@ export default function LegislationClient({
   if (selectedTags.length) selectedTags.forEach(t => filterParts.push(t))
   if (!analyzedOnly)  filterParts.push('including unanalyzed')
   if (hasVotesOnly)         filterParts.push('has roll call')
-  if (hasPerspectivesOnly)  filterParts.push('has perspectives')
   if (query)          filterParts.push(`"${query}"`)
 
   useEffect(() => {
@@ -559,10 +553,6 @@ export default function LegislationClient({
                 <input type="checkbox" checked={hasVotesOnly} onChange={(e) => reset({ hasVotes: e.target.checked })} className="rounded border-input" />
                 Has roll call
               </label>
-              <label className="flex items-center gap-1.5 text-sm cursor-pointer text-muted-foreground hover:text-foreground transition-colors">
-                <input type="checkbox" checked={hasPerspectivesOnly} onChange={(e) => reset({ hasPerspectives: e.target.checked })} className="rounded border-input" />
-                Has perspectives
-              </label>
             </div>
           </div>
 
@@ -779,15 +769,6 @@ export default function LegislationClient({
                     className="rounded border-input w-4 h-4"
                   />
                 </label>
-                <label className="flex items-center justify-between py-2">
-                  <span className="text-sm">Has perspectives</span>
-                  <input
-                    type="checkbox"
-                    checked={hasPerspectivesOnly}
-                    onChange={(e) => reset({ hasPerspectives: e.target.checked })}
-                    className="rounded border-input w-4 h-4"
-                  />
-                </label>
               </div>
 
             </div>
@@ -812,7 +793,7 @@ export default function LegislationClient({
       {!loading && !error && bills.length > 0 && (
         <div className="space-y-2">
           {bills.map((bill) => (
-            <BillCard key={bill.id} bill={bill} query={query} showDate tab={hasPerspectivesOnly ? 'perspectives' : undefined} citySlug={city} />
+            <BillCard key={bill.id} bill={bill} query={query} showDate citySlug={city} />
           ))}
         </div>
       )}

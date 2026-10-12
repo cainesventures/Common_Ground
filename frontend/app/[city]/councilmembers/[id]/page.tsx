@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import CouncilmemberDetailClient from './CouncilmemberDetailClient'
 import { siteUrl } from '@/lib/site'
 import type { CouncilmemberProfile } from '@/lib/types'
+import type { LegislativeProfile } from '@/lib/api-types'
 import { councilmemberGraph, jsonLdProps } from '@/lib/structured-data'
 
 // Must match BILLS_PER_PAGE in the client, so the seeded first page is exactly
@@ -34,6 +35,35 @@ async function getMember(id: string): Promise<CouncilmemberProfile | typeof MISS
     return null
   }
 }
+
+/**
+ * Fetch the legislative profile on the server.
+ *
+ * It used to load in a client effect, and the component returned null until it
+ * arrived -- so a several-hundred-pixel block dropped into the middle of the
+ * page after mount and pushed everything below it down. That was a large part
+ * of this page type measuring CLS 0.238 at p75. Fetching it here removes the
+ * insertion entirely, and has the side benefit of putting the aggregate text
+ * (what the member legislates on, their record) into the server-rendered HTML
+ * where a crawler can read it.
+ *
+ * Failure is a null, never a throw: this is supporting detail, and a blip on
+ * this one endpoint must not take down a profile page that otherwise renders.
+ */
+async function getLegislativeProfile(id: string): Promise<LegislativeProfile | null> {
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}/legislative-profile`,
+      { next: { revalidate: 3600 } },
+    )
+    if (!res.ok) return null
+    const data = await res.json()
+    return data?.profile ?? null
+  } catch {
+    return null
+  }
+}
+
 
 export async function generateMetadata({ params }: { params: Promise<{ city: string; id: string }> }) {
   const { city, id } = await params
@@ -74,7 +104,12 @@ export default async function CouncilmemberPage({
   params: Promise<{ city: string; id: string }>
 }) {
   const { city, id } = await params
-  const initialData = await getMember(id)
+  // In parallel: the member lookup is what decides the 404, the profile is
+  // supporting detail, and neither depends on the other.
+  const [initialData, initialProfile] = await Promise.all([
+    getMember(id),
+    getLegislativeProfile(id),
+  ])
   // Only a confirmed 404 becomes a 404; see the note on MISSING above.
   if (initialData === MISSING) notFound()
 
@@ -89,7 +124,7 @@ export default async function CouncilmemberPage({
   return (
     <>
       {graph && <script {...jsonLdProps(graph)} />}
-      <CouncilmemberDetailClient initialData={initialData} />
+      <CouncilmemberDetailClient initialData={initialData} initialProfile={initialProfile} />
     </>
   )
 }

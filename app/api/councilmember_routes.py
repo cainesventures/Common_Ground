@@ -5,7 +5,8 @@ import logging
 import urllib.request
 import uuid
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
@@ -13,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from app.models.database import get_db
 from app.models import CouncilmemberVote, BillVoteRecord, Legislation
-from app.auth import require_dev_tier, get_optional_user
+from app.auth import require_dev_tier, get_optional_user, get_current_user
+from app.rate_limit import limiter
 from app.services.councilmember_service import (
     get_all_councilmembers,
     get_councilmember,
@@ -243,7 +245,9 @@ async def get_member_legislative_profile(member_id: str, db: Session = Depends(g
 
 class CouncilmemberVoteRequest(BaseModel):
     vote: str
-    voter_token: str
+    # Optional, and no longer the identity. Kept so the client can keep sending
+    # what it already sends, and so each row records which browser cast it.
+    voter_token: Optional[str] = None
 
     @field_validator("vote")
     @classmethod
@@ -254,7 +258,9 @@ class CouncilmemberVoteRequest(BaseModel):
 
     @field_validator("voter_token")
     @classmethod
-    def valid_token(cls, v: str) -> str:
+    def valid_token(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or v == "":
+            return None
         try:
             uuid.UUID(v)
         except ValueError:
@@ -279,18 +285,25 @@ def _cm_vote_counts(db: Session, councilmember_id: str) -> dict:
 @router.get("/{member_id}/votes")
 async def get_member_votes(
     member_id: str,
-    voter_token: str = Query(""),
+    voter_token: str = Query("", deprecated=True, description="Ignored; retained so older clients keep working."),
     db: Session = Depends(get_db),
+    current_user=Depends(get_optional_user),
 ):
-    """Get support/oppose vote counts for a council member and the caller's current vote."""
+    """Get support/oppose vote counts for a council member and the caller's current vote.
+
+    ``your_vote`` is resolved from the session. It used to be looked up by the
+    ``voter_token`` query parameter, which meant anyone could read back a
+    stranger's vote by guessing or replaying their token. The parameter is
+    accepted and ignored so a cached client build does not start 422-ing.
+    """
     counts = _cm_vote_counts(db, member_id)
     your_vote = None
-    if voter_token:
+    if current_user:
         row = (
             db.query(CouncilmemberVote)
             .filter(
                 CouncilmemberVote.councilmember_id == member_id,
-                CouncilmemberVote.voter_token == voter_token,
+                CouncilmemberVote.user_id == current_user.id,
             )
             .first()
         )
@@ -300,39 +313,60 @@ async def get_member_votes(
 
 
 @router.post("/{member_id}/vote")
+@limiter.limit("20/minute")
 async def cast_member_vote(
+    request: Request,
     member_id: str,
     body: CouncilmemberVoteRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(get_optional_user),
+    current_user=Depends(get_current_user),
 ):
-    """Cast or update a support/oppose vote on a council member."""
+    """Cast or update a support/oppose vote on a council member.
+
+    Requires an account. One vote per account per member; voting again updates
+    that row.
+
+    This endpoint used to accept anonymous votes deduplicated on a UUID the
+    caller generated, with no rate limit -- so the "Citizen Approval" figure
+    shown on a named council member's page could be set to any value by
+    looping over fresh UUIDs. The frontend already refused to vote without a
+    session (`isLoggedIn()` in CouncilmemberDetailClient); only the server did
+    not check, so requiring auth here costs no reader anything.
+    """
     from app.services.councilmember_service import get_councilmember
     if not get_councilmember(db, member_id):
         raise HTTPException(status_code=404, detail="Council member not found")
 
-    existing = (
-        db.query(CouncilmemberVote)
-        .filter(
-            CouncilmemberVote.councilmember_id == member_id,
-            CouncilmemberVote.voter_token == body.voter_token,
+    try:
+        existing = (
+            db.query(CouncilmemberVote)
+            .filter(
+                CouncilmemberVote.councilmember_id == member_id,
+                CouncilmemberVote.user_id == current_user.id,
+            )
+            .first()
         )
-        .first()
-    )
-    if existing:
-        existing.vote = body.vote
-        existing.updated_at = datetime.utcnow()
-        if current_user:
-            existing.user_id = current_user.id
-    else:
-        db.add(CouncilmemberVote(
-            id=f"cmv_{uuid.uuid4().hex[:12]}",
-            councilmember_id=member_id,
-            user_id=current_user.id if current_user else None,
-            vote=body.vote,
-            voter_token=body.voter_token,
-        ))
-    db.commit()
+        if existing:
+            existing.vote = body.vote
+            existing.updated_at = datetime.utcnow()
+            if body.voter_token:
+                existing.voter_token = body.voter_token
+        else:
+            db.add(CouncilmemberVote(
+                id=f"cmv_{uuid.uuid4().hex[:12]}",
+                councilmember_id=member_id,
+                user_id=current_user.id,
+                vote=body.vote,
+                voter_token=body.voter_token,
+            ))
+        db.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error casting council member vote on {member_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
     return {"success": True, "counts": _cm_vote_counts(db, member_id), "your_vote": body.vote}
 
 

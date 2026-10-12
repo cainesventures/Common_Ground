@@ -26,7 +26,7 @@ export default function AboutPage() {
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Open Common Ground takes every bill introduced in Philadelphia City Council, summarizes it in plain
-          English, scores its potential impact, and shows how 17 different political perspectives — from
+          English, scores its potential impact, and sets out the case for and the case against — 
           progressive to libertarian — might view it. The goal isn&apos;t to tell you what to think. It&apos;s to give
           you the context to think for yourself.
         </p>
@@ -44,7 +44,6 @@ export default function AboutPage() {
             ['Bill data', 'Legislation is scraped from Philadelphia Legistar, the official public record system maintained by City Council. Bills are fetched regularly to keep the data current.'],
             ['AI analysis', 'Each bill is sent to an AI model that writes a plain-English summary, assigns an impact score (1–10) and categorizes the bill type. Bills still moving through Council are also argued both ways.'],
             ['The case for and against', 'A bill still before Council is read for what it actually does, and then argued both ways — the strongest honest case for it, and the strongest honest case against it, with no political label attached to either. Every number in those arguments is checked against the bill’s own text, and a bill whose arguments cannot be grounded that way is published without them rather than with something invented. Routine housekeeping — a zoning map change, a parking regulation, a lease — is marked as routine instead of being argued over.'],
-            ['The perspectives archive', 'Older bills carry a second kind of writing: AI-generated perspectives framing the bill through seventeen political and community viewpoints. These are no longer produced — the case for and against replaced them — but the existing ones are kept and remain readable. They are simulations, not endorsements, and not a count of who supports a bill.'],
             ['Limitations', 'AI can be wrong. Summaries may miss nuance, and an argument can be weak without being false. The figure checking catches numbers that are not in the bill; it cannot tell you an argument is fair. Always read the source bill and form your own view. Nothing here is legal or political advice.'],
           ].map(([title, body]) => (
             <div key={title as string} className="border rounded-lg p-4">

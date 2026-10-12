@@ -45,7 +45,6 @@ export async function getLegislationList(
   if (f.statuses.length) p.set('status', f.statuses.join(','))
   if (f.sponsors.length) p.set('sponsor', f.sponsors.join(','))
   if (f.hasVotesOnly) p.set('has_votes', 'true')
-  if (f.hasPerspectivesOnly) p.set('has_perspectives', 'true')
 
   try {
     const res = await fetch(`${BACKEND}/api/legislation/search?${p}`, {

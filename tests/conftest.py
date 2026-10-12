@@ -1,5 +1,28 @@
 """Shared pytest fixtures for Common Ground tests."""
 
+import os
+
+_GPU_NOTE = """Running the test suite must not touch the GPU.
+
+test_health_ai_no_key exercises /health/ai, which makes a real
+provider.complete() call. Locally that meant every `pytest` run pulled
+llama3.1:8b — 5 GB — into an 8 GB card that is also driving the desktop, and
+waited out a cold model load (observed at 71s, ~9 min for the whole suite).
+
+Set before anything imports app.config, whose get_settings() is lru_cached and
+would otherwise freeze the real values from .env.
+
+The light model is the default here so that if any test ever does reach a
+live Ollama, it pulls 2 GB rather than 5 GB. The real fix for /health/ai is in
+the test itself, which stubs the provider out so no socket is opened at all —
+pointing the base URL at a closed port was tried first and was worse: the
+route's wait_for gives up after 10s but the blocked thread keeps running (see
+main.py), and a connect to 127.0.0.1:1 takes ~58s to fail on Windows, so the
+suite went from 6s to 69s.
+See [feedback_never_launch_unguarded_gpu_runs] / scripts/gpu_guard.py.
+"""
+os.environ.setdefault("AI_MODEL", "llama3.2:3b")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

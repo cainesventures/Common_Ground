@@ -269,8 +269,12 @@ export const api = {
       body: JSON.stringify({ vote, voter_token: voterToken }),
     }),
 
-  getVotes: (legislationId: string, voterToken?: string) =>
-    apiFetch<BillVoteCountsResponse>(`/api/legislation/${legislationId}/votes${voterToken ? `?voter_token=${voterToken}` : ''}`),
+  // No voter_token: the server resolves `your_vote` from the session, and the
+  // token used to make this URL unique per visitor -- which, on an
+  // edge-cached prefix, meant one Cloudflare cache entry per reader and so a
+  // miss on every first view of every member or bill.
+  getVotes: (legislationId: string) =>
+    apiFetch<BillVoteCountsResponse>(`/api/legislation/${legislationId}/votes`),
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   getMe: () => apiFetch<MeResponse>('/api/auth/me'),
@@ -331,8 +335,8 @@ export const api = {
     apiFetch<ActionResult>('/api/councilmembers/backfill-emails', { method: 'POST' }),
 
   // ── Councilmember votes ───────────────────────────────────────────────────
-  getCouncilmemberVotes: (memberId: string, voterToken: string) =>
-    apiFetch<MemberVoteCountsResponse>(`/api/councilmembers/${memberId}/votes?voter_token=${encodeURIComponent(voterToken)}`),
+  getCouncilmemberVotes: (memberId: string) =>
+    apiFetch<MemberVoteCountsResponse>(`/api/councilmembers/${memberId}/votes`),
   castCouncilmemberVote: (memberId: string, vote: string, voterToken: string) =>
     apiFetch<MemberVoteCountsResponse>(`/api/councilmembers/${memberId}/vote`, {
       method: 'POST',

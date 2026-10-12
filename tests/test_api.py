@@ -24,18 +24,50 @@ def test_health_db_endpoint(client):
     assert r.json()["status"] == "ok"
 
 
-def test_health_ai_no_key(client, monkeypatch):
-    """/health/ai always makes a live call to the configured provider (see
-    main.py) and reports ok or error -- there is no third "warning" outcome in
-    the route, and the provider it calls is AI_PROVIDER (ollama by default),
-    not anthropic_api_key, so patching that setting does not change what this
-    exercises. This asserts the one thing that is actually true regardless of
-    environment: the endpoint always returns 200 with a real status, even when
-    no provider is reachable (as on a CI runner, which has no AI provider at
-    all -- that is an "error" outcome, not a test failure)."""
+def test_health_ai_unreachable_provider(client, monkeypatch):
+    """/health/ai reports an unreachable provider as a 200 with status "error".
+
+    The provider is stubbed. This test used to make a real call to whatever
+    AI_PROVIDER pointed at, which on this dev box meant every `pytest` run
+    pulled llama3.1:8b (5 GB) into an 8 GB card that is also driving the
+    desktop, and waited out a cold model load -- 71s observed for this test
+    alone, ~9 min for the suite. A test suite has no business touching the
+    GPU.
+
+    Stubbing also makes it deterministic. The outcome used to depend on
+    whether Ollama happened to be running: "ok" on the dev box, "error" on CI,
+    so the assertion had to accept either and proved little. Now the failing
+    path is the one under test, and it is asserted exactly.
+    """
+    import app.services.ai_provider as ai
+
+    class Unreachable:
+        def complete(self, system_prompt: str, user_prompt: str) -> str:
+            raise ConnectionError("connection refused")
+
+    monkeypatch.setattr(ai, "get_ai_provider", lambda: Unreachable())
+
     r = client.get("/health/ai")
     assert r.status_code == 200
-    assert r.json()["status"] in ("ok", "error")
+    body = r.json()
+    assert body["status"] == "error"
+    assert body["provider"] == "Unreachable"
+    assert "refused" in body["reason"]
+
+
+def test_health_ai_reports_ok_when_provider_answers(client, monkeypatch):
+    """The success path, which nothing covered before."""
+    import app.services.ai_provider as ai
+
+    class Fine:
+        def complete(self, system_prompt: str, user_prompt: str) -> str:
+            return "OK"
+
+    monkeypatch.setattr(ai, "get_ai_provider", lambda: Fine())
+
+    r = client.get("/health/ai")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "provider": "Fine"}
 
 
 # ---------------------------------------------------------------------------

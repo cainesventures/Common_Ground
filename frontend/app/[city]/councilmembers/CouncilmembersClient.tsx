@@ -12,9 +12,19 @@ import { lastName } from '@/lib/names'
 import { errorMessage } from '@/lib/utils'
 import type { DistrictGeoJSON } from '@/lib/types'
 
+// One source of truth for the map's height: the reserved box, the chunk-loading
+// placeholder and the map itself all read this, so none of them can disagree
+// and shift the page. See the comment at the render site.
+const MAP_HEIGHT = 420
+
 const DistrictMap = dynamic(
   () => import('@/components/DistrictMap').then((m) => m.DistrictMap),
-  { ssr: false, loading: () => <div className="h-96 rounded-lg bg-muted animate-pulse" /> }
+  {
+    ssr: false,
+    loading: () => (
+      <div style={{ height: MAP_HEIGHT }} className="rounded-lg bg-muted animate-pulse" />
+    ),
+  }
 )
 
 // Point-in-polygon (ray-casting). GeoJSON coords are [lng, lat].
@@ -261,14 +271,26 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
         </p>
       </div>
 
-      {/* Full-city district map — shown once members load */}
-      {!loading && !error && (
-        <DistrictMap
-          district="all"
-          members={members}
-          height={420}
-        />
-      )}
+      {/*
+        Full-city district map.
+
+        The box is reserved whether or not the map is ready. This used to be
+        gated on `!loading`, so nothing at all occupied the space until the
+        members request came back and then a 420px map dropped into the middle
+        of the page, pushing every card below it down -- and the dynamic()
+        placeholder was h-96 (384px) against a 420px map, so there was a second
+        36px shift behind the first. Together they were most of this page's
+        CLS 0.248 at p75.
+
+        Height is stated in one place now (MAP_HEIGHT) and used by the
+        reserved box, the loading placeholder and the map itself, so the three
+        cannot drift apart again.
+      */}
+      <div style={{ height: MAP_HEIGHT }} className="w-full">
+        {loading || error
+          ? <div className="h-full rounded-lg bg-muted animate-pulse" />
+          : <DistrictMap district="all" members={members} height={MAP_HEIGHT} />}
+      </div>
 
       {!loading && members.length > 0 && (
         <FindMyCouncilmember members={members} onFound={handleFound} />

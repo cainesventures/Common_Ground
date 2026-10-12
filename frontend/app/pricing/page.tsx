@@ -26,7 +26,7 @@ export default function PricingPage() {
             <span className="text-sm text-muted-foreground">/ forever</span>
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            Every feature, every bill, every perspective — free for every Philadelphian.
+            Every feature, every bill — free for every Philadelphian.
           </p>
         </div>
 

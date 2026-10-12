@@ -32,7 +32,13 @@ export interface VoteRecord {
   result?: string | null
 }
 
-/** One of the 17 legacy persona perspectives: `bill_perspectives`. */
+/** One of the 17 legacy persona perspectives: `bill_perspectives`.
+ *
+ * No longer reader-facing. The rows are kept and the admin pipeline view still
+ * lists them via the dev-tier `/{id}/perspectives` endpoint, which is the only
+ * thing this type is still for -- it is deliberately NOT on `Bill` any more,
+ * because the public bill payload stopped carrying the text.
+ */
 export interface Perspective {
   id?: string
   bill_id?: string
@@ -147,7 +153,9 @@ export interface Bill {
   // Two-lane case for / case against (the current direction)
   case_for?: string | null
   case_against?: string | null
-  two_lane_state?: string | null // argued / procedural / dropped
+  two_lane_state?: string | null // argued / procedural / dropped / insights_only
+  /** "What this bill does" — the grounding-checked factual block. */
+  two_lane_insights?: string | null
   two_lane_generated_at?: string | null
 
   // Hearings
@@ -158,7 +166,6 @@ export interface Bill {
   next_hearing_url?: string | null
 
   // Eager-loaded relationships on the detail route
-  perspectives?: Perspective[]
   vote_records?: VoteRecord[]
 
   // Aggregates some list/detail routes attach

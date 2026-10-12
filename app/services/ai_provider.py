@@ -32,6 +32,9 @@ _GAME_PROCESSES = {
 # How long a game check stands before it is re-taken. Scanning the process
 # table per request would cost more than the throttling saves.
 _GAME_CHECK_TTL_SECONDS = 30
+# nvidia-smi is a subprocess; sampling it before every single request would be
+# its own drag, and VRAM pressure does not change meaningfully faster than this.
+_VRAM_CHECK_TTL_SECONDS = 15
 
 
 class InferencePaused(RuntimeError):
@@ -73,10 +76,35 @@ class OllamaProvider(AIProvider):
         # 0 = let Ollama choose (its default scales with VRAM: 4k/32k/256k).
         # Set it for short tasks to keep the KV cache small -- see _options.
         self._num_ctx = int(os.getenv("AI_NUM_CTX") or 0)
+        # Number of model layers to place on the GPU. -1 = let Ollama decide
+        # (all of them, if they fit).
+        #
+        # This is the only knob that makes a large model coexist with a
+        # desktop on an 8GB card. llama3.1:8b fully offloaded holds ~5.3GB and
+        # peaked at 6.0GB of 8.1GB, leaving ~2.1GB for a desktop that grows
+        # past it -- which is what took this machine down. Keeping some layers
+        # on the CPU trades tokens/sec for VRAM, and with 128GB of system RAM
+        # the layers that live there cost speed, not stability.
+        self._num_gpu = int(os.getenv("AI_NUM_GPU") or -1)
         self._pause_poll_seconds = int(os.getenv("AI_PAUSE_POLL_SECONDS") or 20)
         self._pause_max_seconds = int(os.getenv("AI_PAUSE_MAX_SECONDS") or 1800)
         self._game_checked_at = 0.0
         self._game_seen = False
+        # Free VRAM, in MiB, below which we hand the card back and wait.
+        #
+        # The game check below was the only pause trigger, and it is a
+        # hardcoded list of game executables. The desktop is what actually
+        # competes for VRAM on this machine: a run that is fine against an idle
+        # desktop starves the compositor once Chrome, VS Code and the Claude
+        # app grow into the remaining headroom, and the symptom is that the
+        # mouse still moves (hardware cursor plane) while clicks do nothing.
+        # No game is involved, so nothing paused.
+        #
+        # 0 disables the check. It is a no-op anywhere nvidia-smi is absent,
+        # which covers Railway and CI.
+        self._vram_floor_mb = int(os.getenv("AI_VRAM_FLOOR_MB") or 1200)
+        self._vram_checked_at = 0.0
+        self._vram_free_mb = None
 
     def _game_running(self) -> bool:
         """Names of any known game process, re-checked at most twice a minute."""
@@ -99,30 +127,81 @@ class OllamaProvider(AIProvider):
         self._game_seen = seen
         return seen
 
-    def _wait_if_busy(self) -> None:
-        """Block while a game is running, rather than moving work to the CPU.
+    def _free_vram_mb(self):
+        """Free VRAM in MiB, or None when there is no NVIDIA telemetry.
 
-        Pausing is the only honest option: the GPU is what the game needs, and
-        the CPU fallback this replaces simply relocated the load onto the
-        resource the game was already saturating.
+        Cached briefly: this runs before every request, and shelling out to
+        nvidia-smi per call would be its own overhead.
+        """
+        import subprocess
+        import time
+        if self._vram_floor_mb <= 0:
+            return None
+        now = time.time()
+        if now - self._vram_checked_at < _VRAM_CHECK_TTL_SECONDS:
+            return self._vram_free_mb
+        self._vram_checked_at = now
+        try:
+            out = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip().splitlines()[0]
+            used, total = (int(x.strip()) for x in out.split(","))
+            self._vram_free_mb = total - used
+        except Exception:
+            # No GPU, no nvidia-smi, or a CPU-only host: nothing to guard.
+            self._vram_free_mb = None
+        return self._vram_free_mb
+
+    def _backoff_reason(self):
+        """Why we should hand the GPU back right now, or None to proceed.
+
+        Checked in cost order: the game list is a cached process scan, the
+        VRAM sample is a cached subprocess.
+        """
+        if self._game_running():
+            return "a game is running"
+        free = self._free_vram_mb()
+        if free is not None and free < self._vram_floor_mb:
+            # Our own resident model counts toward `used`, so this reads as
+            # "there is no longer room for both us and the desktop".
+            return (f"only {free}MB VRAM free (floor {self._vram_floor_mb}MB)")
+        return None
+
+    def _wait_if_busy(self) -> None:
+        """Block while the GPU is contended, rather than moving work to the CPU.
+
+        Pausing is the only honest option: the GPU is what the other party
+        needs, and the CPU fallback this replaces simply relocated the load
+        onto the resource that was already saturated.
+
+        Two triggers -- a known game, and free VRAM under a floor. The second
+        is the one that matters day to day, because the competition is usually
+        the desktop rather than a game. See `_vram_floor_mb`.
         """
         import time
-        if self._policy != "pause" or not self._game_running():
+        if self._policy != "pause":
+            return
+        reason = self._backoff_reason()
+        if not reason:
             return
 
         self._unload()  # hand the VRAM back straight away
         waited = 0
-        logger.info("Ollama: pausing — a game is running")
+        logger.warning("Ollama: pausing — %s", reason)
         while waited < self._pause_max_seconds:
             time.sleep(self._pause_poll_seconds)
             waited += self._pause_poll_seconds
-            self._game_checked_at = 0.0  # force a fresh look
-            if not self._game_running():
-                logger.info(f"Ollama: resuming after {waited}s")
+            self._game_checked_at = 0.0   # force a fresh look
+            self._vram_checked_at = 0.0
+            if not self._backoff_reason():
+                logger.info("Ollama: resuming after %ds", waited)
                 return
         raise InferencePaused(
-            f"A game has been running for over {self._pause_max_seconds}s; "
-            "stopping rather than competing with it. Set AI_GPU_POLICY=gpu to override."
+            f"The GPU stayed contended for over {self._pause_max_seconds}s "
+            f"({reason}); stopping rather than competing with it. "
+            "Set AI_GPU_POLICY=gpu to override."
         )
 
     def _loaded_on_gpu(self) -> bool:
@@ -166,13 +245,36 @@ class OllamaProvider(AIProvider):
         # Halving the context halves that share.
         if self._num_ctx > 0:
             options["num_ctx"] = self._num_ctx
-        # num_gpu is set only when CPU mode is explicitly requested. Deciding it
-        # from free VRAM was self-defeating: our own model load consumes the
-        # very headroom being measured, so a concurrent check saw "not enough
-        # VRAM" and pinned the whole run to the CPU on an idle GPU.
+        # num_gpu: how many layers go on the GPU.
+        #
+        # Never *derived* from free VRAM -- that was tried and was
+        # self-defeating, because our own model load consumes the very headroom
+        # being measured, so a concurrent check saw "not enough VRAM" and
+        # pinned the whole run to the CPU on an idle GPU. It is only ever set
+        # explicitly: 0 for CPU mode, or AI_NUM_GPU for a deliberate partial
+        # offload chosen by the caller against a measurement.
         if self._policy == "cpu":
             options["num_gpu"] = 0
+        elif self._num_gpu >= 0:
+            options["num_gpu"] = self._num_gpu
         return options
+
+    def resident_vram_mb(self) -> int:
+        """VRAM this model currently holds, in MiB. 0 when not loaded.
+
+        Needed to tell our own footprint apart from the desktop's. A guard
+        that only looks at total free VRAM cannot do that, and so cannot tell
+        "the desktop needs room" from "we are using the room" -- which makes
+        it unload, see the memory freed, reload, and thrash.
+        """
+        try:
+            r = self._client.get(f"{self.base_url}/api/ps", timeout=10)
+            for m in (r.json() or {}).get("models", []):
+                if m.get("name", "").startswith(self.model.split(":")[0]):
+                    return int((m.get("size_vram") or 0) / (1024 * 1024))
+        except Exception:
+            pass
+        return 0
 
     def _ensure_running(self) -> None:
         """Start Ollama if it's not reachable, then wait until ready."""

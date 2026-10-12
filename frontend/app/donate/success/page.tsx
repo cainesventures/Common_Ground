@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 const IMPACT: Record<number, string> = {
   5:   'Funds AI analysis for ~5 City Council bills',
   10:  'Keeps Open Common Ground running for a week',
-  20:  'Generates perspectives on a full batch of new bills',
+  20:  'Writes the case for and against a full batch of new bills',
   50:  'Covers a month of hosting and data costs',
   100: 'Keeps the project independent and ad-free for a month',
 }

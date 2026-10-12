@@ -530,7 +530,7 @@ export default function CityLandingClient() {
           We don&apos;t tell you what to think. For a bill still moving through Council, we write the strongest honest case for it and the strongest honest case against it, argued only from what the bill actually says. Then you make up your own mind.
         </p>
         <p className="text-xs text-muted-foreground max-w-xl mx-auto mb-6">
-          Not every bill gets an argument. A zoning map change or a parking rule is marked as routine instead, and a bill whose arguments cannot be grounded in its own text is left without one. Older bills also carry an archive of AI perspectives written from different political viewpoints.
+          Not every bill gets an argument. A zoning map change or a parking rule is marked as routine instead, and a bill whose arguments cannot be grounded in its own text is left without one.
         </p>
         <div className="flex flex-wrap justify-center gap-2 mb-8 text-xs">
           {['The case for', 'The case against', 'Every figure checked against the bill'].map((p) => (
@@ -572,7 +572,7 @@ export default function CityLandingClient() {
             </div>
           </div>
 
-          {/* Step 2 — Perspectives preview */}
+          {/* Step 2 — Both-sides preview */}
           <div
             className={`anim-scroll border rounded-xl p-5 flex flex-col gap-4 ${howInView ? 'in-view' : ''}`}
             style={{ transitionDelay: '80ms' }}

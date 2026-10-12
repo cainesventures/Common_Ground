@@ -22,7 +22,6 @@ export interface LegislationFilters {
   sponsors: string[]
   analyzedOnly: boolean
   hasVotesOnly: boolean
-  hasPerspectivesOnly: boolean
   categories: string[]
 }
 
@@ -60,7 +59,6 @@ export function parseFilters(sp: RawSearchParams): LegislationFilters {
     // Analyzed-only is the default view; ?analyzed=0 is what turns it off.
     analyzedOnly: one(sp.analyzed) !== '0',
     hasVotesOnly: one(sp.has_votes) === '1',
-    hasPerspectivesOnly: one(sp.has_perspectives) === '1',
     categories: list(sp.category),
   }
 }

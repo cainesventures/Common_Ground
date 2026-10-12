@@ -327,12 +327,15 @@ class BillTracking(UserBase):
 
 
 class LegislationVote(UserBase):
-    """Anonymous or authenticated human vote on a piece of legislation.
+    """Authenticated human vote on a piece of legislation.
 
-    Deduplicated per (legislation_id, voter_token).  Clients generate a UUID
-    once and store it in localStorage; the server allows one vote per token
-    per legislation item (upsert on conflict).  When a user is logged in,
-    user_id is also stored for vote history.
+    Deduplicated per (legislation_id, user_id) — one vote per account per
+    bill, upserted on conflict.
+
+    voter_token is still recorded, as a note of which browser cast the vote,
+    but it is not the identity: the client generates it, so a caller sending a
+    fresh UUID each request used to get a fresh ballot each request. It is
+    nullable because a client may now omit it.
 
     legislation_id is a logical reference to legislation.id in content.db.
     """
@@ -342,20 +345,30 @@ class LegislationVote(UserBase):
     legislation_id = Column(String, nullable=False, index=True)  # logical ref -> legislation.id
     user_id        = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     vote           = Column(String, nullable=False)   # "support" | "oppose" | "neutral"
-    voter_token    = Column(String, nullable=False)   # client-generated UUID
+    voter_token    = Column(String, nullable=True)    # audit only — see docstring
     created_at     = Column(DateTime, default=datetime.utcnow)
     updated_at     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (UniqueConstraint("legislation_id", "voter_token", name="uq_vote_per_voter"),)
+    # Identity is user_id, not voter_token. voter_token is client-generated, so
+    # a constraint on it only stopped a cooperating client from double-voting:
+    # anyone sending a fresh UUID per request got a fresh ballot. It is still
+    # stored, as an audit trail of which browser cast the vote, but it is no
+    # longer what dedupes.
+    __table_args__ = (UniqueConstraint("legislation_id", "user_id", name="uq_vote_per_user"),)
 
     user = relationship("User", back_populates="votes")
 
 
 class CouncilmemberVote(UserBase):
-    """Anonymous or authenticated citizen approval vote on a council member.
+    """Authenticated citizen approval vote on a council member.
 
-    Deduplicated per (councilmember_id, voter_token).  One vote per token;
+    Deduplicated per (councilmember_id, user_id).  One vote per account;
     casting again updates the existing record (upsert).
+
+    Was anonymous, and the displayed approval figure was therefore settable by
+    anyone willing to loop over fresh UUIDs -- a fabricated number attached to
+    a named public official. Voting now requires an account, which is what the
+    UI already told the reader it required.
 
     councilmember_id is a logical reference to councilmembers.id in content.db.
     """
@@ -365,11 +378,13 @@ class CouncilmemberVote(UserBase):
     councilmember_id  = Column(String, nullable=False, index=True)  # logical ref -> councilmembers.id
     user_id           = Column(String, ForeignKey("users.id"), nullable=True, index=True)
     vote              = Column(String, nullable=False)   # "support" | "oppose"
-    voter_token       = Column(String, nullable=False)
+    voter_token       = Column(String, nullable=True)    # audit only — not the identity
     created_at        = Column(DateTime, default=datetime.utcnow)
     updated_at        = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (UniqueConstraint("councilmember_id", "voter_token", name="uq_cm_vote_per_voter"),)
+    # See LegislationVote: deduped on the authenticated user, not on the
+    # token the client chose for itself.
+    __table_args__ = (UniqueConstraint("councilmember_id", "user_id", name="uq_cm_vote_per_user"),)
 
 
 class BlueskyPost(UserBase):

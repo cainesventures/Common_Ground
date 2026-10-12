@@ -23,13 +23,13 @@ jobs:
   backend:
     name: Backend tests
     runs-on: ubuntu-latest
-    # The suite runs in ~3s. The one caveat is test_health_ai_no_key, which
-    # really does call the configured AI provider: on a dev box where Ollama is
-    # cold it blocks while a model loads into VRAM (observed at 71s, and 9min
-    # for the whole suite on a cold start — 2.8s once warm). A runner has no
-    # provider at all, so the connection is refused immediately. The cap is
-    # here so that if it ever hangs instead of refusing, the job fails fast
-    # rather than burning the free-tier minute budget.
+    # The suite runs in under a second and makes no network calls. It used to
+    # have one caveat: test_health_ai_no_key really called the configured AI
+    # provider, which on a dev box meant blocking while llama3.1:8b loaded into
+    # VRAM (71s observed for that test, ~9min for the whole suite cold). That
+    # test now stubs the provider, so neither CI nor a dev box pulls a model —
+    # a test suite has no business touching the GPU. The cap stays as a
+    # backstop against a future hang burning free-tier minutes.
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4

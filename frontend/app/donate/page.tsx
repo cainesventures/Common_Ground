@@ -66,9 +66,9 @@ export default function DonatePage() {
       <div className="border rounded-lg px-5 py-4 mb-8 space-y-2">
         <p className="text-sm font-semibold mb-3">What your support funds</p>
         {[
-          ['$5', 'Analyzes ~5 City Council bills with AI perspectives'],
+          ['$5', 'Analyzes ~5 City Council bills'],
           ['$10', 'Keeps the site running for a week'],
-          ['$20', 'Generates perspectives on a full batch of new bills'],
+          ['$20', 'Writes the case for and against a full batch of new bills'],
           ['$50', 'Covers a month of hosting and data costs'],
           ['$100', 'Keeps the project independent and ad-free for a month'],
         ].map(([amt, desc]) => (

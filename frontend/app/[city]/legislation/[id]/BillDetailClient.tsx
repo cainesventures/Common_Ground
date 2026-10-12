@@ -6,8 +6,8 @@ import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
-import { PerspectivesPanel } from '@/components/PerspectivesPanel'
 import { TwoLanePanel } from '@/components/TwoLanePanel'
+import { InsightsPanel } from '@/components/InsightsPanel'
 import { api } from '@/lib/api'
 import { isLoggedIn } from '@/lib/auth'
 import { usePostHog } from 'posthog-js/react'
@@ -18,7 +18,7 @@ import { LoginModal } from '@/components/LoginModal'
 import { ShareBar } from '@/components/ShareBar'
 import { siteUrl } from '@/lib/site'
 import { useTabs } from '@/lib/use-tabs'
-import type { Bill, Councilmember, DistrictGeoJSON, Perspective, VoteRecord } from '@/lib/types'
+import type { Bill, Councilmember, DistrictGeoJSON, VoteRecord } from '@/lib/types'
 
 /** Does this bill have any news links? Cheap check for the tab filter, which
  *  runs before the full parse below. */
@@ -587,18 +587,17 @@ function cleanBillText(raw: string): string {
     .trim()
 }
 
-type TabKey = 'summary' | 'perspectives' | 'votes' | 'news' | 'text'
+type TabKey = 'summary' | 'votes' | 'news' | 'text'
 
-// Perspectives moved from second to last. The two-lane panel above the tab bar
-// is now the argument a reader is meant to see; the personas stay reachable,
-// and stay indexed, but they no longer sit in the position that implies they
-// are the main event. Deep links with ?tab=perspectives still work.
+// The Perspectives tab is gone. The 17 personas were never grounding-checked,
+// measured 69% stance accuracy on clear-cut bills, and two people opened one
+// over 180 days. The case for / against above the tab bar is the argument now.
+// The rows remain in the database and the admin panel still reads them.
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'summary',      label: 'Summary' },
-  { key: 'votes',        label: 'Votes' },
-  { key: 'news',         label: 'News' },
-  { key: 'text',         label: 'Bill Text' },
-  { key: 'perspectives', label: 'Perspectives' },
+  { key: 'summary', label: 'Summary' },
+  { key: 'votes',   label: 'Votes' },
+  { key: 'news',    label: 'News' },
+  { key: 'text',    label: 'Bill Text' },
 ]
 
 export default function BillDetailClient({ initialBill = null }: { initialBill?: Bill | null }) {
@@ -620,12 +619,12 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
   // Also seeded: these drive the tab labels, and both come from the same
   // payload, so deriving them here keeps the server and first client render
   // identical.
-  const [perspectivesCount, setPerspectivesCount] = useState((initialBill?.perspectives ?? []).length)
   const [rollCallCount, setRollCallCount] = useState((initialBill?.vote_records ?? []).length)
   const [stickyVisible, setStickyVisible] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const t = searchParams?.get('tab')
-    return (t === 'perspectives' || t === 'votes' || t === 'news') ? t : 'summary'
+    // ?tab=perspectives is no longer a tab; such a link lands on Summary.
+    return (t === 'votes' || t === 'news') ? t : 'summary'
   })
   const titleRef = useRef<HTMLHeadingElement>(null)
   const posthog = usePostHog()
@@ -654,7 +653,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     const useSeed = seedAvailable.current && !opts?.force
     seedAvailable.current = false
 
-    // Phase 1: load bill (includes perspectives + vote_records inline)
+    // Phase 1: load bill (includes vote_records inline)
     Promise.all([
       useSeed ? Promise.resolve({ data: initialBill }) : api.getLegislation(id),
       api.getCouncilmembers().catch(() => ({ members: [] })),
@@ -667,8 +666,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         setMembers(cmData?.members ?? [])
         setTracked((trackData?.ids ?? []).includes(id))
         setIsAdmin(meData?.user?.subscription_tier === 'dev')
-        // perspectives and roll call count come from getLegislation now
-        setPerspectivesCount((bill?.perspectives ?? []).length)
+        // roll call count comes from getLegislation now
         setRollCallCount((bill?.vote_records?.length ?? 0))
         if (bill) {
           posthog?.capture('bill_viewed', {
@@ -719,7 +717,6 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     if (!leg) return tab.key === 'summary'
     if (tab.key === 'text') return !!(leg.full_text && leg.full_text !== leg.description)
     const isOpenBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '')
-    if (tab.key === 'perspectives') return isOpenBill || perspectivesCount > 0
     if (tab.key === 'news') return isOpenBill || hasNewsLinks(leg)
     return true
   })
@@ -955,14 +952,20 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       ) : !leg.analyzed_at && (
         <div className="border border-dashed rounded-lg p-5 text-center space-y-1">
           <p className="text-sm font-medium text-muted-foreground">This bill hasn&apos;t been analyzed yet.</p>
-          <p className="text-xs text-muted-foreground">A plain-English summary, impact score, and AI perspectives will appear here once it&apos;s processed.</p>
+          <p className="text-xs text-muted-foreground">A plain-English summary and impact score will appear here once it&apos;s processed.</p>
         </div>
       )}
 
-      {/* The case for / the case against — above the tab bar, so it needs no
-          click. This is the pivot away from leading with the personas, which
-          one person opened in 120 days from two clicks deep. Renders nothing
-          unless the bill has both lanes and passed the grounding checks. */}
+      {/* What the bill does, then the arguments about it — in that order, and
+          both above the tab bar so neither needs a click. On a concluded bill
+          the arguments render nothing and this is the only writing beyond the
+          summary; it is what replaced the persona panel. */}
+      <InsightsPanel insights={leg.two_lane_insights} />
+
+      {/* The case for / the case against. This is the pivot away from leading
+          with the personas, which one person opened in 120 days from two
+          clicks deep. Renders nothing unless the bill has both lanes and
+          passed the grounding checks. */}
       <TwoLanePanel
         billId={id}
         caseFor={leg.case_for}
@@ -974,11 +977,26 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       <div
         {...billTabs.tablistProps}
         aria-label="Bill sections"
-        className={`flex border-b gap-0 sticky ${stickyVisible ? 'top-[6.5rem]' : 'top-14'} bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-[top] duration-150`}
+        /*
+          Moved with a transform, not by animating `top`.
+
+          This bar used to switch between `top-14` and `top-[6.5rem]` with
+          `transition-[top]`, driven by the IntersectionObserver on the title.
+          `top` is a layout property, so every reader who scrolled past the
+          title caused a real 48px layout shift -- and then another on the way
+          back up. It fired on essentially every session, which is why bill
+          pages measured CLS 0.314 at p75 (Google's "poor" band is >0.25)
+          while the home page sat at 0.027.
+
+          A transform is composited and never relayouts, so the bar still
+          slides down to clear the compact header and contributes nothing to
+          CLS. The sticky offset stays constant at top-14; translate-y-12 is
+          the same 3rem the old top value added.
+        */
+        className={`flex border-b gap-0 sticky top-14 bg-background z-10 pt-1 overflow-x-auto scrollbar-hide transition-transform duration-150 ${stickyVisible ? 'translate-y-12' : 'translate-y-0'}`}
       >
         {visibleTabs.map((tab) => {
           const badge =
-            tab.key === 'perspectives' && perspectivesCount > 0 ? perspectivesCount :
             tab.key === 'news'         && newsLinks.length > 0   ? newsLinks.length :
             tab.key === 'votes'        && rollCallCount > 0      ? rollCallCount :
             null
@@ -1070,39 +1088,13 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         </div>
       )}
 
-      {/* ── Perspectives tab ─────────────────────────────────── */}
-      {/*
-        Rendered even when another tab is showing, hidden with CSS rather than
-        dropped from the tree. The perspectives are the most distinctive writing
-        on the site, and the default tab is Summary, so conditional rendering
-        kept them out of the HTML entirely -- a crawler never saw them. They
-        come in on the bill payload, so keeping them mounted costs no fetch.
-      */}
-      {/* Mirrors the tab's own visibility rule above, so a bill with nothing to
-          show does not carry an empty heading around in hidden markup. */}
-      {(['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '') || perspectivesCount > 0) && (
-        <div {...billTabs.panelProps('perspectives')} className={activeTab === 'perspectives' ? 'space-y-4' : 'hidden'}>
-          <div>
-            <h2 className="text-lg font-semibold">AI Perspectives</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">Simulated viewpoints generated by AI — not real people</p>
-          </div>
-          <PerspectivesPanel
-            billId={id}
-            analyzed={!!leg.analyzed_at}
-            isAdmin={isAdmin}
-            onLoad={setPerspectivesCount}
-            initialPerspectives={leg.perspectives ?? null}
-          />
-        </div>
-      )}
-
       {/* ── Votes tab ────────────────────────────────────────── */}
       {activeTab === 'votes' && (
         <div {...billTabs.panelProps('votes')} className="space-y-6">
           <RollCallSection legislationId={id} />
           <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} />
           <RepVoteCallout legislationId={id} members={members} yourVote={yourVote} />
-          <CombinedSentimentBar perspectives={leg?.perspectives ?? []} voteCounts={voteCounts} />
+          <VoteSentimentBar voteCounts={voteCounts} />
         </div>
       )}
 
@@ -1357,20 +1349,23 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: B
 
 // ── Combined Sentiment Bar ────────────────────────────────────────────────────
 
-function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { perspectives: Perspective[]; voteCounts: VoteTally }) {
-  const perspCounts = (() => {
-    const p = { support: 0, neutral: 0, oppose: 0 } as Record<string, number>
-    for (const persp of perspectivesProp ?? []) {
-      const pos = persp.position === 'mixed' ? 'neutral' : persp.position ?? ''
-      if (pos in p) p[pos]++
-    }
-    return p
-  })()
-
+/**
+ * Citizen sentiment as a single glanceable bar.
+ *
+ * Was `CombinedSentimentBar`, which added each persona's `position` to the
+ * real vote tally and called the sum "Citizens + AI perspectives combined ·
+ * N signals". That presented 17 simulated stances as civic signal, mixed
+ * indistinguishably with actual votes, on a page about a real bill. The
+ * personas are gone, so this counts votes and nothing else.
+ *
+ * Note it overlaps `VotePanel` above it, which already shows a per-option
+ * percentage and its own stacked bar. This is the one-line summary readout.
+ */
+function VoteSentimentBar({ voteCounts }: { voteCounts: VoteTally }) {
   const totals = {
-    support: (voteCounts.support ?? 0) + perspCounts.support,
-    neutral: (voteCounts.neutral ?? 0) + perspCounts.neutral,
-    oppose:  (voteCounts.oppose  ?? 0) + perspCounts.oppose,
+    support: voteCounts.support ?? 0,
+    neutral: voteCounts.neutral ?? 0,
+    oppose:  voteCounts.oppose  ?? 0,
   }
   const total = totals.support + totals.neutral + totals.oppose
   if (total === 0) return null
@@ -1380,7 +1375,7 @@ function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span className="font-medium">Combined Sentiment</span>
+        <span className="font-medium">Citizen Sentiment</span>
         <span className="flex gap-3">
           {totals.support > 0 && <span className="text-green-600">{pct(totals.support)}% support</span>}
           {totals.neutral > 0 && <span className="text-gray-500">{pct(totals.neutral)}% neutral</span>}
@@ -1392,7 +1387,9 @@ function CombinedSentimentBar({ perspectives: perspectivesProp, voteCounts }: { 
         {totals.neutral > 0 && <div className="bg-gray-400 transition-all"  style={{ width: `${pct(totals.neutral)}%` }} />}
         {totals.oppose  > 0 && <div className="bg-red-500 transition-all"   style={{ width: `${pct(totals.oppose)}%`  }} />}
       </div>
-      <p className="text-[10px] text-muted-foreground/50">Citizens + AI perspectives combined · {total} signals</p>
+      <p className="text-[10px] text-muted-foreground/50">
+        {total} {total === 1 ? 'vote' : 'votes'} from signed-in readers
+      </p>
     </div>
   )
 }
@@ -1430,13 +1427,15 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
     onCountsChange?.(c)
   }, [onCountsChange])
 
+  // No longer gated on the voter token: the tallies are public and `your_vote`
+  // comes from the session, so a reader with localStorage blocked still sees
+  // the counts instead of a silent zero.
   useEffect(() => {
-    if (!voterToken) return
-    api.getVotes(billId, voterToken).then((data) => {
+    api.getVotes(billId).then((data) => {
       if (data?.counts?.total) updateCounts(data.counts.total)
       if (data?.your_vote !== undefined) { setMyVote(data.your_vote); onVoteChange?.(data.your_vote) }
     }).catch(() => {})
-  }, [billId, voterToken, updateCounts, onVoteChange])
+  }, [billId, updateCounts, onVoteChange])
 
   const handleVote = async (vote: string) => {
     if (!isLoggedIn()) { setShowLogin(true); return }
@@ -1474,7 +1473,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-sm font-semibold">Community Vote</h2>
-              <p className="text-xs text-muted-foreground">How real people are voting — independent of AI perspectives</p>
+              <p className="text-xs text-muted-foreground">How real people are voting</p>
             </div>
             {total > 0 && (
               <span className="text-xs text-muted-foreground shrink-0 ml-4">{total} {total === 1 ? 'vote' : 'votes'}</span>

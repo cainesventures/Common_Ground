@@ -255,7 +255,15 @@ Log "Upload complete."
 
 # ── Step 7: Git push (Vercel auto-deploys on push) ───────────────────────────
 Log "Step 7/9 - Committing and pushing sitemap + narrative to GitHub..."
-git add frontend/public/sitemap.xml frontend/public/data/legislative_history.json
+# All four sitemap files, not just sitemap.xml. generate_sitemap.py now emits a
+# sitemap index plus three segments (core / bills / bills-archive); staging only
+# the index would push a file whose children were stale or, on a fresh clone,
+# absent -- so robots.txt would point Google at an index referencing 404s.
+git add frontend/public/sitemap.xml `
+        frontend/public/sitemap-core.xml `
+        frontend/public/sitemap-bills.xml `
+        frontend/public/sitemap-bills-archive.xml `
+        frontend/public/data/legislative_history.json
 $staged = git diff --cached --name-only
 if ($staged) {
     $stamp = Get-Date -Format "yyyy-MM-dd"

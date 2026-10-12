@@ -198,3 +198,8 @@ def init_db():
 
     # Migrate any legacy single-DB user data over (idempotent).
     _bootstrap_users_from_legacy_content()
+
+    # create_all never alters an existing table, so structural changes to the
+    # user models need an explicit step. Idempotent — see the module docstring.
+    from app.models.user_migrations import migrate_vote_dedup_to_user_id
+    migrate_vote_dedup_to_user_id(users_engine)
