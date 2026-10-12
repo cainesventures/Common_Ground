@@ -311,9 +311,30 @@ export default function LegislationClient({
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Legislation</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          {/*
+            The live region for the whole filter UI.
+
+            Every filter, chip, checkbox and search here mutates the list
+            asynchronously, and this line is the only thing that says what came
+            back. Without a live region a screen-reader user ticked "signed into
+            law" and heard nothing at all -- the results changed silently
+            underneath them, so there was no way to tell a working filter from a
+            broken one.
+
+            aria-atomic re-reads the whole sentence rather than just the number
+            that changed, so it announces "412 bills matching signed into law"
+            instead of a bare "412". polite, not assertive: it should not
+            interrupt someone mid-sentence while they are still tabbing through
+            the filters.
+          */}
+          <p
+            className="text-sm text-muted-foreground mt-1"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
             {loading
-              ? 'Philadelphia City Council bills'
+              ? 'Searching Philadelphia City Council bills…'
               : filterParts.length > 0
                 ? <>{total.toLocaleString()} bill{total !== 1 ? 's' : ''} matching <span className="font-medium text-foreground">{filterParts.join(', ')}</span></>
                 : <>{total.toLocaleString()} Philadelphia City Council bill{total !== 1 ? 's' : ''}</>
@@ -777,12 +798,14 @@ export default function LegislationClient({
       )}
 
 
-      {error && <p className="text-sm text-destructive">Error: {error}</p>}
+      {/* role="alert" is assertive by definition: a failed search is worth
+          interrupting for, unlike a result count. */}
+      {error && <p role="alert" className="text-sm text-destructive">Error: {error}</p>}
 
 
       {/* Loading skeletons */}
       {loading && (
-        <div className="space-y-2">
+        <div className="space-y-2" aria-hidden="true">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="h-16 bg-muted animate-pulse rounded-lg" />
           ))}

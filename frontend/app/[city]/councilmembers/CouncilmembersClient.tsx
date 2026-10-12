@@ -124,7 +124,9 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
           {loading ? 'Looking…' : 'Find'}
         </button>
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {/* The direct answer to pressing "Find", so it has to be announced --
+          and a failed lookup is worth interrupting for. */}
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {result && (
         <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border">
           {result.photo_url ? (
@@ -316,16 +318,25 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
         </div>
       )}
 
+      {/* Decoration. aria-hidden so a screen reader does not walk eight empty
+          cards; the status line below carries the actual state. */}
       {loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" aria-hidden="true">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="h-24 rounded-lg bg-muted animate-pulse" />
           ))}
         </div>
       )}
 
+      {/* Said once, politely, instead of eight pulsing boxes. */}
+      {loading && (
+        <p role="status" aria-live="polite" className="sr-only">
+          Loading council members…
+        </p>
+      )}
+
       {error && (
-        <div className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div role="alert" className="rounded-md border border-red-200 bg-red-50 p-4 text-sm text-red-700">
           Could not load council members: {error}
         </div>
       )}
