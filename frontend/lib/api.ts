@@ -17,7 +17,6 @@ import type {
   DonationConfigResponse,
   DonationSessionResponse,
   FacetsResponse,
-  HearingsResponse,
   ImpactByYearResponse,
   InsightsSummaryResponse,
   LegislativeProfileResponse,
@@ -389,8 +388,6 @@ export const api = {
   refreshHearings: () =>
     apiFetch<ActionResult>('/api/hearings/refresh', { method: 'POST' }),
 
-  getUpcomingHearings: (days = 30) =>
-    apiFetch<HearingsResponse>(`/api/hearings/upcoming?days=${days}`),
 
   // ── Elections ────────────────────────────────────────────────────────────
   getCandidates: (params?: { election_year?: number; district?: string }) => {

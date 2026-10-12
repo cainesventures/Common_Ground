@@ -72,16 +72,6 @@ def get_current_user(
     return user
 
 
-def require_paid_tier(current_user=Depends(get_current_user)):
-    """FastAPI dependency: require paid or dev tier, else 403."""
-    if current_user.subscription_tier not in ("paid", "dev"):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This feature requires a paid subscription. Upgrade at /pricing.",
-        )
-    return current_user
-
-
 def _is_admin_email(email: str) -> bool:
     """True if email is in the configured ADMIN_EMAILS allowlist."""
     if not email:
@@ -97,9 +87,13 @@ def require_dev_tier(current_user=Depends(get_current_user)):
     """FastAPI dependency: require dev tier OR admin-email allowlist, else 403."""
     if current_user.subscription_tier == "dev" or _is_admin_email(current_user.email):
         return current_user
+    # Not "upgrade at /pricing": that page says the site is free forever with
+    # no subscriptions, so inviting someone to buy their way in was both
+    # untrue and contradicted by the page it pointed at. Dev access is an
+    # allowlist (ADMIN_EMAILS) or a tier set by hand -- there is nothing to buy.
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="This feature requires the developer tier. Upgrade at /pricing.",
+        detail="This endpoint is restricted to site administrators.",
     )
 
 
