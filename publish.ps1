@@ -291,6 +291,11 @@ if ($staged) {
 }
 
 # ── Step 8: Railway redeploy (picks up new DB from B2) ───────────────────────
+# Whether the backend was actually told to restart. Step 9 must not purge the
+# edge cache without it: a purge against the still-running old instance refills
+# the cache from pre-publish data and pins it there for another hour, which is
+# worse than letting it expire on its own.
+$redeployOk = $false
 if ($railwayOk) {
     Log "Step 8/9 - Triggering Railway redeploy..."
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
@@ -314,11 +319,22 @@ if ($railwayOk) {
         Warn "  railway redeploy --yes"
     } else {
         Log "DB_RESTORE_VERSION set to $version"
+        # Retried once. Railway refuses a redeploy while another deployment is
+        # in flight, and a publish that follows a `git push` (which triggers
+        # its own auto-deploy) hits exactly that window -- observed
+        # 2026-10-12, 45s after a push. Transient, so wait and try again
+        # rather than leaving the DB unrestored.
         railway redeploy --yes
+        if ($LASTEXITCODE -ne 0) {
+            Warn "Redeploy refused (a deployment may already be in flight). Retrying in 60s..."
+            Start-Sleep 60
+            railway redeploy --yes
+        }
         if ($LASTEXITCODE -eq 0) {
+            $redeployOk = $true
             Log "Railway redeploy triggered - backend updates in ~3 min."
         } else {
-            Warn "Railway redeploy failed. Manual fallback:"
+            Warn "Railway redeploy failed twice. Manual fallback:"
             Warn "  railway redeploy --yes   (or railway.com -> opencommonground-api -> Redeploy)"
         }
     }
@@ -336,14 +352,31 @@ if ($railwayOk) {
 $cfToken  = [Environment]::GetEnvironmentVariable("CLOUDFLARE_API_TOKEN", "Process")
 $cfZone   = [Environment]::GetEnvironmentVariable("CLOUDFLARE_ZONE_ID", "Process")
 
-if ([string]::IsNullOrWhiteSpace($cfToken) -or [string]::IsNullOrWhiteSpace($cfZone)) {
+# A purge is only safe once the new backend is live. Purging while the OLD
+# instance is still serving refills the edge from pre-publish data and pins it
+# there for a fresh hour -- strictly worse than letting it expire by itself. So
+# a failed redeploy skips the purge rather than racing it.
+$purgeBlocked = $railwayOk -and -not $redeployOk
+
+if ($purgeBlocked) {
+    Warn "Step 9/9 - NOT purging: the backend was never redeployed, so the edge"
+    Warn "would be refilled from pre-publish data and held for another hour."
+    Warn "The new DB is already in B2. To finish the publish:"
+    Warn "  railway redeploy --yes"
+    Warn "  .\publish.ps1 -SkipFetch -SkipEnrich -SkipNarrative -SkipTwoLane"
+} elseif ([string]::IsNullOrWhiteSpace($cfToken) -or [string]::IsNullOrWhiteSpace($cfZone)) {
     Warn "Step 9/9 - Skipping cache purge (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ZONE_ID not set in .env)."
     Warn "The edge will expire on its own within an hour."
 } else {
     Log "Step 9/9 - Purging Cloudflare cache..."
 
-    # Purge only after the new backend is actually serving, otherwise the purge
-    # refills the cache from the old instance and undoes itself.
+    # NOTE: the poll below is a LIVENESS check, not a version check. The old
+    # instance answers /health identically, so this confirms "something is
+    # serving", not "the new build is serving" -- it passes within ~15s either
+    # way. Making it a real check needs the backend to report its deployed
+    # commit (Railway exposes RAILWAY_GIT_COMMIT_SHA) so this can wait for a
+    # match against HEAD. Until then the redeploy gate above is what protects
+    # the cache, not this loop.
     if ($railwayOk) {
         Log "Waiting for the redeployed backend before purging..."
         $healthy = $false
