@@ -18,6 +18,64 @@ def test_health_endpoint(client):
     assert r.json()["status"] == "healthy"
 
 
+def test_health_reports_deploy_markers(client):
+    """/health must carry the deploy markers publish.ps1 waits on.
+
+    `publish.ps1` polls this endpoint until `db_version` matches the
+    DB_RESTORE_VERSION it just set, and only then purges the Cloudflare cache.
+    Before these fields existed it tested `status == "healthy"`, which the OLD
+    container answers identically -- so the purge raced the rollout and could
+    refill the edge from pre-publish data for a fresh hour.
+
+    Both markers are None here (no Railway env, no .restore_version file), so
+    this pins the contract -- the keys are present and `status` is unchanged --
+    rather than the values. Dropping either key would silently send the
+    publish pipeline back to its liveness-only behaviour.
+    """
+    r = client.get("/health")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "healthy"
+    assert "db_version" in body
+    assert "commit" in body
+
+
+def test_deploy_markers_read_the_restore_version_file(tmp_path, monkeypatch):
+    """`db_version` comes from .restore_version beside the content DB.
+
+    The Railway start command writes that file only after `litestream restore`
+    succeeds (railway.toml), which is what makes it proof that this instance
+    restored the snapshot rather than merely that a container started.
+    """
+    import main
+
+    # Trailing newline on purpose: the start command writes it with `echo`,
+    # so the reader has to strip it.
+    (tmp_path / ".restore_version").write_text(
+        "20261012-161328\n", encoding="utf-8")
+    monkeypatch.setattr(
+        main.settings, "database_url", f"sqlite:///{tmp_path / 'content.db'}"
+    )
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "d712e66abcdef123")
+
+    markers = main._read_deploy_markers()
+    assert markers["db_version"] == "20261012-161328"
+    assert markers["commit"] == "d712e66"   # shortened
+
+
+def test_deploy_markers_tolerate_a_missing_file(tmp_path, monkeypatch):
+    """Local dev and a first-ever deploy have no marker file; neither is an error."""
+    import main
+
+    monkeypatch.setattr(
+        main.settings, "database_url", f"sqlite:///{tmp_path / 'content.db'}"
+    )
+    monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA", raising=False)
+
+    markers = main._read_deploy_markers()
+    assert markers == {"commit": None, "db_version": None}
+
+
 def test_health_db_endpoint(client):
     r = client.get("/health/db")
     assert r.status_code == 200

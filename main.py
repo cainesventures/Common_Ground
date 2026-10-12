@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import sys
 import time
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -178,11 +179,60 @@ async def root():
     }
 
 
+def _read_deploy_markers() -> dict:
+    """What this process is actually running, read once at import.
+
+    `publish.ps1` had no way to tell the new backend from the old one. It
+    polled /health, which the OLD container answers identically, so the
+    "wait for the redeployed backend before purging" loop passed within ~15s
+    whether or not anything had been redeployed -- and then purged the edge
+    cache, refilling it from pre-publish data and pinning that for a fresh
+    hour. Observed 2026-10-12.
+
+    Two markers fix that:
+
+    `db_version` is the contents of `.restore_version`, a file the Railway
+    start command writes *after* `litestream restore` succeeds (see
+    railway.toml). So it does not say "a container started", it says "this
+    container restored the snapshot identified by DB_RESTORE_VERSION". That
+    is exactly what a publish needs to confirm, and unlike a commit SHA it
+    changes on a data-only publish, which is the common case.
+
+    `commit` is Railway's build commit, for telling a code deploy apart from
+    a data one.
+
+    Read at import, not per request: the restore happens in the start command
+    before uvicorn execs, so neither value can change while this process
+    lives, and /health is polled every 5 minutes by uptime monitoring.
+    """
+    markers = {"commit": (os.environ.get("RAILWAY_GIT_COMMIT_SHA") or "")[:7] or None}
+
+    # `.restore_version` sits beside the content DB, wherever that is, so this
+    # works on the Railway volume and reads as None in local dev.
+    path = settings.database_url.partition(":///")[2]
+    marker = os.path.join(os.path.dirname(path) or ".", ".restore_version")
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            markers["db_version"] = fh.read().strip() or None
+    except OSError:
+        markers["db_version"] = None
+    return markers
+
+
+DEPLOY_MARKERS = _read_deploy_markers()
+logger.info("Deploy markers: %s", DEPLOY_MARKERS)
+
+
 @app.get("/health")
 @app.head("/health")
 async def health():
-    """Health check endpoint."""
-    return {"status": "healthy"}
+    """Health check endpoint.
+
+    Carries the deploy markers so a publish can wait for *this* build rather
+    than for any build -- see _read_deploy_markers. "status" stays first and
+    unchanged: Railway's healthcheck and UptimeRobot both key on it.
+    """
+    return {"status": "healthy", **DEPLOY_MARKERS}
 
 
 @app.get("/health/db")

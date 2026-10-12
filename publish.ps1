@@ -370,66 +370,112 @@ if ($purgeBlocked) {
 } else {
     Log "Step 9/9 - Purging Cloudflare cache..."
 
-    # NOTE: the poll below is a LIVENESS check, not a version check. The old
-    # instance answers /health identically, so this confirms "something is
-    # serving", not "the new build is serving" -- it passes within ~15s either
-    # way. Making it a real check needs the backend to report its deployed
-    # commit (Railway exposes RAILWAY_GIT_COMMIT_SHA) so this can wait for a
-    # match against HEAD. Until then the redeploy gate above is what protects
-    # the cache, not this loop.
+    # Wait for the backend to report OUR restore version, not merely to be
+    # alive. /health now carries db_version, which is the contents of
+    # .restore_version -- a file the Railway start command writes only after
+    # `litestream restore` succeeds (railway.toml). So a match proves this
+    # instance restored the snapshot uploaded minutes ago.
+    #
+    # The previous loop tested `status -eq "healthy"`, which the OLD container
+    # answers identically, so it passed in ~15s regardless and the purge raced
+    # the rollout. A version match cannot be satisfied by the old instance.
     if ($railwayOk) {
-        Log "Waiting for the redeployed backend before purging..."
-        $healthy = $false
+        Log "Waiting for the backend to report DB version $version..."
+        $live = $false
         for ($i = 0; $i -lt 40; $i++) {
             Start-Sleep 15
             try {
                 $h = Invoke-RestMethod "https://api.opencommonground.com/health" -TimeoutSec 10
-                if ($h.status -eq "healthy") { $healthy = $true; break }
+                if ($h.db_version -eq $version) {
+                    $live = $true
+                    Log "Backend is serving DB version $version (commit $($h.commit))."
+                    break
+                }
+                if ($i -eq 0 -and -not $h.PSObject.Properties.Match('db_version').Count) {
+                    # An older build that predates the marker. Fall back to the
+                    # liveness behaviour rather than waiting out the full 10
+                    # minutes for a field it will never send.
+                    Warn "This backend build does not report db_version; falling back to a liveness check."
+                    if ($h.status -eq "healthy") { Start-Sleep 45; $live = $true; break }
+                }
             } catch {
                 # Expected while the instance is restarting.
             }
         }
-        if ($healthy) {
-            Log "Backend is healthy. Letting the rollout settle..."
-            Start-Sleep 45
+        if ($live) {
+            Log "Letting the rollout settle..."
+            Start-Sleep 20
         } else {
-            Warn "Backend did not report healthy within 10 min; purging anyway."
+            Warn "Backend never reported DB version $version within 10 min."
+            Warn "NOT purging - the edge would be refilled from the old instance."
+            Warn "Check railway.com -> opencommonground-api -> Deployments, then re-run."
+            $purgeBlocked = $true
         }
     }
 
-    # Purge-by-hostname is Enterprise-only, so this clears the whole zone. That
-    # is harmless: Vercel's assets are content-hashed and simply re-fetch.
-    try {
-        $resp = Invoke-RestMethod `
-            -Uri "https://api.cloudflare.com/client/v4/zones/$cfZone/purge_cache" `
-            -Method POST `
-            -Headers @{ "Authorization" = "Bearer $cfToken"; "Content-Type" = "application/json" } `
-            -Body '{"purge_everything":true}' `
-            -TimeoutSec 30
-        if ($resp.success) {
-            Log "Cloudflare cache purged."
-        } else {
-            Warn "Cloudflare purge returned success=false: $($resp.errors | ConvertTo-Json -Compress)"
+    if ($purgeBlocked) {
+        Warn "Purge skipped. The new DB is in B2 and the version bump is set;"
+        Warn "once the backend reports it, run a purge from the Cloudflare"
+        Warn "dashboard -> Caching -> Configuration -> Purge Everything, or"
+        Warn "simply let the edge expire (s-maxage=3600)."
+    } else {
+        # Purge-by-hostname is Enterprise-only, so this clears the whole zone.
+        # That is harmless: Vercel's assets are content-hashed and re-fetch.
+        try {
+            $resp = Invoke-RestMethod `
+                -Uri "https://api.cloudflare.com/client/v4/zones/$cfZone/purge_cache" `
+                -Method POST `
+                -Headers @{ "Authorization" = "Bearer $cfToken"; "Content-Type" = "application/json" } `
+                -Body '{"purge_everything":true}' `
+                -TimeoutSec 30
+            if ($resp.success) {
+                Log "Cloudflare cache purged."
+            } else {
+                Warn "Cloudflare purge returned success=false: $($resp.errors | ConvertTo-Json -Compress)"
+            }
+        } catch {
+            Warn "Cloudflare purge failed: $($_.Exception.Message)"
+            Warn "Manual fallback: Cloudflare dashboard -> Caching -> Configuration -> Purge Everything"
         }
-    } catch {
-        Warn "Cloudflare purge failed: $($_.Exception.Message)"
-        Warn "Manual fallback: Cloudflare dashboard -> Caching -> Configuration -> Purge Everything"
     }
 }
 
-# Record successful run timestamp (used by scheduler gate)
-(Get-Date).ToString("o") | Set-Content "$ROOT\.last_publish"
+# Did the data actually reach production? Uploading to B2 is not publishing:
+# the backend has to restart, restore the snapshot, and report it.
+$publishComplete = $railwayOk -and $redeployOk -and -not $purgeBlocked
+
+# .last_publish gates the scheduled run (-MinDaysSinceLastRun). Writing it
+# after an incomplete publish would suppress the retry for days, turning a
+# recoverable failure into stale production data -- so only a run that got
+# the data live counts.
+if ($publishComplete) {
+    (Get-Date).ToString("o") | Set-Content "$ROOT\.last_publish"
+} else {
+    Warn "Not recording .last_publish - this publish did not reach production,"
+    Warn "so the next scheduled run should retry rather than skip."
+}
 
 Log ""
 Log "============================================================"
-Log " Publish complete!"
-Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
-if ($railwayOk) {
-    Log " Railway (backend):  restores DB from B2 and restarts in ~3 min"
+if ($publishComplete) {
+    Log " Publish complete!"
 } else {
-    Log " Railway (backend):  SKIPPED - the new DB is in B2 but is NOT live"
+    Log " Publish INCOMPLETE - the new DB is in B2 but may not be live."
 }
-Log " Cloudflare:         edge cache purged (or expires within 1h)"
+Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
+if (-not $railwayOk) {
+    Log " Railway (backend):  SKIPPED - the new DB is in B2 but is NOT live"
+} elseif ($redeployOk) {
+    Log " Railway (backend):  redeployed and restored from B2"
+} else {
+    Log " Railway (backend):  REDEPLOY FAILED - the new DB is NOT live"
+}
+if ($purgeBlocked) {
+    Log " Cloudflare:         NOT purged - see the warnings above"
+} else {
+    Log " Cloudflare:         edge cache purged (or expires within 1h)"
+}
 Log " Log file:           $LogFile"
 Log "============================================================"
 try { Stop-Transcript | Out-Null } catch { }
+if (-not $publishComplete) { exit 1 }
