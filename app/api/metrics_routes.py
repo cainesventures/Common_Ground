@@ -1,13 +1,37 @@
-"""API routes for site metrics."""
+"""API routes for site metrics.
+
+Dev-tier only, both of them.
+
+They were unauthenticated, outside the edge-cache allow-list in main.py, and
+unrate-limited -- and `get_metrics` runs ten COUNT queries over 8,680 bills and
+99,100 vote records, ~68ms of database work per call measured locally and
+slower on Railway's volume. On a single SQLite instance that made this the
+cheapest way to load the backend of anything exposed, with no account needed
+and no limit to hit.
+
+They also disclosed registered user counts, saved-bill counts and digest
+opt-in numbers, which are nobody else's business.
+
+Nothing public consumes either route: `/api/metrics` is read by /admin and
+/dashboard, `/api/metrics/health` only by /admin, and no worker, workflow or
+script calls them. UptimeRobot watches `/health` on the app root, which is
+untouched. So requiring the dev tier costs nothing and is a better answer than
+rate-limiting an endpoint that no visitor should reach at all.
+
+The limiter stays on as defence in depth -- an admin session should not be able
+to hammer the instance either, deliberately or through a runaway poll.
+"""
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.auth import require_dev_tier
 from app.models import Legislation, BillPerspective, User, BillTracking, BillVoteRecord
 from app.models.database import get_db
+from app.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/metrics", tags=["metrics"])
@@ -34,7 +58,11 @@ def _apply_date_filters(q, year: int, month: int, date_from: str, date_to: str):
 
 
 @router.get("/health")
-async def get_system_health():
+@limiter.limit("30/minute")
+async def get_system_health(
+    request: Request,
+    _user=Depends(require_dev_tier),
+):
     """Return system status: DB connectivity and current AI provider config.
 
     The app uses a two-database bind (content + users), so a bare ``SELECT 1``
@@ -62,12 +90,15 @@ async def get_system_health():
 
 
 @router.get("")
+@limiter.limit("30/minute")
 async def get_metrics(
+    request: Request,
     year: int = Query(0),
     month: int = Query(0),
     date_from: str = Query(""),
     date_to: str = Query(""),
     db: Session = Depends(get_db),
+    _user=Depends(require_dev_tier),
 ):
     """Return site-wide counts for the metrics dashboard, optionally scoped by date filter."""
     from sqlalchemy import func, or_

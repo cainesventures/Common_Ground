@@ -228,3 +228,44 @@ def test_bill_payload_carries_insights(client, test_db):
     r = client.get(f"/api/legislation/{leg.id}")
     assert r.status_code == 200
     assert r.json()["data"]["two_lane_insights"] == "1. Does a thing. 2. Does another thing."
+
+
+# ---------------------------------------------------------------------------
+# /api/metrics is not public
+# ---------------------------------------------------------------------------
+# Ten COUNTs over 8,680 bills and 99,100 vote records, outside the edge-cache
+# allow-list, previously with no auth and no limit -- the cheapest way to load
+# a single-instance SQLite backend. It also disclosed user and tracking counts.
+# Only /admin and /dashboard consume it.
+
+def test_metrics_requires_auth(client):
+    assert client.get("/api/metrics").status_code == 401
+
+
+def test_metrics_health_requires_auth(client):
+    assert client.get("/api/metrics/health").status_code == 401
+
+
+def test_metrics_forbidden_for_a_signed_in_free_user(client, user):
+    """An account is not enough; this is dev-tier only."""
+    from main import app
+
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        assert client.get("/api/metrics").status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_metrics_allowed_for_dev_tier(client, test_db, user):
+    from main import app
+
+    user.subscription_tier = "dev"
+    test_db.flush()
+    app.dependency_overrides[get_current_user] = lambda: user
+    try:
+        r = client.get("/api/metrics")
+        assert r.status_code == 200
+        assert "bills" in r.json()["metrics"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
