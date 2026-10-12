@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import ReactMarkdown from 'react-markdown'
 import { getAllSlugs, getPost, formatPostDate } from '@/lib/blog'
 import { ShareBar } from '@/components/ShareBar'
+import { jsonLdString } from '@/lib/structured-data'
 
 // Fully static: every post is prerendered; unknown slugs 404 without the server.
 export const dynamicParams = false
@@ -74,7 +75,7 @@ export default async function BlogPostPage({
     <div className="max-w-3xl mx-auto px-4 py-12">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(jsonLd) }}
       />
 
       <nav className="mb-8 text-sm">

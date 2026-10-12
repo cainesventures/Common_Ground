@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { getBudget, fundsBySize } from '@/lib/budget'
 import { BudgetExplorer } from '@/components/budget/BudgetExplorer'
+import { jsonLdString } from '@/lib/structured-data'
 
 export const metadata: Metadata = {
   title: 'Philadelphia Budget Explorer — Open Common Ground',
@@ -36,7 +37,7 @@ export default function BudgetPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-12">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(jsonLd) }} />
 
       <header className="mb-8">
         <div className="type-eyebrow text-muted-foreground mb-2">Budget Explorer</div>

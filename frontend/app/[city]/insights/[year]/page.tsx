@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getCityConfig } from '@/lib/city'
+import { jsonLdString } from '@/lib/structured-data'
 import {
   getAllYears,
   getYearEntry,
@@ -143,7 +144,7 @@ export default async function YearInReviewPage({ params }: { params: Promise<{ c
 
   return (
     <div className="space-y-8">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdString(jsonLd) }} />
 
       {/* Header */}
       <div className="space-y-3">

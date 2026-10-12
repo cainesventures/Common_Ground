@@ -202,10 +202,41 @@ export function councilmemberGraph(
   return { '@context': 'https://schema.org', '@graph': [person, breadcrumbNode(crumbs)] }
 }
 
+/**
+ * Serialise a value for embedding inside a <script> tag.
+ *
+ * `JSON.stringify` escapes quotes and backslashes but NOT `<`, `>` or `&`, and
+ * the HTML parser does not care that it is looking at JSON: the first
+ * `</script` inside a string value ends the tag, and everything after it is
+ * parsed as markup. So a bill whose title or summary contained
+ * `</script><img src=x onerror=...>` would execute that on its own page.
+ *
+ * That is reachable in this app rather than theoretical. The graphs below are
+ * built from bill titles and AI-written summaries, and the year pages from an
+ * AI-written narrative -- model output over text ingested from Legistar. A
+ * prompt injection in a bill's full text only has to get the model to emit
+ * `</script>` once. And what it would steal is the JWT, which lives in
+ * localStorage.
+ *
+ * `<`, `>` and `&` are ordinary JSON string escapes, so every
+ * JSON-LD consumer reads them as the original characters. `&` is escaped too,
+ * so the markup cannot be reconstructed through HTML entities.
+ */
+export function jsonLdString(node: Json): string {
+  // NOTE the doubled backslashes: '\u003c' in TypeScript source IS the
+  // character '<', so written that way this would replace '<' with '<' -- a
+  // silent no-op that still reads like an escape. What must reach the output
+  // is the six literal characters \ u 0 0 3 c.
+  return JSON.stringify(node)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+}
+
 /** Renderable props for a <script type="application/ld+json"> tag. */
 export function jsonLdProps(node: Json) {
   return {
     type: 'application/ld+json' as const,
-    dangerouslySetInnerHTML: { __html: JSON.stringify(node) },
+    dangerouslySetInnerHTML: { __html: jsonLdString(node) },
   }
 }
