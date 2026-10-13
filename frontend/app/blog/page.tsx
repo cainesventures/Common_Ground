@@ -4,14 +4,14 @@ import { getAllPosts, formatPostDate } from '@/lib/blog'
 import { ShareBar } from '@/components/ShareBar'
 
 export const metadata: Metadata = {
-  title: 'Blog — Open Common Ground',
+  title: 'Blog, Open Common Ground',
   description:
-    'Opinionated deep dives on Philadelphia legislation — what the bills actually do, what the record shows, and why it matters.',
+    'Opinionated deep dives on Philadelphia legislation: what the bills actually do, what the record shows, and why it matters.',
   alternates: { canonical: 'https://opencommonground.com/blog' },
   openGraph: {
-    title: 'Blog — Open Common Ground',
+    title: 'Blog, Open Common Ground',
     description:
-      'Opinionated deep dives on Philadelphia legislation — what the bills actually do, what the record shows, and why it matters.',
+      'Opinionated deep dives on Philadelphia legislation: what the bills actually do, what the record shows, and why it matters.',
     type: 'website',
     siteName: 'Open Common Ground',
     url: 'https://opencommonground.com/blog',
@@ -27,7 +27,7 @@ export default function BlogIndexPage() {
         <div className="type-eyebrow text-muted-foreground mb-2">The Blog</div>
         <h1 className="type-display mb-3">Reading the record</h1>
         <p className="type-body text-muted-foreground max-w-2xl">
-          Opinionated deep dives into Philadelphia legislation — grounded in the actual bills and
+          Opinionated deep dives into Philadelphia legislation, grounded in the actual bills and
           votes, with a point of view. One writer, no comment section.
         </p>
       </header>

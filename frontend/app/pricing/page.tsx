@@ -3,7 +3,7 @@ import { siteUrl } from '@/lib/site'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Pricing — Open Common Ground',
+  title: 'Pricing, Open Common Ground',
   description: 'Open Common Ground is free forever, supported by donations.',
   alternates: { canonical: siteUrl('/pricing') },
 }
@@ -26,7 +26,7 @@ export default function PricingPage() {
             <span className="text-sm text-muted-foreground">/ forever</span>
           </div>
           <p className="text-sm text-muted-foreground mt-2">
-            Every feature, every bill — free for every Philadelphian.
+            Every feature, every bill, free for every Philadelphian.
           </p>
         </div>
 
@@ -39,7 +39,7 @@ export default function PricingPage() {
             'Sponsor and committee insights',
             'Vote on legislation (sign-in required)',
             'Save and track bills you care about',
-            'Insights dashboard — 26 years of data',
+            'Insights dashboard with 26 years of data',
           ].map((f) => (
             <li key={f} className="flex items-start gap-2 text-sm">
               <span className="text-green-500 shrink-0 mt-0.5">✓</span>

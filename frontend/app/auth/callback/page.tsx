@@ -41,7 +41,7 @@ function AuthCallbackInner() {
         <p className="text-2xl">🔒</p>
         <h1 className="text-xl font-semibold">Sign-in unavailable</h1>
         <p className="text-muted-foreground max-w-sm text-sm">
-          Open Common Ground is currently in early access. Sign-in will be available to everyone shortly — check back soon.
+          Open Common Ground is currently in early access. Sign-in will be available to everyone shortly. Check back soon.
         </p>
         <Link href="/" className="text-sm text-primary hover:underline">
           Browse legislation without signing in →

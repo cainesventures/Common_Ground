@@ -3,8 +3,8 @@ import { siteUrl } from '@/lib/site'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'About — Open Common Ground',
-  description: 'About Open Common Ground — a free, independent civic technology project tracking Philadelphia City Council.',
+  title: 'About, Open Common Ground',
+  description: 'About Open Common Ground, a free, independent civic technology project tracking Philadelphia City Council.',
   alternates: { canonical: siteUrl('/about') },
 }
 
@@ -20,18 +20,18 @@ export default function AboutPage() {
         <h2 className="text-base font-semibold">Why I built this</h2>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Philadelphia passes hundreds of bills every year. Most residents never hear about them. I wanted to
-          change that — not by adding more noise, but by making the existing public record actually readable.
+          change that, not by adding more noise, but by making the existing public record actually readable.
           City Council legislation is public, but it&apos;s buried in a system designed for lawyers and lobbyists,
           not for people who just want to know what&apos;s happening in their city.
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
           Open Common Ground takes every bill introduced in Philadelphia City Council, summarizes it in plain
-          English, scores its potential impact, and sets out the case for and the case against — 
-          progressive to libertarian — might view it. The goal isn&apos;t to tell you what to think. It&apos;s to give
+          English, scores its potential impact, and sets out the strongest honest case for it and
+          against it. The goal isn&apos;t to tell you what to think. It&apos;s to give
           you the context to think for yourself.
         </p>
         <p className="text-sm text-muted-foreground leading-relaxed">
-          I&apos;m a software developer and Philadelphia resident. This is a personal project — not a startup,
+          I&apos;m a software developer and Philadelphia resident. This is a personal project, not a startup,
           not a nonprofit, not affiliated with the city in any way. I built it because I think civic
           transparency matters, and because I could.
         </p>
@@ -43,7 +43,7 @@ export default function AboutPage() {
           {[
             ['Bill data', 'Legislation is scraped from Philadelphia Legistar, the official public record system maintained by City Council. Bills are fetched regularly to keep the data current.'],
             ['AI analysis', 'Each bill is sent to an AI model that writes a plain-English summary, assigns an impact score (1–10) and categorizes the bill type. Bills still moving through Council are also argued both ways.'],
-            ['The case for and against', 'A bill still before Council is read for what it actually does, and then argued both ways — the strongest honest case for it, and the strongest honest case against it, with no political label attached to either. Every number in those arguments is checked against the bill’s own text, and a bill whose arguments cannot be grounded that way is published without them rather than with something invented. Routine housekeeping — a zoning map change, a parking regulation, a lease — is marked as routine instead of being argued over.'],
+            ['The case for and against', 'A bill still before Council is read for what it actually does, and then argued both ways: the strongest honest case for it, and the strongest honest case against it, with no political label attached to either. Every number in those arguments is checked against the bill’s own text, and a bill whose arguments cannot be grounded that way is published without them rather than with something invented. Routine housekeeping, such as a zoning map change, a parking regulation or a lease, is marked as routine instead of being argued over.'],
             ['Limitations', 'AI can be wrong. Summaries may miss nuance, and an argument can be weak without being false. The figure checking catches numbers that are not in the bill; it cannot tell you an argument is fair. Always read the source bill and form your own view. Nothing here is legal or political advice.'],
           ].map(([title, body]) => (
             <div key={title as string} className="border rounded-lg p-4">

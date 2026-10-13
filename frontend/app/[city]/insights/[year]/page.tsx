@@ -23,17 +23,17 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   const { city, year } = await params
   const entry = getYearEntry(Number(year))
   const cityConfig = getCityConfig(city)
-  if (!entry || !cityConfig) return { title: 'Year in Review — Open Common Ground' }
+  if (!entry || !cityConfig) return { title: 'Year in Review, Open Common Ground' }
 
   const title = `${cityConfig.fullCouncilName} ${entry.year}: Year in Review`
   const description =
     `${entry.headline}. ${entry.stats.total} bills introduced, ${entry.stats.signed} signed into law` +
     (entry.stats.contested_count ? `, ${entry.stats.contested_count} contested votes` : '') +
-    ` — every bill, what passed, and what mattered in ${entry.year}.`
+    `. Every bill, what passed, and what mattered in ${entry.year}.`
 
   const canonical = `https://opencommonground.com/${city}/insights/${entry.year}`
   return {
-    title: `${title} — Open Common Ground`,
+    title: `${title}, Open Common Ground`,
     description,
     alternates: { canonical },
     openGraph: {
@@ -179,10 +179,10 @@ export default async function YearInReviewPage({ params }: { params: Promise<{ c
           sub={s.pass_rate != null ? `${Math.round(s.pass_rate * 100)}% of closed bills` : undefined} />
         <StatTile label="Didn't Pass" value={s.failed + s.vetoed + (s.died_in_committee ?? 0)}
           sub={s.died_in_committee ? 'failed, vetoed, or died in committee' : 'failed or vetoed'} />
-        <StatTile label="Median Days to Law" value={s.median_days_to_passage ?? '—'} sub="introduction to signing" />
+        <StatTile label="Median Days to Law" value={s.median_days_to_passage ?? '–'} sub="introduction to signing" />
         <StatTile label="Contested Votes" value={s.contested_count} sub="bills with at least one Nay" />
         <StatTile label="Top Issue"
-          value={s.top_tags[0] ? s.top_tags[0].tag.replace(/-/g, ' ') : '—'}
+          value={s.top_tags[0] ? s.top_tags[0].tag.replace(/-/g, ' ') : '–'}
           sub={s.top_tags[0] ? `${s.top_tags[0].count} bills` : undefined} />
       </div>
 
@@ -245,7 +245,7 @@ export default async function YearInReviewPage({ params }: { params: Promise<{ c
             )}
           </h2>
           <p className="text-xs text-muted-foreground">
-            Most council roll calls are unanimous — these are the bills that split the chamber.
+            Most council roll calls are unanimous. These are the bills that split the chamber.
           </p>
           <div className="space-y-2">
             {entry.contested_bills.map(b => <ContestedBillCard key={b.id} bill={b} city={city} />)}

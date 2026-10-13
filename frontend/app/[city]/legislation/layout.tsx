@@ -16,7 +16,7 @@ export async function generateMetadata({
 
   const title = `${config.fullCouncilName} Legislation`
   const description =
-    `Browse and search every ${config.fullCouncilName} bill — filter by topic, ` +
+    `Browse and search every ${config.fullCouncilName} bill: filter by topic, ` +
     `status, sponsor and year, with plain-English summaries.`
   const canonical = siteUrl(`/${city}/legislation`)
 

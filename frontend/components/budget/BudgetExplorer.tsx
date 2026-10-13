@@ -247,7 +247,7 @@ function BreakdownView(props: {
           <>
             {!complete && (
               <p className="text-xs mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
-                FY{year} is <strong>partial</strong> — the city&apos;s legislative record for this year is incomplete.
+                FY{year} is <strong>partial</strong>. The city&apos;s legislative record for this year is incomplete.
               </p>
             )}
             <ul className="space-y-1.5">
@@ -294,7 +294,7 @@ function BreakdownView(props: {
                             Over time
                             {sFirst && sLast ? (
                               <>
-                                {' — '}
+                                {': '}
                                 <span className="tabular-nums">{fmt(sFirst.total, mode)}</span> (FY{sFirst.fy}) →{' '}
                                 <span className="tabular-nums font-medium text-foreground">{fmt(sLast.total, mode)}</span> (FY{sLast.fy}){' '}
                                 <span className={sPct >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}>
@@ -344,7 +344,7 @@ function BreakdownView(props: {
             </ul>
             {hiddenCount > 0 && (
               <button onClick={() => setShowAll((s) => !s)} className="mt-4 text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
-                {showAll ? 'Show top 15 only' : `Show all ${rawDepts.length} departments — the other ${hiddenCount} total ${fmt(adj(otherTotal, year), mode)}`}
+                {showAll ? 'Show top 15 only' : `Show all ${rawDepts.length} departments, the other ${hiddenCount} total ${fmt(adj(otherTotal, year), mode)}`}
               </button>
             )}
             <p className="text-xs text-muted-foreground mt-3">Tip: click any department with a › to see its spending-class breakdown and what it is.</p>

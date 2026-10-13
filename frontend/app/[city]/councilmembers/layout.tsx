@@ -16,7 +16,7 @@ export async function generateMetadata({
 
   const title = `${config.fullCouncilName} Members`
   const description =
-    `All ${config.totalMembers} ${config.fullCouncilName} members — district maps, ` +
+    `All ${config.totalMembers} ${config.fullCouncilName} members: district maps, ` +
     `voting records, sponsored bills and contact details.`
   const canonical = siteUrl(`/${city}/councilmembers`)
 

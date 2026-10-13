@@ -5,7 +5,7 @@ import { siteUrl } from '@/lib/site'
 // as legislation/, councilmembers/ and insights/. Without this the route
 // inherited the site-wide title and description verbatim, which made it a
 // duplicate of the homepage to a crawler.
-const title = 'Philadelphia Council Candidates — AI Vote Predictions'
+const title = 'Philadelphia Council Candidates: AI Vote Predictions'
 const description =
   'Pick a Philadelphia City Council bill and see how declared candidates might vote on it, ' +
   'with the reasoning spelled out. AI-generated speculation for civic engagement, not a ' +

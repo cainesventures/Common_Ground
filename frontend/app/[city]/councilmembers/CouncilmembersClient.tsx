@@ -268,8 +268,8 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
         <p className="text-muted-foreground mt-1">
           {CITY.totalMembers} members
           {CITY.atLargeCount > 0
-            ? ` — ${CITY.districtCount} district seats and ${CITY.atLargeCount} at-large seats.`
-            : ` — ${CITY.districtCount} district seats.`}
+            ? `, with ${CITY.districtCount} district seats and ${CITY.atLargeCount} at-large seats.`
+            : `, with ${CITY.districtCount} district seats.`}
         </p>
       </div>
 

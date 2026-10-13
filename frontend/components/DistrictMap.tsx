@@ -162,7 +162,7 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
 
   const title = showAll
     ? 'Philadelphia City Council Districts'
-    : district === 'At-Large' ? 'At-Large — Citywide' : `Philadelphia ${district}`
+    : district === 'At-Large' ? 'At-Large · Citywide' : `Philadelphia ${district}`
 
   return (
     <div style={{ isolation: 'isolate' }} className="border rounded-lg overflow-hidden">

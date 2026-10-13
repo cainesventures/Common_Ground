@@ -4,9 +4,9 @@ import { BudgetExplorer } from '@/components/budget/BudgetExplorer'
 import { jsonLdString } from '@/lib/structured-data'
 
 export const metadata: Metadata = {
-  title: 'Philadelphia Budget Explorer — Open Common Ground',
+  title: 'Philadelphia Budget Explorer, Open Common Ground',
   description:
-    "Explore 25+ years of Philadelphia's city budget — where the money is appropriated, by department and fund, parsed from the annual budget ordinances.",
+    "Explore 25+ years of Philadelphia's city budget: where the money is appropriated, by department and fund, parsed from the annual budget ordinances.",
   alternates: { canonical: 'https://opencommonground.com/budget' },
   openGraph: {
     title: 'Philadelphia Budget Explorer',
@@ -44,7 +44,7 @@ export default function BudgetPage() {
         <h1 className="type-display mb-3">Where Philadelphia&apos;s money goes</h1>
         <p className="type-body text-muted-foreground max-w-2xl">
           Every dollar the city appropriates is set by an annual budget ordinance. This explorer pulls the
-          department-by-department numbers straight from those ordinances, FY{firstFY} to FY{lastFY} — pick a
+          department-by-department numbers straight from those ordinances, FY{firstFY} to FY{lastFY}. Pick a
           fund and a year to see how the money is divided, and how it&apos;s shifted over time.
         </p>
       </header>
@@ -61,7 +61,7 @@ export default function BudgetPage() {
           Source: Philadelphia annual operating-budget ordinances (Legistar). Each fund&apos;s figures are
           checked against the ordinance&apos;s own declared total; a few early years are marked partial where
           the city&apos;s legislative record is incomplete. Inflation uses BLS CPI-U and population uses U.S.
-          Census figures — recent years are estimates.
+          Census figures, and recent years are estimates.
         </p>
       </footer>
     </div>

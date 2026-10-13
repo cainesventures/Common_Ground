@@ -39,7 +39,7 @@ function ContestedBillsCard({ city }: { city: string }) {
       <div>
         <h2 className="text-lg font-semibold">The Votes That Split Council</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Nearly every council roll call is unanimous — these are the rare bills that drew opposition.
+          Nearly every council roll call is unanimous. These are the rare bills that drew opposition.
           {total != null && (year ? ` ${total} contested in ${year}.` : ` ${total} contested bills since 2000.`)}
         </p>
       </div>
@@ -157,7 +157,7 @@ function DissentTableCard({ city }: { city: string }) {
                 <td className="text-right tabular-nums py-2 px-3">{m.total_votes.toLocaleString()}</td>
                 <td className="text-right tabular-nums py-2 px-3 font-medium">{m.nays}</td>
                 <td className="text-right tabular-nums py-2 px-3">
-                  {m.contested_votes ? `${Math.round(m.dissent_rate * 100)}%` : '—'}
+                  {m.contested_votes ? `${Math.round(m.dissent_rate * 100)}%` : '–'}
                 </td>
                 <td className="text-right tabular-nums py-2 pl-3">{m.absents}</td>
               </tr>
@@ -200,7 +200,7 @@ function AgreementMatrixCard() {
       <div>
         <h2 className="text-lg font-semibold">Who Votes Together</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Agreement between current members on contested bills only — the votes that actually
+          Agreement between current members on contested bills only, the votes that actually
           differentiate. Green = usually agree, red = often split. Pairs with fewer than{' '}
           {data.min_shared} shared contested votes are blank.
         </p>

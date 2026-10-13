@@ -302,7 +302,7 @@ function LegislativeProfile({ memberId, memberName, initialProfile = null }: {
       {/* Key metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
         <Metric
-          value={o.pass_rate != null ? `${Math.round(o.pass_rate * 100)}%` : '—'}
+          value={o.pass_rate != null ? `${Math.round(o.pass_rate * 100)}%` : '–'}
           label="Pass Rate"
           sub="of concluded bills signed into law"
         />
@@ -320,14 +320,14 @@ function LegislativeProfile({ memberId, memberName, initialProfile = null }: {
           onClick={o.active > 0 ? () => toggle('active') : undefined}
           expanded={openPanel === 'active'}
         />
-        <Metric value={p.impact.avg_score ?? '—'} label="Avg Impact" sub="1–10 across analyzed bills" />
+        <Metric value={p.impact.avg_score ?? '–'} label="Avg Impact" sub="1–10 across analyzed bills" />
         <Metric
-          value={p.median_days_to_passage ?? '—'}
+          value={p.median_days_to_passage ?? '–'}
           label="Median Days to Law"
           sub="introduction → signed"
         />
         <Metric
-          value={v.attendance_rate != null ? `${Math.round(v.attendance_rate * 100)}%` : '—'}
+          value={v.attendance_rate != null ? `${Math.round(v.attendance_rate * 100)}%` : '–'}
           label="Vote Attendance"
           sub={`${v.total_votes.toLocaleString()} roll calls`}
         />
@@ -561,7 +561,7 @@ function CouncilmemberVotePanel({ memberId, memberName }: { memberId: string; me
 function ContactSection({ member }: { member: Councilmember }) {
   const [phoneCopied, setPhoneCopied] = useState(false)
 
-  const subject = `${CITY.fullCouncilName} — Constituent Message`
+  const subject = `${CITY.fullCouncilName}: Constituent Message`
   const body = `Dear ${member.name},
 
 I am a ${CITY.name} resident writing to share my perspective on legislation currently before City Council.
@@ -1003,7 +1003,7 @@ export default function CouncilmemberDetailClient({ initialData = null, initialP
       <div className="border-t pt-5">
         <ShareBar
           url={siteUrl(`/${city}/councilmembers/${member.id}`)}
-          title={`${member.name} — Philadelphia City Council`}
+          title={`${member.name}, Philadelphia City Council`}
           event="member_shared"
           eventProps={{ member_id: member.id }}
         />

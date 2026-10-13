@@ -34,7 +34,7 @@ export function Footer() {
           <div>
             <p className="font-semibold text-sm">Open Common Ground</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Philadelphia City Council bill tracker — free, independent, no ads.
+              Philadelphia City Council bill tracker. Free, independent, no ads.
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               An independent civic project · Not affiliated with the City of Philadelphia

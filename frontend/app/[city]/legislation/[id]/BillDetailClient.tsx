@@ -53,7 +53,7 @@ function buildGcalUrl(opts: { date: string; time?: string; body?: string; locati
   const end = new Date(d.getTime() + 60 * 60 * 1000) // +1 hour
   const params = new URLSearchParams({
     action: 'TEMPLATE',
-    text: `Hearing: ${opts.billNumber} — ${opts.billTitle}`,
+    text: `Hearing: ${opts.billNumber}, ${opts.billTitle}`,
     dates: `${fmt(d)}/${fmt(end)}`,
     details: `${CITY.fullCouncilName} hearing: ${opts.body || ''}`,
     location: opts.location || `City Hall, ${CITY.name}`,
@@ -370,7 +370,7 @@ function ContactMyCouncilmember({ members, billTitle, billNumber }: { members: C
 }
 
 function openGmail(member: Councilmember, billTitle: string, billNumber: string) {
-  const subject = `Philadelphia City Council — ${billNumber}`
+  const subject = `Philadelphia City Council bill ${billNumber}`
   const body = `Dear ${member.name},
 
 I am a Philadelphia resident writing about ${billNumber}: ${billTitle}.
@@ -1497,7 +1497,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
                 <span>{label}</span>
                 {total > 0 && (
                   <span className={`text-xs font-normal ${isSelected ? 'opacity-80' : 'text-muted-foreground'}`}>
-                    {count > 0 ? `${Math.round((count / total) * 100)}%` : '—'}
+                    {count > 0 ? `${Math.round((count / total) * 100)}%` : '–'}
                   </span>
                 )}
               </button>

@@ -69,13 +69,13 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   const { city, id } = await params
   try {
     const data = await getMember(id)
-    if (!data || data === MISSING) return { title: 'Councilmember — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
+    if (!data || data === MISSING) return { title: 'Councilmember, Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
     const m = data?.member
     const title = m?.name ?? 'Councilmember'
-    const description = `${title}${m?.district ? `, ${m.district}` : ''}${m?.party ? ` · ${m.party}` : ''} — Philadelphia City Council`
+    const description = `${title}${m?.district ? `, ${m.district}` : ''}${m?.party ? ` · ${m.party}` : ''}, Philadelphia City Council`
     const canonical = siteUrl(`/${city}/councilmembers/${id}`)
     return {
-      title: `${title} — Open Common Ground`,
+      title: `${title}, Open Common Ground`,
       description,
       alternates: { canonical },
       openGraph: {
@@ -94,7 +94,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
       },
     }
   } catch {
-    return { title: 'Councilmember — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
+    return { title: 'Councilmember, Open Common Ground', alternates: { canonical: siteUrl(`/${city}/councilmembers/${id}`) } }
   }
 }
 

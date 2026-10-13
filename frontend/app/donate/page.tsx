@@ -58,7 +58,7 @@ export default function DonatePage() {
         <h1 className="text-3xl font-bold tracking-tight mb-3">Support Open Common Ground</h1>
         <p className="text-muted-foreground text-base leading-relaxed">
           Open Common Ground is a free, open civic tool for Philadelphia residents. Your donation keeps
-          it running — covering AI analysis costs, hosting, and development.
+          it running, covering AI analysis costs, hosting, and development.
         </p>
       </div>
 
@@ -148,12 +148,12 @@ export default function DonatePage() {
         disabled={loading || !effectiveAmount}
         className="btn-primary-hover w-full h-12 rounded-lg bg-primary text-primary-foreground font-semibold text-base transition-all disabled:opacity-60"
       >
-        {loading ? 'Redirecting to Stripe…' : `Donate $${effectiveAmount ?? '—'}`}
+        {loading ? 'Redirecting to Stripe…' : `Donate $${effectiveAmount ?? '–'}`}
       </button>
 
       <p className="text-xs text-muted-foreground text-center mt-4">
         Secure payment via Stripe. We never store your card details.
-        This is a one-time donation — no recurring charges.
+        This is a one-time donation with no recurring charges.
       </p>
     </div>
   )

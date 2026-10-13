@@ -3,7 +3,7 @@ import { siteUrl } from '@/lib/site'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Legal & Disclaimer — Open Common Ground',
+  title: 'Legal & Disclaimer, Open Common Ground',
   description: 'Disclaimer, data sources, and privacy information for Open Common Ground.',
   alternates: { canonical: siteUrl('/legal') },
 }

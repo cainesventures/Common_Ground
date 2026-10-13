@@ -35,7 +35,7 @@ function SuccessContent() {
       .finally(() => setLoading(false))
   }, [sessionId])
 
-  const shareText = `I just supported Open Common Ground — a free civic tool that tracks every Philadelphia City Council bill in plain English. Check it out:`
+  const shareText = `I just supported Open Common Ground, a free civic tool that tracks every Philadelphia City Council bill in plain English. Check it out:`
   const shareUrl = typeof window !== 'undefined' ? window.location.origin : 'https://opencommonground.com'
 
   return (

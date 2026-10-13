@@ -15,10 +15,10 @@ const geist = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://opencommonground.com'),
-  title: 'Open Common Ground — Philadelphia City Council Tracker',
+  title: 'Open Common Ground, Philadelphia City Council Tracker',
   description: 'Track Philadelphia City Council bills with AI-generated plain-English summaries, and the case for and against the bills still in play. Free, independent, no ads.',
   openGraph: {
-    title: 'Open Common Ground — Philadelphia City Council Tracker',
+    title: 'Open Common Ground, Philadelphia City Council Tracker',
     description: 'Track Philadelphia City Council bills with AI-generated plain-English summaries, and the case for and against the bills still in play. Free, independent, no ads.',
     url: 'https://opencommonground.com',
     siteName: 'Open Common Ground',
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Open Common Ground — Philadelphia City Council Tracker',
+    title: 'Open Common Ground, Philadelphia City Council Tracker',
     description: 'Track Philadelphia City Council bills with AI-generated plain-English summaries, and the case for and against the bills still in play. Free, independent, no ads.',
     images: ['/opengraph-image'],
   },
@@ -35,7 +35,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning is required, not cosmetic. The inline theme script
+    // below adds .light / .dark to <html> before React hydrates, so the client
+    // element legitimately has a class the server never rendered. React reports
+    // that as a hydration mismatch. The flag silences it for THIS element's own
+    // attributes only, one level deep, so real mismatches inside the tree are
+    // still reported. Removing it brings the console error back; removing the
+    // script instead brings back the flash of the wrong theme on every load.
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/*
           Applies the stored theme before first paint. Without this the .dark /

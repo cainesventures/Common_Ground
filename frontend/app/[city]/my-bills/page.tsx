@@ -125,7 +125,7 @@ export default function MyBillsPage() {
       await api.toggleTrackBill(billId)
     } catch {
       if (snapshot) setBills((prev) => [...prev, snapshot])
-      toast.error('Failed to remove bill — please try again')
+      toast.error('Failed to remove bill, please try again')
     }
   }, [bills])
 

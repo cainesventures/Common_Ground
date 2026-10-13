@@ -261,7 +261,7 @@ function StatusFunnelChart({
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: FUNNEL_COLORS[selectedStage] }} />
-                  <span className="font-medium text-sm">{FUNNEL_LABELS[selectedStage]} — {activeYear}</span>
+                  <span className="font-medium text-sm">{FUNNEL_LABELS[selectedStage]} · {activeYear}</span>
                   {billsTotal > 0 && <span className="text-xs text-muted-foreground">({billsTotal.toLocaleString()} bills)</span>}
                 </div>
                 <div className="flex items-center gap-3">
@@ -409,7 +409,7 @@ function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
     if (drillDown?.params.billType === key) { setDrillDown(null); return }
     setDrillDown({
       params: { billType: key, year },
-      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Bills — ${year}`,
+      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Bills · ${year}`,
       href: `/${city}/legislation?year=${year}&bill_type=${key}`,
     })
   }
@@ -418,7 +418,7 @@ function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
     if (drillDown?.params.impact === key) { setDrillDown(null); return }
     setDrillDown({
       params: { impact: key, year },
-      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Impact Bills — ${year}`,
+      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Impact Bills · ${year}`,
       href: `/${city}/legislation?year=${year}&impact=${key}`,
     })
   }
@@ -513,7 +513,7 @@ function BillTypeOverTimeSection({ years }: { years: ImpactYearRow[] }) {
     }
     setDrillDown({
       params: { billType: btKey, year: yearVal },
-      title: `${btKey.charAt(0).toUpperCase() + btKey.slice(1)} Bills — ${yearVal}`,
+      title: `${btKey.charAt(0).toUpperCase() + btKey.slice(1)} Bills · ${yearVal}`,
       href: `/${city}/legislation?year=${yearVal}&bill_type=${btKey}`,
     })
   }
@@ -671,7 +671,7 @@ function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
 
       {drillDown && (
         <DrillDownPanel
-          title={`${drillDown.sponsor}${drillDown.year ? ` — ${drillDown.year}` : ' — All time'}`}
+          title={`${drillDown.sponsor}${drillDown.year ? ` · ${drillDown.year}` : ' · All time'}`}
           searchParams={{ sponsor: drillDown.sponsor, year: drillDown.year || undefined }}
           viewAllHref={`/${city}/legislation?sponsor=${encodeURIComponent(drillDown.sponsor)}${drillDown.year ? `&year=${drillDown.year}` : ''}`}
           onClose={() => setDrillDown(null)}
@@ -699,7 +699,7 @@ function TagSparkChart({ tag, data, color }: { tag: string; data: TagYearRow[]; 
   return (
     <div className="rounded-lg border bg-muted/20 p-3 mt-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium capitalize">{tag.replace(/-/g, ' ')} — all years</span>
+        <span className="text-xs font-medium capitalize">{tag.replace(/-/g, ' ')} · all years</span>
         <span className="text-xs text-muted-foreground">peak {peakCount} in {peakYear}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
@@ -844,7 +844,7 @@ function YearByYearSection({ data, city }: { data: NarrativeData | null; city: s
       <div>
         <h2 className="text-lg font-semibold">Year in Review</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          AI analysis of each year&apos;s legislative activity — pick a year to explore.
+          AI analysis of each year&apos;s legislative activity. Pick a year to explore.
         </p>
       </div>
 
@@ -892,12 +892,12 @@ function YearByYearSection({ data, city }: { data: NarrativeData | null; city: s
             : undefined} />
         <StatCard label="Signed into Law" value={entry.stats.signed}
           sub={entry.stats.pass_rate != null ? `${Math.round(entry.stats.pass_rate * 100)}% of closed bills` : undefined} />
-        <StatCard label="Median Days to Law" value={entry.stats.median_days_to_passage ?? '—'}
+        <StatCard label="Median Days to Law" value={entry.stats.median_days_to_passage ?? '–'}
           sub="introduction to signing" />
         <StatCard label="Contested Votes" value={entry.stats.contested_count}
           sub="bills with at least one Nay" />
         <StatCard label="Top Issue"
-          value={entry.stats.top_tags[0] ? entry.stats.top_tags[0].tag.replace(/-/g, ' ') : '—'}
+          value={entry.stats.top_tags[0] ? entry.stats.top_tags[0].tag.replace(/-/g, ' ') : '–'}
           sub={entry.stats.top_tags[0] ? `${entry.stats.top_tags[0].count} bills` : undefined} />
       </div>
 
@@ -1098,7 +1098,7 @@ export default function InsightsPage() {
               : `introduced in ${CURRENT_YEAR}`} />
           <StatCard label="Signed into Law" value={summary.signed_into_law} sub="all time" />
           <StatCard label="Pass Rate" value={`${Math.round(summary.pass_rate * 100)}%`} sub="of closed bills" />
-          <StatCard label="Avg Impact Score" value={summary.avg_impact_score ?? '—'} sub="1–10 across analyzed" />
+          <StatCard label="Avg Impact Score" value={summary.avg_impact_score ?? '–'} sub="1–10 across analyzed" />
         </div>
       )}
 
@@ -1170,7 +1170,7 @@ export default function InsightsPage() {
       {/* Top Issues */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">Top Issues — {activeYear}</h2>
+          <h2 className="text-lg font-semibold">Top Issues · {activeYear}</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
             Click a tag to filter the status chart above and see its full history.
           </p>
