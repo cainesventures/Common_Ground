@@ -20,11 +20,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
   const post = getPost(slug)
-  if (!post) return { title: 'Blog — Open Common Ground' }
+  if (!post) return { title: 'Blog, Open Common Ground' }
 
   const canonical = `https://opencommonground.com/blog/${post.slug}`
   return {
-    title: `${post.title} — Open Common Ground`,
+    title: `${post.title}, Open Common Ground`,
     description: post.summary,
     alternates: { canonical },
     openGraph: {
@@ -119,11 +119,21 @@ export default async function BlogPostPage({
           <p className="text-sm text-muted-foreground mb-5">
             Every claim above traces to the public legislative record. Each row shows the bill&apos;s
             outcome and, where one was recorded, the final roll-call vote. &ldquo;No roll call&rdquo;
-            means it passed without a recorded tally — typically a voice vote.
+            means it passed without a recorded tally, typically a voice vote.
           </p>
           <ul className="space-y-2">
             {post.related_bills.map((b) => {
-              const died = /committee|fail|veto/i.test(b.outcome)
+              // Three states, not two. The old test treated "Lapsed" as a success and
+              // "In committee" as a failure, which inverts the meaning on any post about
+              // bills that died quietly or are still pending.
+              const o = b.outcome.toLowerCase()
+              const dead = /lapsed|fail|veto|defeat|withdrawn|died|tabled/.test(o)
+              const passed = /signed|enacted|adopted|approved|passed/.test(o)
+              const badgeClass = dead
+                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                : passed
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
               return (
                 <li key={b.bill_number}>
                   <a
@@ -138,11 +148,7 @@ export default async function BlogPostPage({
                     </span>
                     <span className="shrink-0 flex items-center gap-2">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                          died
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                            : 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                        }`}
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}
                       >
                         {b.outcome}
                       </span>
@@ -160,7 +166,7 @@ export default async function BlogPostPage({
 
       <footer className="mt-12 border-t pt-6 space-y-4">
         <p className="text-sm text-muted-foreground">
-          This is commentary by {post.author}. There&apos;s no comment section — if it sparked
+          This is commentary by {post.author}. There&apos;s no comment section. If it sparked
           something, share it where the conversation already lives.
         </p>
         <ShareBar url={shareUrl} title={post.title} eventProps={{ slug: post.slug }} />
