@@ -3,6 +3,7 @@ import BillDetailClient from './BillDetailClient'
 import { siteUrl } from '@/lib/site'
 import { getBill, MISSING } from './get-bill'
 import { billGraph, jsonLdProps } from '@/lib/structured-data'
+import { BillBlogCallout } from '@/components/blog/BillBlogCallout'
 
 const TITLE_MAX = 70
 
@@ -24,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   if (bill === MISSING) notFound()
   try {
     if (!bill) {
-      return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
+      return { title: 'Bill, Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
     }
     // Legal titles run to 300+ characters; Google shows ~60. Prefer the plain
     // title, then the AI headline, and only fall back to the raw legal title,
@@ -33,10 +34,10 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
     const title = truncateTitle(rawTitle)
     const description = bill?.summary
       ? bill.summary.slice(0, 160)
-      : `Philadelphia City Council bill ${bill?.bill_number ?? ''} — Open Common Ground`
+      : `Philadelphia City Council bill ${bill?.bill_number ?? ''}, Open Common Ground`
     const canonical = siteUrl(`/${city}/legislation/${id}`)
     return {
-      title: `${title} — Open Common Ground`,
+      title: `${title}, Open Common Ground`,
       description,
       alternates: { canonical },
       openGraph: {
@@ -55,7 +56,7 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
       },
     }
   } catch {
-    return { title: 'Bill — Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
+    return { title: 'Bill, Open Common Ground', alternates: { canonical: siteUrl(`/${city}/legislation/${id}`) } }
   }
 }
 
@@ -88,6 +89,7 @@ export default async function BillDetailPage({
   return (
     <>
       {graph && <script {...jsonLdProps(graph)} />}
+      <BillBlogCallout billId={id} billNumber={initialBill?.bill_number} />
       <BillDetailClient initialBill={initialBill} />
     </>
   )

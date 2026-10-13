@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
 import { usePathname } from 'next/navigation'
-import { getCityConfig } from '@/lib/city'
+import { getCityConfig, CITY_SLUG } from '@/lib/city'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { api } from '@/lib/api'
@@ -78,10 +78,18 @@ export function Navbar() {
 
   const isDev = process.env.NODE_ENV === 'development'
 
-  // Derive city from path: /philadelphia/... → 'philadelphia'
+  // Derive city from path: /philadelphia/... → 'philadelphia'.
+  //
+  // Falling back to CITY_SLUG rather than '' matters. On a non-city page such as
+  // /blog or /budget the path has no city segment, and an empty prefix produced
+  // nav links like /legislation, which only work because next.config redirects
+  // them. Every click from those pages paid a 308, and the href set changed
+  // depending on which page you were on, which is exactly the kind of
+  // path-derived divergence that shows up as a hydration mismatch on the nav.
+  // The prefix is now the same on every route.
   const citySlug = pathname.split('/')[1]
   const cityConfig = getCityConfig(citySlug)
-  const p = cityConfig ? `/${citySlug}` : ''
+  const p = `/${cityConfig ? citySlug : CITY_SLUG}`
 
   // Admin tools only show when the user has admin rights AND is in admin mode.
   // Toggle (button further down) flips between modes — lets admins see the

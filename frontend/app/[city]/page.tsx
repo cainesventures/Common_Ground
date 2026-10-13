@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getCityConfig } from '@/lib/city'
 import { siteUrl } from '@/lib/site'
 import CityLandingClient from './CityLandingClient'
+import { getAllPosts } from '@/lib/blog'
 
 // The landing page itself is a client component, so its metadata lives here.
 // It deliberately does not go in [city]/layout.tsx: metadata set on a layout is
@@ -19,7 +20,7 @@ export async function generateMetadata({
 
   const title = `${config.fullCouncilName} Bill Tracker`
   const description =
-    `Track ${config.fullCouncilName} legislation in plain English — bill summaries, ` +
+    `Track ${config.fullCouncilName} legislation in plain English: bill summaries, ` +
     `sponsors, voting records and ${config.totalMembers} council member profiles. ` +
     `Free, independent, no ads.`
   const canonical = siteUrl(`/${city}`)
@@ -39,5 +40,17 @@ export default async function CityLandingPage({
 }) {
   const { city } = await params
   if (!getCityConfig(city)) notFound()
-  return <CityLandingClient />
+  // Only the fields the card needs. Passing the whole post would drag every
+  // article body into the client bundle for a card that shows four lines.
+  const [latest] = getAllPosts()
+  const latestPost = latest
+    ? {
+        slug: latest.slug,
+        title: latest.title,
+        dek: latest.dek,
+        date: latest.date,
+        reading_minutes: latest.reading_minutes,
+      }
+    : null
+  return <CityLandingClient latestPost={latestPost} />
 }

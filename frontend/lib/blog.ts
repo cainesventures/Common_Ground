@@ -50,6 +50,34 @@ export function getAllSlugs(): string[] {
   return (data.posts ?? []).map((p) => p.slug)
 }
 
+/** The Legistar id inside a related-bill URL, e.g. ".../legistar_phila_2360998". */
+function billIdFromUrl(url: string): string | null {
+  return url.match(/(legistar_phila_\d+)/)?.[1] ?? null
+}
+
+/**
+ * Every post that cites a given bill.
+ *
+ * This is the reverse of related_bills, and it exists because the traffic runs
+ * the other way: bill pages are the site's top organic entry point, so a reader
+ * arriving from a search lands on the bill and has no way to discover the piece
+ * that analyses it. Matching is by Legistar id, with bill number as a fallback
+ * for any entry whose URL is not in the canonical form.
+ */
+export function getPostsForBill(
+  billId?: string | null,
+  billNumber?: string | null,
+): BlogPost[] {
+  if (!billId && !billNumber) return []
+  return getAllPosts().filter((post) =>
+    (post.related_bills ?? []).some((b) => {
+      if (billId && billIdFromUrl(b.url) === billId) return true
+      if (billNumber && b.bill_number === billNumber) return true
+      return false
+    }),
+  )
+}
+
 /** Human-friendly date, e.g. "June 29, 2026". */
 export function formatPostDate(iso: string): string {
   const d = new Date(iso + 'T00:00:00')
