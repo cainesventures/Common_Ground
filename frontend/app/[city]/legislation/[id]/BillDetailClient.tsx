@@ -393,6 +393,53 @@ Sincerely,
 // ── Bill status timeline ─────────────────────────────────────────────────────
 
 // Ordered steps that match actual DB statuses
+/**
+ * Shown on a bill that lapsed with an empty roll call.
+ *
+ * This is the per-bill face of the corpus finding in
+ * /blog/philadelphia-cyclist-rules-never-voted: 1,624 of the 8,465 bills
+ * introduced 2000-2025 died without a single recorded vote at any stage, which
+ * makes dying unvoted the normal way a Philadelphia bill dies rather than an
+ * exception. The post asserts it; these 1,624 pages are where a reader can
+ * actually see it on the bill in front of them.
+ *
+ * Rendered from the SSR payload rather than a client fetch on purpose. Bill
+ * detail pages are the top organic entry point for the site, so this text has
+ * to be in the server HTML to be worth anything.
+ */
+function LapsedWithoutVoteNotice({ term }: { term?: { start: number; end: number } | null }) {
+  return (
+    <section
+      aria-labelledby="lapsed-no-vote-heading"
+      className="border rounded-lg p-5 space-y-2 border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30"
+    >
+      <h2 id="lapsed-no-vote-heading" className="text-sm font-semibold">
+        No one voted on this bill
+      </h2>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        {term
+          ? `This bill was introduced in the ${term.start}–${term.end} Council term and lapsed when that term ran out. `
+          : 'This bill lapsed when the Council term it was introduced in ran out. '}
+        The public record shows no committee vote and no floor vote at any
+        stage, so no member of Council ever went on record for or against it.
+      </p>
+      <p className="text-sm text-muted-foreground leading-relaxed">
+        That is not unusual here. Of the 8,465 bills introduced between 2000 and
+        2025, 1,624 lapsed without a single recorded vote. Ninety percent of
+        bills that became law carry a roll call. Three percent of lapsed bills
+        do.{' '}
+        <Link
+          href="/blog/philadelphia-cyclist-rules-never-voted"
+          className="underline hover:text-primary"
+        >
+          How this works
+        </Link>
+        .
+      </p>
+    </section>
+  )
+}
+
 const STATUS_STEPS = [
   { key: 'introduced',      label: 'Introduced' },
   { key: 'in_committee',    label: 'In Committee' },
@@ -619,7 +666,10 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
   // Also seeded: these drive the tab labels, and both come from the same
   // payload, so deriving them here keeps the server and first client render
   // identical.
-  const [rollCallCount, setRollCallCount] = useState((initialBill?.vote_records ?? []).length)
+  // roll_call_count, not vote_records.length: the detail route eager-loads
+  // the relationship but does not serialize it, so the old expression was
+  // pinned at 0 and the votes tab never showed a count.
+  const [rollCallCount, setRollCallCount] = useState(initialBill?.roll_call_count ?? 0)
   const [stickyVisible, setStickyVisible] = useState(false)
   const [activeTab, setActiveTab] = useState<TabKey>(() => {
     const t = searchParams?.get('tab')
@@ -667,7 +717,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         setTracked((trackData?.ids ?? []).includes(id))
         setIsAdmin(meData?.user?.subscription_tier === 'dev')
         // roll call count comes from getLegislation now
-        setRollCallCount((bill?.vote_records?.length ?? 0))
+        setRollCallCount(bill?.roll_call_count ?? 0)
         if (bill) {
           posthog?.capture('bill_viewed', {
             bill_id: id,
@@ -942,6 +992,9 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
 
       {/* Status timeline */}
       {leg.status && <StatusTimeline status={leg.status} />}
+
+      {/* The 1,624 bills that died with nobody on record. */}
+      {leg.lapsed_without_vote && <LapsedWithoutVoteNotice term={leg.council_term} />}
 
       {/* Plain-language summary — always visible regardless of active tab */}
       {leg.summary ? (

@@ -165,8 +165,22 @@ export interface Bill {
   next_hearing_location?: string | null
   next_hearing_url?: string | null
 
-  // Eager-loaded relationships on the detail route
+  // Eager-loaded relationships on the detail route.
+  //
+  // vote_records is NOT serialized by GET /api/legislation/{id} even though
+  // the route eager-loads it, so anything needing the roll-call size on the
+  // detail page must use roll_call_count below, not vote_records.length.
   vote_records?: VoteRecord[]
+
+  // Roll call, served by the detail route.
+  //
+  // lapsed_without_vote is true only for status === 'lapsed' with an empty
+  // roll call: the 1,624 bills of 8,465 (2000-2025) that died without anyone
+  // in Council going on record. council_term is the four-year term the bill
+  // was introduced in, which is the term it died at the end of.
+  roll_call_count?: number
+  lapsed_without_vote?: boolean
+  council_term?: { start: number; end: number } | null
 
   // Aggregates some list/detail routes attach
   perspective_count?: number

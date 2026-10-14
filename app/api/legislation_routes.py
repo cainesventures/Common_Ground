@@ -2855,6 +2855,19 @@ async def get_legislation(
             .scalar() or 0
         )
 
+        roll_call_count = len(leg.vote_records or [])
+        lapsed_without_vote = (leg.status == "lapsed") and roll_call_count == 0
+
+        # Philadelphia council terms run four calendar years from the January
+        # after each municipal election, so every term starts on a year
+        # divisible by four (2020-2023, 2024-2027). Same rule as
+        # insights_routes.current_term_start; derived here rather than in the
+        # frontend so there is one definition of it.
+        council_term = None
+        if leg.introduced_date:
+            _ts = leg.introduced_date.year - (leg.introduced_date.year % 4)
+            council_term = {"start": _ts, "end": _ts + 3}
+
         return {
             "success": True,
             "data": {
@@ -2900,6 +2913,24 @@ async def get_legislation(
                 #
                 # The count stays: the admin pipeline view filters on it.
                 "perspective_count": perspective_count,
+                # Roll-call size, and whether this bill died without anyone
+                # going on record.
+                #
+                # vote_records was selectinloaded here but never serialized,
+                # so the frontend's rollCallCount was pinned at 0 and the
+                # count badge on the votes tab never rendered.
+                #
+                # lapsed_without_vote drives the notice on the bill page. The
+                # condition is deliberately status == "lapsed" AND an empty
+                # roll call, which matches the published corpus figure exactly
+                # (1,624 of the 8,465 bills introduced 2000-2025). Derived
+                # died_in_committee bills are NOT folded in: there are only 79
+                # of them, they are a read-time reclassification rather than a
+                # Legistar status, and including them would make the page
+                # disagree with the number in the blog post.
+                "roll_call_count": roll_call_count,
+                "lapsed_without_vote": lapsed_without_vote,
+                "council_term": council_term,
                 # The case for / the case against. two_lane_state tells the
                 # page why there is no case when there is none, so it can show
                 # nothing rather than an empty panel.
