@@ -580,6 +580,7 @@ class LegislationIngestionService:
         bill_type: Optional[str] = None,
         committee: Optional[str] = None,
         not_posted_for: Optional[str] = None,
+        lapsed_without_vote: Optional[bool] = None,
     ):
         """Search for legislation with optional filters."""
         from sqlalchemy import extract, func, text
@@ -668,6 +669,17 @@ class LegislationIngestionService:
             from sqlalchemy import exists
             base_query = base_query.filter(
                 exists().where(BillVoteRecord.legislation_id == Legislation.id)
+            )
+        if lapsed_without_vote:
+            # The 1,624 bills behind the "Died without a vote" view: lapsed,
+            # and no roll call at any stage. Same definition as
+            # insights_routes.get_lapsed_without_vote and as the notice on the
+            # bill page, so the three cannot disagree about which bills these
+            # are.
+            from sqlalchemy import exists as _exists
+            base_query = base_query.filter(
+                Legislation.status == "lapsed",
+                ~_exists().where(BillVoteRecord.legislation_id == Legislation.id),
             )
         if has_perspectives:
             from sqlalchemy import exists as _exists

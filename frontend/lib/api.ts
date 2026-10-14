@@ -99,7 +99,7 @@ export const api = {
   listLegislation: (limit = 20, offset = 0, level = '') =>
     apiFetch<BillListResponse>(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),
 
-  getFacets: (params: { q?: string; level?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number }) => {
+  getFacets: (params: { q?: string; level?: string; analyzed?: string; tag?: string; impact?: string; status?: string; sponsor?: string; year?: number; month?: number; lapsedNoVote?: boolean }) => {
     const p = new URLSearchParams()
     if (params.q)        p.set('q', params.q)
     if (params.level)    p.set('level', params.level)
@@ -110,6 +110,7 @@ export const api = {
     if (params.sponsor)  p.set('sponsor', params.sponsor)
     if (params.year)     p.set('year', String(params.year))
     if (params.month)    p.set('month', String(params.month))
+    if (params.lapsedNoVote) p.set('lapsed_without_vote', 'true')
     return apiFetch<FacetsResponse>(`/api/legislation/facets?${p}`)
   },
 
@@ -223,10 +224,10 @@ export const api = {
     return apiFetch<MonthCountsResponse>(`/api/legislation/month-counts?${p}`)
   },
 
-  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false, billType = '', committee = '') => {
+  searchLegislation: (q: string, limit = 20, offset = 0, level = '', analyzed = '', tag: string | string[] = '', impact = '', year = 0, month = 0, status: string | string[] = '', sponsor = '', hasVotes = false, hasPerspectives = false, missingPerspectives = false, billType = '', committee = '', lapsedNoVote = false) => {
     const tagStr = Array.isArray(tag) ? tag.join(',') : tag
     const statusStr = Array.isArray(status) ? status.join(',') : status
-    return apiFetch<BillListResponse>(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}${billType ? `&bill_type=${encodeURIComponent(billType)}` : ''}${committee ? `&committee=${encodeURIComponent(committee)}` : ''}`)
+    return apiFetch<BillListResponse>(`/api/legislation/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}${analyzed ? `&analyzed=${analyzed}` : ''}${tagStr ? `&tag=${encodeURIComponent(tagStr)}` : ''}${impact ? `&impact=${impact}` : ''}${year ? `&year=${year}` : ''}${month ? `&month=${month}` : ''}${statusStr ? `&status=${encodeURIComponent(statusStr)}` : ''}${sponsor ? `&sponsor=${encodeURIComponent(sponsor)}` : ''}${hasVotes ? `&has_votes=true` : ''}${hasPerspectives ? `&has_perspectives=true` : ''}${missingPerspectives ? `&missing_perspectives=true` : ''}${billType ? `&bill_type=${encodeURIComponent(billType)}` : ''}${committee ? `&committee=${encodeURIComponent(committee)}` : ''}${lapsedNoVote ? `&lapsed_without_vote=true` : ''}`)
   },
 
   getSpotlight: (limit = 8) =>

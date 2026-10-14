@@ -303,9 +303,18 @@ _TAG_TO_CATEGORY: dict[str, str] = {
 
 
 def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
+                         lapsed_without_vote=False,
                          skip_tag=False, skip_status=False, skip_sponsor=False):
     """Apply standard filters to a SQLAlchemy query. Skip flags omit one dimension for faceted counts."""
     from sqlalchemy import extract, or_
+    if lapsed_without_vote:
+        # Kept in step with the search route so facet counts reflect the
+        # "died without a vote" filter instead of silently ignoring it.
+        from sqlalchemy import exists as _exists
+        q_obj = q_obj.filter(
+            Legislation.status == "lapsed",
+            ~_exists().where(BillVoteRecord.legislation_id == Legislation.id),
+        )
     if q:
         q_obj = q_obj.filter(
             (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
@@ -345,6 +354,7 @@ async def get_facets(
     sponsor: str = Query("", max_length=100),
     year: int = Query(0),
     month: int = Query(0),
+    lapsed_without_vote: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     """Return per-dimension facet counts for the legislation filters.
@@ -355,7 +365,8 @@ async def get_facets(
     import json
     from collections import Counter
     kw = dict(q=q, level=level, analyzed=analyzed, tag=tag, impact=impact,
-              status=status, sponsor=sponsor, year=year, month=month)
+              status=status, sponsor=sponsor, year=year, month=month,
+              lapsed_without_vote=lapsed_without_vote)
 
     # Status counts — all filters except status
     status_rows = _filter_legislation(**kw, skip_status=True,
@@ -692,6 +703,7 @@ async def search_legislation(
     year: int = Query(0, description="Filter by introduction year (0 = all)"),
     month: int = Query(0, description="Filter by introduction month 1-12 (0 = all)"),
     has_votes: bool = Query(False, description="Only return bills with cached roll call votes"),
+    lapsed_without_vote: bool = Query(False, description="Only return bills that lapsed with no roll call at any stage"),
     has_perspectives: bool = Query(False, description="Only return bills with at least one generated perspective"),
     missing_perspectives: bool = Query(False, description="Only return bills with no generated perspectives"),
     city: str = Query("", max_length=50, description="City slug filter (e.g. 'philadelphia', 'chicago'). Defaults to 'philadelphia' for local searches."),
@@ -715,7 +727,8 @@ async def search_legislation(
         results, total = service.search_legislation(
             q, limit=limit, offset=offset, level=level, analyzed=analyzed_filter, tag=tag, impact=impact,
             year=year or None, month=month or None, status=status or None, sponsor=sponsor or None,
-            has_votes=has_votes or None, has_perspectives=has_perspectives or None,
+            has_votes=has_votes or None, lapsed_without_vote=lapsed_without_vote or None,
+            has_perspectives=has_perspectives or None,
             missing_perspectives=missing_perspectives or None, city=effective_city or None,
             bill_type=bill_type or None, committee=committee or None,
             not_posted_for=not_posted_for or None,

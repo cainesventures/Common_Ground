@@ -22,6 +22,7 @@ export interface LegislationFilters {
   sponsors: string[]
   analyzedOnly: boolean
   hasVotesOnly: boolean
+  lapsedNoVote: boolean
   categories: string[]
 }
 
@@ -59,6 +60,7 @@ export function parseFilters(sp: RawSearchParams): LegislationFilters {
     // Analyzed-only is the default view; ?analyzed=0 is what turns it off.
     analyzedOnly: one(sp.analyzed) !== '0',
     hasVotesOnly: one(sp.has_votes) === '1',
+    lapsedNoVote: one(sp.lapsed_no_vote) === '1',
     categories: list(sp.category),
   }
 }
