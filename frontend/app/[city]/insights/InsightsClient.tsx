@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { InsightsTabs, type InsightsSection } from '@/components/insights/InsightsTabs'
 import { LapsedSection, type LapsedPayload } from '@/components/insights/LapsedSection'
 import { SubjectOutputSection, type SubjectOutput } from '@/components/insights/SubjectOutputSection'
+import { KeyFinding } from '@/components/insights/KeyFinding'
 import type { Bill as BillRow } from '@/lib/types'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -1153,6 +1154,10 @@ export default function InsightsClient({
 
       {section === 'overview' && (
         <>
+          {/* The thing you only see by reading What dies and Subjects
+              together, so it does not depend on a reader doing that. */}
+          <KeyFinding data={output} city={city} />
+
           {/* Multi-decade narrative */}
           <LegislativeHistorySection data={narrativeData} />
 
