@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { InsightsTabs, type InsightsSection } from '@/components/insights/InsightsTabs'
 import { LapsedSection, type LapsedPayload } from '@/components/insights/LapsedSection'
+import { SubjectOutputSection, type SubjectOutput } from '@/components/insights/SubjectOutputSection'
 import type { Bill as BillRow } from '@/lib/types'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -1000,11 +1001,13 @@ export default function InsightsClient({
   initialTag = '',
   initialYear = null,
   lapsed = null,
+  output = null,
 }: {
   section?: InsightsSection
   initialTag?: string
   initialYear?: number | null
   lapsed?: LapsedPayload | null
+  output?: SubjectOutput | null
 }) {
   const router = useRouter()
   const { city } = useParams<{ city: string }>()
@@ -1224,6 +1227,7 @@ export default function InsightsClient({
       </>)}
 
       {section === 'subjects' && (<>
+      <SubjectOutputSection data={output} city={city} />
       {/* Top Issues */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div>

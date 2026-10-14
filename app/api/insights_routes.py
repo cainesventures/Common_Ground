@@ -1009,3 +1009,98 @@ async def get_lapsed_without_vote(
             ],
         },
     }
+
+
+@router.get("/subject-output")
+async def get_subject_output(db: Session = Depends(get_db)):
+    """What Council actually turns into law, by subject.
+
+    The companion to /lapsed-without-vote, and deliberately NOT its mirror.
+
+    A pass *rate* by subject carries almost no information here, because it is
+    very nearly 100 minus the lapse rate: across tags above the floor, every
+    status other than "signed into law" and "lapsed with no roll call"
+    accounts for 2.0% of bills on average and never more than 5.6%. Ranking
+    subjects by pass rate just redraws the lapsed chart backwards.
+
+    Volume is the part that is not already on screen. Council signs roughly
+    1,900 zoning bills and 1,500 planning bills in this window against 84
+    education bills, so what it spends its time on is a different question
+    from what it is willing to vote on, and only counting answers it.
+
+    Same closed window as the rankings (see LAPSED_CLOSED_TO_YEAR), so a bill
+    still moving in the sitting term cannot drag a subject's rate down.
+    """
+    rc = _roll_call_subquery(db)
+    year_col = extract("year", Legislation.introduced_date)
+    no_vote = (rc.c.cnt.is_(None)) | (rc.c.cnt == 0)
+
+    rows = (
+        db.query(Legislation.tags, Legislation.status, rc.c.cnt)
+        .outerjoin(rc, rc.c.legislation_id == Legislation.id)
+        .filter(
+            Legislation.level == "local",
+            Legislation.introduced_date.isnot(None),
+            year_col >= LAPSED_FROM_YEAR,
+            year_col <= LAPSED_CLOSED_TO_YEAR,
+            Legislation.tags.isnot(None),
+            Legislation.tags != "",
+            Legislation.tags != "[]",
+        )
+        .all()
+    )
+
+    import json as _j
+
+    def _blank():
+        return {"total": 0, "signed": 0, "died": 0}
+
+    cats: dict[str, dict] = {}
+    tags: dict[str, dict] = {}
+    for tags_json, status, cnt in rows:
+        try:
+            parsed = _j.loads(tags_json)
+        except Exception:
+            continue
+        signed = status == "signed_into_law"
+        died = status == "lapsed" and not cnt
+
+        keys = {str(x).lower().strip() for x in parsed if isinstance(x, str) and str(x).strip()}
+        for bucket, names in ((cats, categories_for_tags(parsed)), (tags, keys)):
+            for name in names:
+                slot = bucket.setdefault(name, _blank())
+                slot["total"] += 1
+                if signed:
+                    slot["signed"] += 1
+                if died:
+                    slot["died"] += 1
+
+    def _rows(bucket: dict, floor: int, label):
+        out = [
+            {
+                "key": k,
+                "label": label(k),
+                "total": v["total"],
+                "signed": v["signed"],
+                "died": v["died"],
+                "pct_signed": round(100.0 * v["signed"] / v["total"], 1),
+            }
+            for k, v in bucket.items()
+            if v["total"] >= floor
+        ]
+        out.sort(key=lambda r: -r["signed"])
+        return out
+
+    by_category = _rows(cats, MIN_CATEGORY_BILLS, lambda k: k[:1].upper() + k[1:])
+    by_tag = _rows(tags, MIN_TAG_BILLS, _tag_label)
+
+    return {
+        "success": True,
+        "from_year": LAPSED_FROM_YEAR,
+        "to_year": LAPSED_CLOSED_TO_YEAR,
+        "min_category_bills": MIN_CATEGORY_BILLS,
+        "min_tag_bills": MIN_TAG_BILLS,
+        "total_signed": sum(1 for _, st, _c in rows if st == "signed_into_law"),
+        "by_category": by_category,
+        "by_tag": by_tag,
+    }
