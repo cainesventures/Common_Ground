@@ -1125,10 +1125,20 @@ export default function InsightsPage() {
           </p>
         </div>
         <StatusFunnelChart data={statusData} selectedYear={selectedYear} onYearChange={setSelectedYear} />
-        <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}${tagFilter ? `&tag=${tagFilter}` : ''}`)}
-          className="text-sm text-primary hover:underline">
-          View all {activeYear} bills →
-        </button>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}${tagFilter ? `&tag=${tagFilter}` : ''}`)}
+            className="text-sm text-primary hover:underline">
+            View all {activeYear} bills →
+          </button>
+          {/* The funnel shows bills reaching "lapsed" but not that almost none
+              of them were ever voted on, which is the part worth following.
+              Worded to span the whole corpus rather than "of them": it sits
+              beside a link scoped to one year, and "of them" read as though
+              all 1,624 were that year's. */}
+          <Link href={`/${city}/legislation/lapsed`} className="text-sm text-primary hover:underline">
+            1,624 bills since 2000 died without a vote →
+          </Link>
+        </div>
       </div>
 
       {/* Impact Distribution */}

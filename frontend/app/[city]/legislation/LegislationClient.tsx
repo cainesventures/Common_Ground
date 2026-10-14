@@ -353,6 +353,32 @@ export default function LegislationClient({
         />
       </div>
 
+      {/*
+        Entry point to the lapsed-without-a-vote view.
+
+        That page was reachable only from the blog post that produced it and
+        from the sitemap, which meant the finding was effectively unlinked from
+        the part of the site it is about. This list is where someone goes
+        looking for which bills died and what happened to them.
+      */}
+      <Link
+        href={`/${city}/legislation/lapsed`}
+        className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50/60 px-4 py-3 transition-colors hover:bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 dark:hover:bg-amber-950/50"
+      >
+        <span className="min-w-0">
+          <span className="block text-sm font-semibold">1,624 bills died without a vote</span>
+          <span className="block text-xs text-muted-foreground">
+            Roughly one bill in five since 2000 lapsed with no roll call at any stage. See which ones.
+          </span>
+        </span>
+        <svg
+          aria-hidden xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+          className="h-4 w-4 shrink-0 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </Link>
+
       {/* ── Filter row ── */}
       <div className="sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4 space-y-2">
 
