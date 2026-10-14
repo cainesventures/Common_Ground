@@ -19,6 +19,8 @@
  * lighter amber.
  */
 
+import Link from 'next/link'
+
 const ACCENT = '#d97706'
 
 type Outcome = {
@@ -51,14 +53,52 @@ type RankRow = { key: string; label: string; total: number; died: number; pct: n
  * ranking into a comparison: without it every bar looks damning, and with it
  * you can see that most of the list sits near the norm.
  */
+/**
+ * One bar. A link when the caller can point at the bills behind it, a plain
+ * div otherwise: only the category breakdown maps onto a filter the
+ * legislation page understands.
+ */
+function RowBody({ row, unit, href }: { row: RankRow; unit: string; href?: string }) {
+  const inner = (
+    <>
+      <span
+        className="h-4 rounded-r-[4px]"
+        style={{ backgroundColor: ACCENT, width: `${Math.max(row.pct, 0.8)}%` }}
+      />
+      <span className="ml-2 text-xs font-medium tabular-nums">{row.pct}%</span>
+      <span className={TIP}>
+        <span className="block font-medium">{row.label}</span>
+        <span className="block text-muted-foreground">
+          {row.died.toLocaleString()} of {row.total.toLocaleString()} {unit} died without a vote
+          {href ? '. Select to browse them.' : ''}
+        </span>
+      </span>
+    </>
+  )
+  const cls = 'group relative flex h-4 items-center'
+  return href ? (
+    <Link
+      href={href}
+      aria-label={`${row.label}: ${row.pct}% died without a vote. Browse these bills.`}
+      className={`${cls} rounded-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
+    >
+      {inner}
+    </Link>
+  ) : (
+    <div className={cls} tabIndex={0}>{inner}</div>
+  )
+}
+
 function RankBars({
   rows,
   baseline,
   unit,
+  hrefFor,
 }: {
   rows: RankRow[]
   baseline?: number | null
   unit: string
+  hrefFor?: (row: RankRow) => string
 }) {
   return (
     <div className="space-y-2">
@@ -96,19 +136,7 @@ function RankBars({
                 />
               )}
 
-              <div className="group relative flex h-4 items-center" tabIndex={0}>
-                <div
-                  className="h-4 rounded-r-[4px]"
-                  style={{ backgroundColor: ACCENT, width: `${Math.max(r.pct, 0.8)}%` }}
-                />
-                <span className="ml-2 text-xs font-medium tabular-nums">{r.pct}%</span>
-                <span className={TIP}>
-                  <span className="block font-medium">{r.label}</span>
-                  <span className="block text-muted-foreground">
-                    {r.died.toLocaleString()} of {r.total.toLocaleString()} {unit} died without a vote
-                  </span>
-                </span>
-              </div>
+              <RowBody row={r} unit={unit} href={hrefFor?.(r)} />
             </div>
           </div>
         ))}
@@ -130,16 +158,18 @@ export function RankChart({
   baseline,
   unit,
   caption,
+  hrefFor,
 }: {
   rows?: RankRow[]
   baseline?: number | null
   unit: string
   caption: string
+  hrefFor?: (row: RankRow) => string
 }) {
   if (!rows || rows.length === 0) return null
   return (
     <div className="space-y-3">
-      <RankBars rows={rows} baseline={baseline} unit={unit} />
+      <RankBars rows={rows} baseline={baseline} unit={unit} hrefFor={hrefFor} />
       <div className="sr-only">
         <table>
           <caption>{caption}</caption>

@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 from fastapi.responses import StreamingResponse
 from app.models.database import get_db
+from app.tag_categories import category_for_tag, tag_to_category
 from app.services.legislation_service import LegislationIngestionService, sync_vote_records
 from app.models import Legislation, LegislationVote, BillPerspective, BillVoteRecord, BlueskyPost
 from app.auth import require_dev_tier, get_optional_user, get_current_user, require_bot_token
@@ -245,88 +246,11 @@ async def get_tag_counts(
     return result
 
 
-def _load_tag_categories() -> dict[str, str]:
-    """Read the canonical tag -> category mapping.
-
-    This used to be a literal here and a second literal in
-    frontend/lib/bill-categories.ts. The two drifted, and the drift was
-    invisible until the Categories filter was measured: this endpoint reported
-    Public Safety 13 against 704 uses of the tag. One file now feeds both, and
-    the web app's copy is generated from it by scripts/sync_tag_categories.py
-    with a test that fails when it goes stale.
-    """
-    path = _Path(__file__).resolve().parents[2] / "app" / "data" / "tag_categories.json"
-    with path.open(encoding="utf-8") as fh:
-        data = _json.load(fh)
-    mapping: dict[str, str] = {}
-    for category, tags in data["categories"].items():
-        for tag in tags:
-            mapping[str(tag).lower().strip()] = category
-    return mapping
-
-
-_TAG_TO_CATEGORY: dict[str, str] = _load_tag_categories()
-
-
-def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
-                         lapsed_without_vote=False,
-                         skip_tag=False, skip_status=False, skip_sponsor=False):
-    """Apply standard filters to a SQLAlchemy query. Skip flags omit one dimension for faceted counts."""
-    from sqlalchemy import extract, or_
-    if lapsed_without_vote:
-        # Kept in step with the search route so facet counts reflect the
-        # "died without a vote" filter instead of silently ignoring it.
-        from sqlalchemy import exists as _exists
-        q_obj = q_obj.filter(
-            Legislation.status == "lapsed",
-            ~_exists().where(BillVoteRecord.legislation_id == Legislation.id),
-        )
-    if q:
-        q_obj = q_obj.filter(
-            (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
-        )
-    if level:
-        q_obj = q_obj.filter(Legislation.level == level)
-    if analyzed == "true":
-        q_obj = q_obj.filter(Legislation.analyzed_at.isnot(None))
-    elif analyzed == "false":
-        q_obj = q_obj.filter(Legislation.analyzed_at.is_(None))
-    if not skip_tag and tag:
-        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
-        q_obj = q_obj.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
-    if impact:
-        q_obj = q_obj.filter(Legislation.impact_level == impact)
-    if not skip_status and status:
-        status_list = [s.strip() for s in status.split(',') if s.strip()]
-        q_obj = q_obj.filter(Legislation.status.in_(status_list))
-    if not skip_sponsor and sponsor:
-        sponsor_list = [s.strip() for s in sponsor.split(',') if s.strip()]
-        q_obj = q_obj.filter(or_(*[Legislation.sponsor.ilike(f"%{s}%") for s in sponsor_list]))
-    if year:
-        q_obj = q_obj.filter(extract("year", Legislation.introduced_date) == year)
-    if month:
-        q_obj = q_obj.filter(extract("month", Legislation.introduced_date) == month)
-    return q_obj
-
-
-
-def _category_for_tag(tag: str) -> str | None:
-    """Look up a tag's category, tolerating hyphen/underscore/space spelling.
-
-    The map was written with spaces ('public safety') but the tags written on
-    bills are hyphenated ('public-safety'), so the biggest buckets matched
-    nothing: the facets endpoint reported Public Safety 13 against 704 uses of
-    the tag, Environment 6 against 362, Immigration 1. Normalising at lookup
-    fixes every such pair at once instead of listing both spellings forever.
-    """
-    key = (tag or "").lower().strip()
-    if not key:
-        return None
-    for variant in (key, key.replace("-", " ").replace("_", " "), key.replace(" ", "-")):
-        hit = _TAG_TO_CATEGORY.get(variant)
-        if hit:
-            return hit
-    return None
+# Both live in app/tag_categories.py now: the lapsed analysis in
+# insights_routes needs the same lookup, and importing one route module into
+# another to borrow a dict is how the original duplication started.
+_TAG_TO_CATEGORY = tag_to_category()
+_category_for_tag = category_for_tag
 
 
 @router.get("/facets")

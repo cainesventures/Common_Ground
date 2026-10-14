@@ -38,9 +38,11 @@ export type LapsedPayload = {
     min_committee_bills: number
     min_sponsor_bills: number
     min_tag_bills: number
+    min_category_bills: number
     by_committee?: { key: string; label: string; total: number; died: number; pct: number }[]
     by_sponsor?: { key: string; label: string; total: number; died: number; pct: number }[]
     by_tag?: { key: string; label: string; total: number; died: number; pct: number }[]
+    by_category?: { key: string; label: string; total: number; died: number; pct: number }[]
   }
 }
 
@@ -121,16 +123,47 @@ export function LapsedSection({ data, city }: { data: LapsedPayload | null; city
         </div>
       </section>
 
-      {ww?.by_tag?.length ? (
+      {ww?.by_category?.length ? (
         <section className="space-y-3">
           <div className="space-y-1">
             <h3 className="text-lg font-semibold">What the bill was about</h3>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              Share of bills on each subject that lapsed without a recorded vote, for subjects
-              attached to at least {ww.min_tag_bills} bills. Ethics and elections sit at the top,
-              the two subjects Council was least willing to put to a vote, and the rules
-              governing Council itself are what both are about. The bottom of the list is the
-              routine business of running a city: infrastructure, planning and land use.
+              Share of bills in each category that lapsed without a recorded vote. Education,
+              public safety and health sit at the top; the things a city does every day, zoning
+              and transportation, sit at the bottom. Select any bar to browse exactly those
+              bills.
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              These are the same categories as the filter on the legislation page. A bill
+              usually carries several tags, so it can fall into more than one category and the
+              totals add up to more than the number of bills. Categories with at least{' '}
+              {ww.min_category_bills} bills.
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card p-5">
+            <RankChart
+              rows={ww.by_category}
+              baseline={ww.baseline_pct}
+              unit="bills"
+              caption="Share of bills that lapsed without a recorded vote, by category"
+              hrefFor={r =>
+                `/${city}/legislation?category=${encodeURIComponent(r.key)}&lapsed_no_vote=1`
+              }
+            />
+          </div>
+        </section>
+      ) : null}
+
+      {ww?.by_tag?.length ? (
+        <section className="space-y-3">
+          <div className="space-y-1">
+            <h3 className="text-lg font-semibold">The same thing in finer detail</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              The same question against the raw tags rather than the categories above, for
+              tags on at least {ww.min_tag_bills} bills. This is where the sharp findings are:
+              ethics and elections sit at the top, the two subjects Council was least willing to
+              put to a vote, and the rules governing Council itself are what both are about. Both
+              vanish into Government at the coarser grain.
             </p>
             <p className="text-xs text-muted-foreground leading-relaxed">
               Subjects come from the tags on each bill, and a bill usually carries several, so

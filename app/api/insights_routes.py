@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models.database import get_db
 from app.models import Legislation, BillVoteRecord, Councilmember
 from app.services.name_matching import surname as _last_name, strip_title as _short_name
+from app.tag_categories import categories_for_tags
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
@@ -696,6 +697,7 @@ LAPSED_CLOSED_TO_YEAR = 2023
 MIN_COMMITTEE_BILLS = 50
 MIN_SPONSOR_BILLS = 80
 MIN_TAG_BILLS = 60
+MIN_CATEGORY_BILLS = 60
 
 # Legistar writes the same person two ways depending on whether they held the
 # presidency, so "Council President Clarke" and "Councilmember Clarke" are
@@ -892,6 +894,37 @@ async def get_lapsed_without_vote(
             if died_here:
                 tag_died[t] = tag_died.get(t, 0) + 1
 
+    # The same pass, bucketed into the coarse categories the legislation
+    # filter uses, so a reader can click a bar and land on exactly those bills.
+    # Kept alongside the tag breakdown rather than replacing it: categories are
+    # what the filter understands, tags are where the sharp findings are
+    # (ethics at 59% disappears into 'government' at this grain).
+    cat_tot: dict[str, int] = {}
+    cat_died: dict[str, int] = {}
+    for tags_json, status, cnt in tag_rows:
+        try:
+            parsed = _json.loads(tags_json)
+        except Exception:
+            continue
+        died_here = status == "lapsed" and not cnt
+        for category in categories_for_tags(parsed):
+            cat_tot[category] = cat_tot.get(category, 0) + 1
+            if died_here:
+                cat_died[category] = cat_died.get(category, 0) + 1
+
+    by_category = [
+        {
+            "key": c,
+            "label": c[:1].upper() + c[1:],
+            "total": n,
+            "died": cat_died.get(c, 0),
+            "pct": round(100.0 * cat_died.get(c, 0) / n, 1),
+        }
+        for c, n in cat_tot.items()
+        if n >= MIN_CATEGORY_BILLS
+    ]
+    by_category.sort(key=lambda r: (-r["pct"], -r["total"]))
+
     by_tag = [
         {
             "key": t,
@@ -949,9 +982,11 @@ async def get_lapsed_without_vote(
             "min_committee_bills": MIN_COMMITTEE_BILLS,
             "min_sponsor_bills": MIN_SPONSOR_BILLS,
             "min_tag_bills": MIN_TAG_BILLS,
+            "min_category_bills": MIN_CATEGORY_BILLS,
             "by_committee": by_committee,
             "by_sponsor": by_sponsor,
             "by_tag": by_tag,
+            "by_category": by_category,
         },
         "bills": {
             "total": bills_total,

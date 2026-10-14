@@ -42,10 +42,8 @@
     "civil rights": [
       "civil rights",
       "discrimination",
-      "elections",
       "fair practices ordinance",
       "personal data protection",
-      "referendum",
       "transparency"
     ],
     "community": [
@@ -83,6 +81,7 @@
       "city-government",
       "city_government",
       "civil-service",
+      "elections",
       "ethics",
       "government",
       "government policy",
@@ -90,7 +89,8 @@
       "government structure",
       "home rule charter amendment",
       "office",
-      "procurement contracts"
+      "procurement contracts",
+      "referendum"
     ],
     "health": [
       "alcohol",
