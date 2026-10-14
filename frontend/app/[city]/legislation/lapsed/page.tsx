@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { siteUrl } from '@/lib/site'
 import { VoteCoverageChart, TermChart } from './LapsedCharts'
+import { LegislationViewTabs } from '@/components/LegislationViewTabs'
 
 /**
  * /[city]/legislation/lapsed -- the bills that died with nobody on record.
@@ -98,7 +99,7 @@ export default async function LapsedPage({
 
   if (!data) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-10 space-y-3">
+      <div className="space-y-3">
         <h1 className="text-2xl font-bold">Bills that died without a vote</h1>
         <p className="text-sm text-muted-foreground">
           This page could not load its data just now. Please try again in a moment.
@@ -119,13 +120,13 @@ export default async function LapsedPage({
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8 space-y-8">
+    <div className="space-y-8">
       <header className="space-y-3">
-        <nav className="text-xs text-muted-foreground">
-          <Link href={`/${city}/legislation`} className="underline hover:text-primary">All legislation</Link>
-          <span className="mx-1.5">/</span>
-          <span>Died without a vote</span>
-        </nav>
+        <LegislationViewTabs
+          city={city}
+          active="lapsed"
+          lapsedCount={totals.lapsed_without_vote}
+        />
 
         <h1 className="text-3xl font-bold leading-tight">Bills that died without a vote</h1>
 
