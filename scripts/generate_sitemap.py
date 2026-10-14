@@ -174,6 +174,7 @@ def build_core(member_ids: list[str]) -> ElementTree:
         # ranking signal between them.
         (f"{BASE_URL}/philadelphia",                "1.0", "daily"),
         (f"{BASE_URL}/philadelphia/legislation",    "0.8", "daily"),
+        (f"{BASE_URL}/philadelphia/legislation/lapsed", "0.8", "monthly"),
         (f"{BASE_URL}/philadelphia/insights",       "0.8", "weekly"),
         (f"{BASE_URL}/philadelphia/councilmembers", "0.7", "weekly"),
         (f"{BASE_URL}/budget",                      "0.8", "monthly"),

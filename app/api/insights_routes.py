@@ -665,3 +665,158 @@ async def get_agreement_matrix(
         "matrix": matrix,
         "min_shared": min_shared,
     }
+
+
+# The window the published corpus figures are quoted over. 2026 bills are
+# still moving, so including them would make the headline number drift
+# downward every time Council votes on something.
+LAPSED_FROM_YEAR = 2000
+LAPSED_TO_YEAR = 2025
+
+# Outcomes worth comparing vote coverage across, in the order they are shown.
+# "lapsed" is last because it is the punchline.
+_OUTCOME_ORDER = ["vetoed", "signed_into_law", "failed", "lapsed"]
+
+
+def _roll_call_subquery(db: Session):
+    """Per-bill roll-call size, as a joinable subquery."""
+    return (
+        db.query(
+            BillVoteRecord.legislation_id.label("legislation_id"),
+            func.count(BillVoteRecord.id).label("cnt"),
+        )
+        .group_by(BillVoteRecord.legislation_id)
+        .subquery()
+    )
+
+
+@router.get("/lapsed-without-vote")
+async def get_lapsed_without_vote(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    term: int = Query(0, description="Filter to one council term by its start year (0 = all)"),
+    db: Session = Depends(get_db),
+):
+    """Bills that lapsed without a single recorded vote, plus the context.
+
+    Backs /philadelphia/legislation/lapsed. The finding: of the 8,465 bills
+    introduced 2000-2025, 1,624 lapsed with an empty roll call, so dying
+    unvoted is the ordinary way a Philadelphia bill dies rather than a fate
+    reserved for controversial ones. 90% of bills signed into law carry a roll
+    call; 3% of lapsed bills do.
+
+    Counts are computed here rather than stored, so the page cannot drift from
+    the database the way a hardcoded figure in prose would.
+
+    Grouping is by four-year council term, not by year, and that is deliberate:
+    vote-record coverage dips hard in 2019 (124 of 271 signed bills) for
+    reasons that look like a Legistar gap rather than a change in Council's
+    behaviour, and a year-by-year chart would show a false cliff there. The
+    2016-2019 term absorbs it.
+    """
+    rc = _roll_call_subquery(db)
+    year_col = extract("year", Legislation.introduced_date)
+
+    def _scoped(q):
+        return q.filter(
+            Legislation.level == "local",
+            Legislation.introduced_date.isnot(None),
+            year_col >= LAPSED_FROM_YEAR,
+            year_col <= LAPSED_TO_YEAR,
+        )
+
+    no_vote = (rc.c.cnt.is_(None)) | (rc.c.cnt == 0)
+
+    corpus_total = _scoped(db.query(func.count(Legislation.id))).scalar() or 0
+
+    # Vote coverage per outcome. One pass, grouped by status.
+    rows = _scoped(
+        db.query(
+            Legislation.status,
+            func.count(Legislation.id),
+            func.sum(case((no_vote, 0), else_=1)),
+        ).outerjoin(rc, rc.c.legislation_id == Legislation.id)
+    ).group_by(Legislation.status).all()
+
+    by_status = {s: (int(n), int(w or 0)) for s, n, w in rows}
+    vote_rate = []
+    for status in _OUTCOME_ORDER:
+        total, with_vote = by_status.get(status, (0, 0))
+        if not total:
+            continue
+        vote_rate.append({
+            "status": status,
+            "label": STATUS_LABELS.get(status, status),
+            "total": total,
+            "with_vote": with_vote,
+            "without_vote": total - with_vote,
+            "pct_with_vote": round(100.0 * with_vote / total, 1),
+        })
+
+    lapsed_total, lapsed_with_vote = by_status.get("lapsed", (0, 0))
+    lapsed_no_vote = lapsed_total - lapsed_with_vote
+
+    # The headline set, grouped into council terms. Terms start on years
+    # divisible by four -- same rule as current_term_start().
+    term_rows = _scoped(
+        db.query(year_col.label("y"), func.count(Legislation.id))
+        .outerjoin(rc, rc.c.legislation_id == Legislation.id)
+        .filter(Legislation.status == "lapsed", no_vote)
+    ).group_by("y").all()
+
+    terms: dict[int, int] = {}
+    for y, n in term_rows:
+        start = int(y) - (int(y) % 4)
+        terms[start] = terms.get(start, 0) + int(n)
+    by_term = [
+        {"start": s, "end": s + 3, "count": terms[s], "label": f"{s}–{s + 3}"}
+        for s in sorted(terms)
+    ]
+
+    # The bills themselves, newest first.
+    bills_q = _scoped(
+        db.query(Legislation)
+        .outerjoin(rc, rc.c.legislation_id == Legislation.id)
+        .filter(Legislation.status == "lapsed", no_vote)
+    )
+    if term:
+        bills_q = bills_q.filter(year_col >= term, year_col <= term + 3)
+
+    bills_total = bills_q.with_entities(func.count(Legislation.id)).scalar() or 0
+    bills = (
+        bills_q.order_by(Legislation.introduced_date.desc())
+        .limit(limit).offset(offset).all()
+    )
+
+    return {
+        "success": True,
+        "totals": {
+            "corpus": corpus_total,
+            "lapsed": lapsed_total,
+            "lapsed_without_vote": lapsed_no_vote,
+            "from_year": LAPSED_FROM_YEAR,
+            "to_year": LAPSED_TO_YEAR,
+        },
+        "vote_rate_by_outcome": vote_rate,
+        "by_term": by_term,
+        "bills": {
+            "total": bills_total,
+            "limit": limit,
+            "offset": offset,
+            "term": term or None,
+            "results": [
+                {
+                    "id": b.id,
+                    "bill_number": b.bill_number,
+                    "title": b.title,
+                    "plain_title": b.plain_title,
+                    "headline": b.headline,
+                    "sponsor": b.sponsor,
+                    "committee": b.committee,
+                    "introduced_date": b.introduced_date.isoformat() if b.introduced_date else None,
+                    "term_start": b.introduced_date.year - (b.introduced_date.year % 4) if b.introduced_date else None,
+                }
+                for b in bills
+            ],
+        },
+    }
