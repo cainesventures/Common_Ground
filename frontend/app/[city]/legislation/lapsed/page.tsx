@@ -36,8 +36,10 @@ type WhoAndWhere = {
   baseline_total: number
   min_committee_bills: number
   min_sponsor_bills: number
-  by_committee: RankRow[]
-  by_sponsor: RankRow[]
+  min_tag_bills: number
+  by_committee?: RankRow[]
+  by_sponsor?: RankRow[]
+  by_tag?: RankRow[]
 }
 
 type Payload = {
@@ -202,7 +204,35 @@ export default async function LapsedPage({
         </div>
       </section>
 
-      {ww && (
+      {ww?.by_tag?.length ? (
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">What the bill was about</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Share of bills on each subject that lapsed without a recorded vote, for subjects
+            attached to at least {ww.min_tag_bills} bills. Ethics and elections sit at the top,
+            the two subjects Council was least willing to put to a vote, and the rules governing
+            Council itself are what both are about. The bottom of the list is the routine
+            business of running a city: infrastructure, planning and land use.
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Subjects come from the tags on each bill, and a bill usually carries several, so one
+            bill can appear under more than one subject here and the totals add up to more than
+            the number of bills.
+          </p>
+        </div>
+        <div className="border rounded-lg p-4">
+          <RankChart
+            rows={ww.by_tag}
+            baseline={ww.baseline_pct}
+            unit="bills"
+            caption="Share of bills that lapsed without a recorded vote, by subject"
+          />
+        </div>
+      </section>
+      ) : null}
+
+      {ww?.by_committee?.length ? (
       <section className="space-y-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Where bills go to die</h2>
@@ -222,9 +252,9 @@ export default async function LapsedPage({
           />
         </div>
       </section>
-      )}
+      ) : null}
 
-      {ww && (
+      {ww?.by_sponsor?.length ? (
       <section className="space-y-3">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Whose bills die</h2>
@@ -249,7 +279,7 @@ export default async function LapsedPage({
           />
         </div>
       </section>
-      )}
+      ) : null}
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">

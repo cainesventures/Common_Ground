@@ -133,12 +133,12 @@ export function RankChart({
   unit,
   caption,
 }: {
-  rows: RankRow[]
+  rows?: RankRow[]
   baseline?: number | null
   unit: string
   caption: string
 }) {
-  if (rows.length === 0) return null
+  if (!rows || rows.length === 0) return null
   return (
     <div className="space-y-3">
       <RankBars rows={rows} baseline={baseline} unit={unit} />

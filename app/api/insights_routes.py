@@ -695,12 +695,19 @@ LAPSED_CLOSED_TO_YEAR = 2023
 # bills at the top.
 MIN_COMMITTEE_BILLS = 50
 MIN_SPONSOR_BILLS = 80
+MIN_TAG_BILLS = 60
 
 # Legistar writes the same person two ways depending on whether they held the
 # presidency, so "Council President Clarke" and "Councilmember Clarke" are
 # 775 and 599 bills by one member. Grouping on the raw string splits their
 # record in half and understates it.
 _SPONSOR_TITLES = ("Council President ", "Councilmember ", "Council member ")
+
+
+def _tag_label(tag: str) -> str:
+    """'historic-preservation' -> 'Historic preservation'."""
+    text = tag.replace("-", " ").replace("_", " ").strip()
+    return text[:1].upper() + text[1:] if text else text
 
 
 def _normalize_sponsor(raw: str) -> str:
@@ -853,6 +860,51 @@ async def get_lapsed_without_vote(
     by_committee = _rate_rows(Legislation.committee, MIN_COMMITTEE_BILLS)
     by_sponsor = _rate_rows(Legislation.sponsor, MIN_SPONSOR_BILLS, _normalize_sponsor)
 
+    # Subject matter, keyed on the tag vocabulary itself rather than on the
+    # coarse category buckets the legislation filter uses.
+    #
+    # Those buckets cannot carry this. _TAG_TO_CATEGORY in legislation_routes
+    # keys its tags with spaces ('public safety') while the tags actually
+    # written on bills are hyphenated ('public-safety'), so three of its
+    # categories match essentially nothing and a fourth, 'civil rights', is 111
+    # election bills out of 114 and would have been published under a label
+    # that is not what it contains. Tags say what they are.
+    import json as _json
+
+    tag_rows = _closed(
+        db.query(Legislation.tags, Legislation.status, rc.c.cnt)
+        .outerjoin(rc, rc.c.legislation_id == Legislation.id)
+        .filter(Legislation.tags.isnot(None), Legislation.tags != "", Legislation.tags != "[]")
+    ).all()
+
+    tag_tot: dict[str, int] = {}
+    tag_died: dict[str, int] = {}
+    for tags_json, status, cnt in tag_rows:
+        try:
+            parsed = _json.loads(tags_json)
+        except Exception:
+            continue
+        died_here = status == "lapsed" and not cnt
+        # A bill carries several tags; de-duplicate so one bill counts once per
+        # tag, never twice because it was tagged 'housing' and 'Housing'.
+        for t in {str(x).lower().strip() for x in parsed if isinstance(x, str) and str(x).strip()}:
+            tag_tot[t] = tag_tot.get(t, 0) + 1
+            if died_here:
+                tag_died[t] = tag_died.get(t, 0) + 1
+
+    by_tag = [
+        {
+            "key": t,
+            "label": _tag_label(t),
+            "total": n,
+            "died": tag_died.get(t, 0),
+            "pct": round(100.0 * tag_died.get(t, 0) / n, 1),
+        }
+        for t, n in tag_tot.items()
+        if n >= MIN_TAG_BILLS
+    ]
+    by_tag.sort(key=lambda r: (-r["pct"], -r["total"]))
+
     closed_total = _closed(db.query(func.count(Legislation.id))).scalar() or 0
     closed_died = _closed(
         db.query(func.count(Legislation.id))
@@ -896,8 +948,10 @@ async def get_lapsed_without_vote(
             "baseline_total": closed_total,
             "min_committee_bills": MIN_COMMITTEE_BILLS,
             "min_sponsor_bills": MIN_SPONSOR_BILLS,
+            "min_tag_bills": MIN_TAG_BILLS,
             "by_committee": by_committee,
             "by_sponsor": by_sponsor,
+            "by_tag": by_tag,
         },
         "bills": {
             "total": bills_total,
