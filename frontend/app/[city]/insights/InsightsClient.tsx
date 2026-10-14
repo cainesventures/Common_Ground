@@ -1,0 +1,1254 @@
+'use client'
+
+import { useEffect, useState, useCallback } from 'react'
+import { InsightsTabs, type InsightsSection } from '@/components/insights/InsightsTabs'
+import { LapsedSection, type LapsedPayload } from '@/components/insights/LapsedSection'
+import type { Bill as BillRow } from '@/lib/types'
+import { useRouter, useParams } from 'next/navigation'
+import Link from 'next/link'
+import { api } from '@/lib/api'
+import DrillDownPanel, { DrillDownSearchParams } from '@/components/insights/DrillDownPanel'
+import ContestedVotesSection from '@/components/insights/ContestedVotesSection'
+// Type-only import — the runtime data still comes from a fetch of the static
+// JSON, so the 250KB dataset never enters the client bundle.
+import type { NarrativeData } from '@/lib/legislative-history'
+// Row shapes come from the API contract rather than being restated here.
+import type {
+  ImpactYearRow,
+  SponsorRow,
+  TagYearRow,
+  YearStatusRow,
+} from '@/lib/api-types'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface Summary {
+  total_bills: number
+  active_bills: number
+  died_in_committee?: number
+  current_term_start?: number
+  bills_this_year: number
+  bills_last_year: number
+  signed_into_law: number
+  pass_rate: number
+  avg_impact_score: number | null
+  years_from: number
+  years_to: number
+  last_fetched_at?: string | null
+}
+
+
+// ── Colors ───────────────────────────────────────────────────────────────────
+
+const FUNNEL_COLORS: Record<string, string> = {
+  introduced:        '#3b82f6',
+  in_committee:      '#f59e0b',
+  died_in_committee: '#94a3b8',
+  signed_into_law:   '#10b981',
+  not_passed:        '#6b7280',
+}
+
+const BILL_TYPE_COLORS: Record<string, string> = {
+  substantive: '#3b82f6',
+  ceremonial:  '#f59e0b',
+  procedural:  '#6b7280',
+  unknown:     '#d1d5db',
+}
+
+const IMPACT_COLORS_PIE: Record<string, string> = {
+  high:   '#ef4444',
+  medium: '#f59e0b',
+  low:    '#10b981',
+}
+
+const TAG_PALETTE = [
+  '#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+  '#f97316','#06b6d4','#ec4899','#84cc16','#6b7280',
+]
+
+const IMPACT_BADGE: Record<string, string> = {
+  high:   'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  medium: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  low:    'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+}
+
+const CURRENT_YEAR = new Date().getFullYear()
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function pct(n: number, total: number) {
+  if (!total) return '0%'
+  return `${Math.round((n / total) * 100)}%`
+}
+
+// ── Stat Card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl border bg-card p-4">
+      {accent && <div className="text-xs font-medium mb-1" style={{ color: accent }}>{label}</div>}
+      <div className="text-2xl font-bold tabular-nums">{typeof value === 'number' ? value.toLocaleString() : value}</div>
+      {!accent && <div className="text-sm font-medium mt-0.5">{label}</div>}
+      {sub && <div className="text-xs text-muted-foreground mt-0.5">{sub}</div>}
+    </div>
+  )
+}
+
+// ── Status Funnel Chart ───────────────────────────────────────────────────────
+
+const FUNNEL_STAGES = ['introduced', 'in_committee', 'died_in_committee', 'signed_into_law', 'not_passed'] as const
+type FunnelStage = typeof FUNNEL_STAGES[number]
+
+// "died_in_committee" is derived server-side from non-terminal bills of prior
+// council terms — in the DB those rows are still introduced/in_committee, so
+// the drill-down queries those statuses (the year filter scopes them to dead ones).
+const FUNNEL_STATUS_MAP: Record<FunnelStage, string> = {
+  introduced:        'introduced',
+  in_committee:      'in_committee',
+  died_in_committee: 'introduced,in_committee',
+  signed_into_law:   'signed_into_law',
+  not_passed:        'failed,vetoed,withdrawn,tabled',
+}
+
+const FUNNEL_LABELS: Record<FunnelStage, string> = {
+  introduced:        'Introduced',
+  in_committee:      'In Committee',
+  died_in_committee: 'Died in Committee',
+  signed_into_law:   'Signed into Law',
+  not_passed:        'Not Passed',
+}
+
+const CHART_W = 700
+const CHART_H = 220
+const PAD = { top: 20, right: 16, bottom: 36, left: 48 }
+const PAGE_SIZE = 20
+
+function bucketRow(row: YearStatusRow): Record<FunnelStage, number> {
+  return {
+    introduced:        row.introduced || 0,
+    in_committee:      row.in_committee || 0,
+    died_in_committee: row.died_in_committee || 0,
+    signed_into_law:   row.signed_into_law || 0,
+    not_passed:        (row.failed || 0) + (row.vetoed || 0) + (row.withdrawn || 0) + (row.tabled || 0),
+  }
+}
+
+function StatusFunnelChart({
+  data, selectedYear, onYearChange,
+}: {
+  data: YearStatusRow[]
+  selectedYear: number | null
+  onYearChange: (year: number) => void
+}) {
+  const router = useRouter()
+  const { city } = useParams<{ city: string }>()
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; stage: FunnelStage; count: number } | null>(null)
+  const [selectedStage, setSelectedStage] = useState<FunnelStage | null>(null)
+  const [bills, setBills] = useState<BillRow[]>([])
+  const [billsTotal, setBillsTotal] = useState(0)
+  const [billsPage, setBillsPage] = useState(0)
+  const [billsLoading, setBillsLoading] = useState(false)
+
+  const activeYear = selectedYear ?? data[data.length - 1]?.year
+
+  useEffect(() => { setSelectedStage(null); setBills([]); setBillsTotal(0); setBillsPage(0) }, [activeYear])
+
+  useEffect(() => {
+    if (!selectedStage || !activeYear) return
+    setBillsLoading(true)
+    api.searchLegislation('', PAGE_SIZE, billsPage * PAGE_SIZE, 'local', '', '', '', activeYear, 0, FUNNEL_STATUS_MAP[selectedStage])
+      .then(d => { if (!d?.success) return; setBills(d.results ?? []); setBillsTotal(d.total ?? 0) })
+      .catch(() => {})
+      .finally(() => setBillsLoading(false))
+  }, [selectedStage, activeYear, billsPage])
+
+  if (!data.length) return (
+    <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading…</div>
+  )
+
+  const row = data.find(r => r.year === activeYear)
+  const bucketed = row ? bucketRow(row) : null
+
+  const innerW = CHART_W - PAD.left - PAD.right
+  const innerH = CHART_H - PAD.top - PAD.bottom
+  const maxVal = bucketed ? Math.max(...FUNNEL_STAGES.map(s => bucketed[s]), 1) : 1
+  const xPos = (i: number) => (i / (FUNNEL_STAGES.length - 1)) * innerW
+  const yPos = (val: number) => innerH - (val / maxVal) * innerH
+  const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * maxVal))
+
+  const handleStageClick = (stage: FunnelStage) => {
+    setSelectedStage(prev => prev === stage ? null : stage)
+    setBillsPage(0)
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Year</span>
+        <select value={activeYear} onChange={e => onYearChange(Number(e.target.value))}
+          className="rounded border bg-background px-2 py-1 text-sm">
+          {[...data].reverse().map(r => <option key={r.year} value={r.year}>{r.year}</option>)}
+        </select>
+        {row && <span className="text-xs text-muted-foreground">{row.total.toLocaleString()} bills total</span>}
+      </div>
+
+      {bucketed && (
+        <>
+          <div className="w-full overflow-x-auto">
+            <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} className="w-full" style={{ minWidth: 400 }}
+              onMouseLeave={() => setTooltip(null)}>
+              <g transform={`translate(${PAD.left},${PAD.top})`}>
+                {yTicks.map(tick => (
+                  <g key={tick}>
+                    <line x1={0} x2={innerW} y1={yPos(tick)} y2={yPos(tick)} stroke="currentColor" strokeOpacity={0.08} strokeWidth={1} />
+                    <text x={-6} y={yPos(tick) + 4} textAnchor="end" fontSize={10} fill="currentColor" fillOpacity={0.45}>
+                      {tick >= 1000 ? `${(tick / 1000).toFixed(tick % 1000 === 0 ? 0 : 1)}k` : tick}
+                    </text>
+                  </g>
+                ))}
+                {FUNNEL_STAGES.map((s, i) => (
+                  <text key={s} x={xPos(i)} y={innerH + 20}
+                    textAnchor={i === 0 ? 'start' : i === FUNNEL_STAGES.length - 1 ? 'end' : 'middle'}
+                    fontSize={10} fill={selectedStage === s ? FUNNEL_COLORS[s] : 'currentColor'}
+                    fillOpacity={selectedStage === s ? 1 : 0.55} fontWeight={selectedStage === s ? 600 : 400}>
+                    {FUNNEL_LABELS[s]}
+                  </text>
+                ))}
+                {FUNNEL_STAGES.map((s, i) => (
+                  <line key={s} x1={xPos(i)} x2={xPos(i)} y1={0} y2={innerH} stroke="currentColor" strokeOpacity={0.06} strokeWidth={1} />
+                ))}
+                <path
+                  d={FUNNEL_STAGES.map((s, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(bucketed[s])}`).join(' ')}
+                  fill="none" stroke="#6366f1" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
+                />
+                {FUNNEL_STAGES.map((s, i) => (
+                  <circle key={s} cx={xPos(i)} cy={yPos(bucketed[s])}
+                    r={selectedStage === s ? 7 : tooltip?.stage === s ? 6 : 4.5}
+                    fill={FUNNEL_COLORS[s]} stroke="var(--background)"
+                    strokeWidth={selectedStage === s ? 2.5 : 1.5}
+                    style={{ cursor: 'pointer', transition: 'r 100ms ease' }}
+                    onMouseEnter={(e) => {
+                      const svg = (e.target as SVGElement).closest('svg')!
+                      const rect = svg.getBoundingClientRect()
+                      const svgX = ((xPos(i) + PAD.left) / CHART_W) * rect.width + rect.left
+                      const svgY = ((yPos(bucketed[s]) + PAD.top) / CHART_H) * rect.height + rect.top
+                      setTooltip({ x: svgX, y: svgY, stage: s, count: bucketed[s] })
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                    onClick={() => handleStageClick(s)}
+                  />
+                ))}
+              </g>
+            </svg>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {FUNNEL_STAGES.map(s => (
+              <button key={s} onClick={() => handleStageClick(s)}
+                className={`rounded-lg border p-3 text-left transition-all ${selectedStage === s ? 'border-foreground/40 bg-muted shadow-sm' : 'bg-muted/30 hover:bg-muted/60'}`}>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: FUNNEL_COLORS[s] }} />
+                  <span className="text-xs text-muted-foreground">{FUNNEL_LABELS[s]}</span>
+                </div>
+                <div className="text-xl font-bold tabular-nums">{bucketed[s].toLocaleString()}</div>
+                {row && row.total > 0 && (
+                  <div className="text-xs text-muted-foreground mt-0.5">{Math.round((bucketed[s] / row.total) * 100)}% of total</div>
+                )}
+              </button>
+            ))}
+          </div>
+
+          {selectedStage && (
+            <div className="rounded-lg border bg-card overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: FUNNEL_COLORS[selectedStage] }} />
+                  <span className="font-medium text-sm">{FUNNEL_LABELS[selectedStage]} · {activeYear}</span>
+                  {billsTotal > 0 && <span className="text-xs text-muted-foreground">({billsTotal.toLocaleString()} bills)</span>}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}&status=${encodeURIComponent(FUNNEL_STATUS_MAP[selectedStage])}`)}
+                    className="text-xs text-primary hover:underline">View all →</button>
+                  <button onClick={() => setSelectedStage(null)} className="text-muted-foreground hover:text-foreground text-lg leading-none">×</button>
+                </div>
+              </div>
+              {billsLoading ? (
+                <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">Loading…</div>
+              ) : bills.length === 0 ? (
+                <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">No bills found.</div>
+              ) : (
+                <>
+                  <ul className="divide-y">
+                    {bills.map(bill => (
+                      <li key={bill.id}>
+                        <a href={`/${city}/legislation/${bill.id}`}
+                          className="flex items-start justify-between gap-3 px-4 py-3 hover:bg-muted/40 transition-colors">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-mono text-muted-foreground shrink-0">{bill.bill_number}</span>
+                              {bill.impact_level && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded-full ${IMPACT_BADGE[bill.impact_level] ?? 'bg-muted text-muted-foreground'}`}>{bill.impact_level}</span>
+                              )}
+                            </div>
+                            <p className="text-sm mt-0.5 leading-snug line-clamp-2">{bill.plain_title || bill.title}</p>
+                          </div>
+                          <span className="text-xs text-muted-foreground shrink-0 mt-1">
+                            {bill.introduced_date ? new Date(bill.introduced_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : ''}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                  {billsTotal > PAGE_SIZE && (
+                    <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-muted-foreground">
+                      <span>{billsPage * PAGE_SIZE + 1}–{Math.min((billsPage + 1) * PAGE_SIZE, billsTotal)} of {billsTotal.toLocaleString()}</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setBillsPage(p => Math.max(0, p - 1))} disabled={billsPage === 0}
+                          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">← Prev</button>
+                        <button onClick={() => setBillsPage(p => p + 1)} disabled={(billsPage + 1) * PAGE_SIZE >= billsTotal}
+                          className="px-2 py-1 rounded border disabled:opacity-40 hover:bg-muted transition-colors">Next →</button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {tooltip && (
+        <div className="fixed z-50 rounded-lg border bg-popover shadow-md px-3 py-2 text-sm pointer-events-none"
+          style={{ left: tooltip.x + 12, top: tooltip.y - 36 }}>
+          <span>{FUNNEL_LABELS[tooltip.stage]}</span>
+          <span className="text-muted-foreground mx-1">·</span>
+          <span className="font-semibold tabular-nums">{tooltip.count.toLocaleString()}</span>
+          <span className="text-muted-foreground text-xs ml-1">click to browse</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Donut Chart ───────────────────────────────────────────────────────────────
+
+function DonutChart({
+  segments, size = 120, selectedKey, onSelect,
+}: {
+  segments: { key: string; label: string; value: number; color: string }[]
+  size?: number
+  selectedKey?: string
+  onSelect: (key: string) => void
+}) {
+  const total = segments.reduce((s, seg) => s + seg.value, 0)
+  if (!total) return <div className="flex items-center justify-center h-24 text-xs text-muted-foreground">No data</div>
+
+  const cx = size / 2, cy = size / 2, r = size * 0.38, inner = size * 0.22
+  let cumAngle = -Math.PI / 2
+
+  const paths = segments.map(seg => {
+    const angle = (seg.value / total) * 2 * Math.PI
+    const startAngle = cumAngle
+    const endAngle = cumAngle + angle
+    cumAngle = endAngle
+
+    const x1 = cx + r * Math.cos(startAngle), y1 = cy + r * Math.sin(startAngle)
+    const x2 = cx + r * Math.cos(endAngle),   y2 = cy + r * Math.sin(endAngle)
+    const xi1 = cx + inner * Math.cos(startAngle), yi1 = cy + inner * Math.sin(startAngle)
+    const xi2 = cx + inner * Math.cos(endAngle),   yi2 = cy + inner * Math.sin(endAngle)
+    const large = angle > Math.PI ? 1 : 0
+    const d = `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${inner} ${inner} 0 ${large} 0 ${xi1} ${yi1} Z`
+    return { ...seg, d, angle }
+  })
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} className="w-full max-w-[140px]">
+      {paths.map(p => (
+        <path key={p.key} d={p.d} fill={p.color}
+          opacity={selectedKey && selectedKey !== p.key ? 0.35 : 1}
+          strokeWidth={selectedKey === p.key ? 1.5 : 0.5}
+          stroke="var(--background)"
+          style={{ cursor: 'pointer', transition: 'opacity 150ms' }}
+          onClick={() => onSelect(p.key)}
+        />
+      ))}
+      <text x={cx} y={cy + 3} textAnchor="middle" fontSize={11} fontWeight={600} fill="currentColor">
+        {total.toLocaleString()}
+      </text>
+      <text x={cx} y={cy + 14} textAnchor="middle" fontSize={7} fill="currentColor" fillOpacity={0.5}>total</text>
+    </svg>
+  )
+}
+
+// ── Impact Distribution ───────────────────────────────────────────────────────
+
+function ImpactDistributionSection({ years }: { years: ImpactYearRow[] }) {
+  const { city } = useParams<{ city: string }>()
+  const [activeYear, setActiveYear] = useState<number | null>(null)
+  const [drillDown, setDrillDown] = useState<{ params: DrillDownSearchParams; title: string; href: string } | null>(null)
+
+  const yearList = [...years].reverse()
+  const year = activeYear ?? yearList[0]?.year
+  const row = years.find(r => r.year === year)
+
+  const btSegs = row ? [
+    { key: 'substantive', label: 'Substantive', value: row.bill_type.substantive, color: BILL_TYPE_COLORS.substantive },
+    { key: 'ceremonial',  label: 'Ceremonial',  value: row.bill_type.ceremonial,  color: BILL_TYPE_COLORS.ceremonial },
+    { key: 'procedural',  label: 'Procedural',  value: row.bill_type.procedural,  color: BILL_TYPE_COLORS.procedural },
+  ] : []
+
+  const ilSegs = row ? [
+    { key: 'high',   label: 'High',   value: row.impact_level.high,   color: IMPACT_COLORS_PIE.high },
+    { key: 'medium', label: 'Medium', value: row.impact_level.medium, color: IMPACT_COLORS_PIE.medium },
+    { key: 'low',    label: 'Low',    value: row.impact_level.low,    color: IMPACT_COLORS_PIE.low },
+  ] : []
+
+  if (!years.length) return (
+    <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">Loading…</div>
+  )
+
+  const handleBtClick = (key: string) => {
+    if (drillDown?.params.billType === key) { setDrillDown(null); return }
+    setDrillDown({
+      params: { billType: key, year },
+      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Bills · ${year}`,
+      href: `/${city}/legislation?year=${year}&bill_type=${key}`,
+    })
+  }
+
+  const handleIlClick = (key: string) => {
+    if (drillDown?.params.impact === key) { setDrillDown(null); return }
+    setDrillDown({
+      params: { impact: key, year },
+      title: `${key.charAt(0).toUpperCase() + key.slice(1)} Impact Bills · ${year}`,
+      href: `/${city}/legislation?year=${year}&impact=${key}`,
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-muted-foreground">Year</span>
+        <select value={year} onChange={e => { setActiveYear(Number(e.target.value)); setDrillDown(null) }}
+          className="rounded border bg-background px-2 py-1 text-sm">
+          {yearList.map(r => <option key={r.year} value={r.year}>{r.year}</option>)}
+        </select>
+        {row && <span className="text-xs text-muted-foreground">{row.total.toLocaleString()} analyzed bills</span>}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {/* Bill Type donut */}
+        <div>
+          <div className="text-sm font-medium mb-3">Bill Type</div>
+          <div className="flex items-center gap-4">
+            <DonutChart segments={btSegs} size={130} selectedKey={drillDown?.params.billType}
+              onSelect={handleBtClick} />
+            <div className="space-y-2 flex-1">
+              {btSegs.map(s => (
+                <button key={s.key} onClick={() => handleBtClick(s.key)}
+                  className={`w-full flex items-center gap-2 text-left rounded px-2 py-1 transition-colors ${drillDown?.params.billType === s.key ? 'bg-muted' : 'hover:bg-muted/50'}`}>
+                  <div className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="text-xs flex-1 capitalize">{s.label}</span>
+                  <span className="text-xs font-semibold tabular-nums">{s.value}</span>
+                  <span className="text-xs text-muted-foreground">{row ? pct(s.value, row.total) : ''}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Impact Level donut */}
+        <div>
+          <div className="text-sm font-medium mb-3">Impact Level</div>
+          <div className="flex items-center gap-4">
+            <DonutChart segments={ilSegs} size={130} selectedKey={drillDown?.params.impact}
+              onSelect={handleIlClick} />
+            <div className="space-y-2 flex-1">
+              {ilSegs.map(s => (
+                <button key={s.key} onClick={() => handleIlClick(s.key)}
+                  className={`w-full flex items-center gap-2 text-left rounded px-2 py-1 transition-colors ${drillDown?.params.impact === s.key ? 'bg-muted' : 'hover:bg-muted/50'}`}>
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.color }} />
+                  <span className="text-xs flex-1 capitalize">{s.label}</span>
+                  <span className="text-xs font-semibold tabular-nums">{s.value}</span>
+                  <span className="text-xs text-muted-foreground">{row ? pct(s.value, row.total) : ''}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {drillDown && (
+        <DrillDownPanel
+          title={drillDown.title}
+          searchParams={drillDown.params}
+          viewAllHref={drillDown.href}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Bill Type Over Time ───────────────────────────────────────────────────────
+
+function BillTypeOverTimeSection({ years }: { years: ImpactYearRow[] }) {
+  const { city } = useParams<{ city: string }>()
+  const [drillDown, setDrillDown] = useState<{ params: DrillDownSearchParams; title: string; href: string } | null>(null)
+
+  if (!years.length) return (
+    <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">Loading…</div>
+  )
+
+  const W = 700, H = 180, PL = 48, PR = 12, PT = 12, PB = 36
+  const iW = W - PL - PR, iH = H - PT - PB
+  const n = years.length
+  const barW = Math.max(8, iW / n - 3)
+  const xPos = (i: number) => PL + (i / n) * iW + barW / 2
+
+  const BT_ORDER = ['substantive', 'ceremonial', 'procedural'] as const
+
+  const handleBarClick = (yearVal: number, btKey: string) => {
+    const key = `${btKey}-${yearVal}`
+    if (drillDown && drillDown.params.billType === btKey && drillDown.params.year === yearVal) {
+      setDrillDown(null); return
+    }
+    setDrillDown({
+      params: { billType: btKey, year: yearVal },
+      title: `${btKey.charAt(0).toUpperCase() + btKey.slice(1)} Bills · ${yearVal}`,
+      href: `/${city}/legislation?year=${yearVal}&bill_type=${btKey}`,
+    })
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+        {BT_ORDER.map(k => (
+          <div key={k} className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: BILL_TYPE_COLORS[k] }} />
+            <span className="capitalize">{k}</span>
+          </div>
+        ))}
+        <span className="ml-1 italic">click a bar to see bills</span>
+      </div>
+
+      <div className="w-full overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ minWidth: 400 }}>
+          {[0, 25, 50, 75, 100].map(tick => (
+            <g key={tick}>
+              <line x1={PL} x2={W - PR} y1={PT + iH - (tick / 100) * iH} y2={PT + iH - (tick / 100) * iH}
+                stroke="currentColor" strokeOpacity={0.07} strokeWidth={1} />
+              <text x={PL - 6} y={PT + iH - (tick / 100) * iH + 4} textAnchor="end"
+                fontSize={9} fill="currentColor" fillOpacity={0.4}>{tick}%</text>
+            </g>
+          ))}
+
+          {years.map((row, i) => {
+            const total = BT_ORDER.reduce((s, k) => s + row.bill_type[k], 0)
+            if (!total) return null
+            let stackY = PT + iH
+            return (
+              <g key={row.year}>
+                {BT_ORDER.map(k => {
+                  const h = (row.bill_type[k] / total) * iH
+                  stackY -= h
+                  const active = drillDown?.params.billType === k && drillDown?.params.year === row.year
+                  return (
+                    <rect key={k} x={xPos(i) - barW / 2} y={stackY} width={barW} height={h}
+                      fill={BILL_TYPE_COLORS[k]}
+                      opacity={drillDown && !active ? 0.5 : 1}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => handleBarClick(row.year, k)}
+                    />
+                  )
+                })}
+                <text x={xPos(i)} y={PT + iH + 14} textAnchor="middle"
+                  fontSize={9} fill="currentColor" fillOpacity={0.5}>{row.year}</text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      {drillDown && (
+        <DrillDownPanel
+          title={drillDown.title}
+          searchParams={drillDown.params}
+          viewAllHref={drillDown.href}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Sponsor Leaderboard ───────────────────────────────────────────────────────
+
+function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
+  const { city } = useParams<{ city: string }>()
+  const [activeYear, setActiveYear] = useState(0)
+  const [sort, setSort] = useState<'active' | 'effective'>('active')
+  const [sponsors, setSponsors] = useState<SponsorRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [drillDown, setDrillDown] = useState<{ sponsor: string; year: number } | null>(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setDrillDown(null)
+    api.getInsightsSponsorLeaderboard({ year: activeYear })
+      .then((d: { sponsors?: SponsorRow[] } | null) => { setSponsors(d?.sponsors ?? []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [activeYear])
+
+  const sorted = [...sponsors].sort((a, b) =>
+    sort === 'active' ? b.total - a.total : b.pass_rate - a.pass_rate
+  )
+
+  const maxTotal = sorted[0]?.total || 1
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Year</span>
+          <select value={activeYear} onChange={e => setActiveYear(Number(e.target.value))}
+            className="rounded border bg-background px-2 py-1 text-sm">
+            <option value={0}>All time</option>
+            {yearList.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div className="flex rounded border overflow-hidden text-xs">
+          {(['active', 'effective'] as const).map(s => (
+            <button key={s} onClick={() => setSort(s)}
+              className={`px-3 py-1.5 capitalize transition-colors ${sort === s ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+              Most {s}
+            </button>
+          ))}
+        </div>
+        {sort === 'effective' && <span className="text-xs text-muted-foreground italic">min 3 bills</span>}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">Loading…</div>
+      ) : sorted.length === 0 ? (
+        <div className="text-sm text-muted-foreground">No data.</div>
+      ) : (
+        <div className="space-y-1">
+          {(sort === 'effective' ? sorted.filter(s => s.total >= 3) : sorted).map((sponsor, i) => {
+            const isSelected = drillDown?.sponsor === sponsor.sponsor
+            return (
+              <button key={sponsor.sponsor}
+                onClick={() => setDrillDown(isSelected ? null : { sponsor: sponsor.sponsor, year: activeYear })}
+                className={`w-full flex items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${isSelected ? 'bg-muted border border-border' : 'hover:bg-muted/50'}`}>
+                <span className="text-xs text-muted-foreground w-5 shrink-0 tabular-nums">{i + 1}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{sponsor.sponsor}</div>
+                  <div className="mt-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-primary/60 transition-all"
+                      style={{ width: `${(sponsor.total / maxTotal) * 100}%` }} />
+                  </div>
+                </div>
+                <div className="text-right shrink-0 space-y-0.5">
+                  <div className="text-sm font-semibold tabular-nums">{sponsor.total}</div>
+                  <div className="text-xs text-muted-foreground">bills</div>
+                </div>
+                <div className="text-right shrink-0 space-y-0.5 w-16">
+                  <div className="text-sm font-semibold tabular-nums"
+                    style={{ color: sponsor.pass_rate > 0.3 ? '#10b981' : sponsor.pass_rate > 0.1 ? '#f59e0b' : '#6b7280' }}>
+                    {Math.round(sponsor.pass_rate * 100)}%
+                  </div>
+                  <div className="text-xs text-muted-foreground">pass rate</div>
+                </div>
+                {sponsor.avg_impact_score !== null && (
+                  <div className="text-right shrink-0 space-y-0.5 w-12">
+                    <div className="text-sm font-semibold tabular-nums">{sponsor.avg_impact_score}</div>
+                    <div className="text-xs text-muted-foreground">avg impact</div>
+                  </div>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {drillDown && (
+        <DrillDownPanel
+          title={`${drillDown.sponsor}${drillDown.year ? ` · ${drillDown.year}` : ' · All time'}`}
+          searchParams={{ sponsor: drillDown.sponsor, year: drillDown.year || undefined }}
+          viewAllHref={`/${city}/legislation?sponsor=${encodeURIComponent(drillDown.sponsor)}${drillDown.year ? `&year=${drillDown.year}` : ''}`}
+          onClose={() => setDrillDown(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Tag Spark Chart ───────────────────────────────────────────────────────────
+
+function TagSparkChart({ tag, data, color }: { tag: string; data: TagYearRow[]; color: string }) {
+  const points = data.map(r => ({ year: r.year, count: (r[tag] as number) ?? 0 }))
+  const maxVal = Math.max(...points.map(p => p.count), 1)
+  const peakCount = maxVal
+  const peakYear = points.find(p => p.count === peakCount)?.year
+
+  const W = 600, H = 110, PL = 12, PR = 12, PT = 22, PB = 22
+  const iW = W - PL - PR, iH = H - PT - PB
+  const n = points.length
+  const xPos = (i: number) => PL + (i / Math.max(n - 1, 1)) * iW
+  const yPos = (v: number) => PT + iH - (v / maxVal) * iH
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(p.count)}`).join(' ')
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 mt-3">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-medium capitalize">{tag.replace(/-/g, ' ')} · all years</span>
+        <span className="text-xs text-muted-foreground">peak {peakCount} in {peakYear}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+        <path d={`${pathD} L ${xPos(n - 1)} ${PT + iH} L ${xPos(0)} ${PT + iH} Z`} fill={color} fillOpacity={0.1} />
+        <path d={pathD} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+        {points.map((p, i) => (
+          <g key={p.year}>
+            {p.count > 0 && (
+              <>
+                <circle cx={xPos(i)} cy={yPos(p.count)} r={3} fill={color} stroke="var(--background)" strokeWidth={1.5} />
+                <text x={xPos(i)} y={yPos(p.count) - 6}
+                  textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+                  fontSize={8} fill={color} fillOpacity={0.85}
+                  fontWeight={p.count === peakCount ? 700 : 400}>{p.count}</text>
+              </>
+            )}
+            <text x={xPos(i)} y={H - 4}
+              textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}
+              fontSize={8} fill="currentColor" fillOpacity={0.4}>{p.year}</text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  )
+}
+
+// ── Tag Trends Chart ──────────────────────────────────────────────────────────
+
+function TagTrendsChart({
+  year, data, tags, selectedTag, onTagClick,
+}: {
+  year: number
+  data: TagYearRow[]
+  tags: string[]
+  selectedTag: string
+  onTagClick: (tag: string) => void
+}) {
+  const row = data.find(r => r.year === year)
+  const items = tags
+    .map((tag, i) => ({ tag, count: row?.[tag] ?? 0, color: TAG_PALETTE[i % TAG_PALETTE.length] }))
+    .filter(t => t.count > 0)
+    .sort((a, b) => b.count - a.count)
+
+  if (!data.length) return <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">Loading...</div>
+  if (!items.length) return <div className="flex items-center justify-center h-24 text-muted-foreground text-sm">No tag data for {year}.</div>
+
+  const maxVal = items[0].count
+  const selectedItem = items.find(t => t.tag === selectedTag)
+
+  return (
+    <div className="space-y-1.5">
+      {items.map(({ tag, count, color }) => {
+        const isSelected = selectedTag === tag
+        return (
+          <button key={tag} onClick={() => onTagClick(tag)}
+            className={`w-full flex items-center gap-3 rounded-md px-1 py-0.5 transition-colors ${isSelected ? 'bg-muted' : 'hover:bg-muted/50'}`}>
+            <div className={`w-28 shrink-0 text-xs text-right capitalize truncate ${isSelected ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>
+              {tag.replace(/-/g, ' ')}
+            </div>
+            <div className="flex-1 h-5 rounded-sm overflow-hidden bg-muted/40">
+              <div className="h-full rounded-sm transition-all duration-300"
+                style={{ width: `${(count / maxVal) * 100}%`, backgroundColor: color, opacity: selectedTag && !isSelected ? 0.4 : 1 }} />
+            </div>
+            <div className={`w-10 shrink-0 text-xs tabular-nums text-right ${isSelected ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+              {count}
+            </div>
+          </button>
+        )
+      })}
+      {selectedItem && <TagSparkChart tag={selectedItem.tag} data={data} color={selectedItem.color} />}
+    </div>
+  )
+}
+
+// ── Legislative History (static JSON generated by scripts/generate_legislative_narrative.py) ──
+
+function LegislativeHistorySection({ data }: { data: NarrativeData | null }) {
+  if (!data) return null
+
+  const paragraphs = data.narrative!.split(/\n\n+/).filter(Boolean)
+
+  return (
+    <div className="rounded-xl border bg-card p-5 space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">
+          {data.years_covered.to - data.years_covered.from + 1} Years of Philadelphia City Council
+        </h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          AI analysis of {data.total_bills.toLocaleString()} bills, {data.years_covered.from}–{data.years_covered.to}
+        </p>
+      </div>
+
+      {data.key_stats.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {data.key_stats.map(s => (
+            <StatCard key={s.label} label={s.label} value={s.value} sub={s.note} />
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-sm leading-relaxed text-muted-foreground">{p}</p>
+        ))}
+      </div>
+
+      {data.generated_at && (
+        <p className="text-xs text-muted-foreground border-t pt-3">
+          Analysis generated {new Date(data.generated_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Year in Review ───────────────────────────────────────────────────────────
+
+const STATUS_BADGE: Record<string, string> = {
+  signed_into_law: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+  failed:          'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  vetoed:          'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  introduced:      'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+  in_committee:    'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+}
+
+function statusLabel(status: string) {
+  return status.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function YearByYearSection({ data, city }: { data: NarrativeData | null; city: string }) {
+  const years = data?.years ?? []
+  const [activeYear, setActiveYear] = useState<number | null>(null)
+
+  if (years.length === 0) return null
+
+  const sorted = [...years].sort((a, b) => b.year - a.year)
+  const entry = sorted.find(y => y.year === activeYear) ?? sorted[0]
+  const paragraphs = entry.narrative.split(/\n\n+/).filter(Boolean)
+
+  return (
+    <div className="rounded-xl border bg-card p-5 space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">Year in Review</h2>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          AI analysis of each year&apos;s legislative activity. Pick a year to explore.
+        </p>
+      </div>
+
+      {/* Year selector */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+        {sorted.map(y => (
+          <button
+            key={y.year}
+            onClick={() => setActiveYear(y.year)}
+            className={`shrink-0 px-3 py-1 rounded-full text-sm border transition-colors ${
+              y.year === entry.year
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background hover:bg-muted'
+            }`}
+          >
+            {y.year}
+          </button>
+        ))}
+      </div>
+
+      {/* Headline */}
+      <div>
+        <h3 className="text-xl font-bold leading-snug">
+          {entry.year}: {entry.headline}
+          {entry.is_partial && (
+            <span className="ml-2 align-middle text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              year in progress
+            </span>
+          )}
+        </h3>
+        {entry.key_themes.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-2">
+            {entry.key_themes.map(t => (
+              <span key={t} className="text-xs px-2 py-0.5 rounded-full bg-muted border">{t}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <StatCard label="Bills Introduced" value={entry.stats.total}
+          sub={entry.stats.delta_vs_prior != null
+            ? `${entry.stats.delta_vs_prior >= 0 ? '+' : ''}${entry.stats.delta_vs_prior} vs ${entry.year - 1}`
+            : undefined} />
+        <StatCard label="Signed into Law" value={entry.stats.signed}
+          sub={entry.stats.pass_rate != null ? `${Math.round(entry.stats.pass_rate * 100)}% of closed bills` : undefined} />
+        <StatCard label="Median Days to Law" value={entry.stats.median_days_to_passage ?? '–'}
+          sub="introduction to signing" />
+        <StatCard label="Contested Votes" value={entry.stats.contested_count}
+          sub="bills with at least one Nay" />
+        <StatCard label="Top Issue"
+          value={entry.stats.top_tags[0] ? entry.stats.top_tags[0].tag.replace(/-/g, ' ') : '–'}
+          sub={entry.stats.top_tags[0] ? `${entry.stats.top_tags[0].count} bills` : undefined} />
+      </div>
+
+      {/* Narrative */}
+      <div className="space-y-3">
+        {paragraphs.map((p, i) => (
+          <p key={i} className="text-sm leading-relaxed text-muted-foreground">{p}</p>
+        ))}
+      </div>
+
+      {/* Notable bills */}
+      {entry.notable_bills.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">Highest-impact bills of {entry.year}</h4>
+          <div className="space-y-2">
+            {entry.notable_bills.map(b => (
+              <a key={b.id} href={`/${city}/legislation/${b.id}`}
+                className="block rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium leading-snug">{b.title}</div>
+                    {b.lede && <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{b.lede}</div>}
+                  </div>
+                  <div className="shrink-0 flex flex-col items-end gap-1">
+                    <span className="text-xs font-semibold tabular-nums px-2 py-0.5 rounded-full bg-muted border">
+                      impact {b.impact_score}/10
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_BADGE[b.status] ?? 'bg-muted'}`}>
+                      {statusLabel(b.status)}
+                    </span>
+                  </div>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Contested votes */}
+      {entry.contested_bills.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="text-sm font-semibold">
+            Most contested votes
+            {entry.stats.contested_count > entry.contested_bills.length &&
+              ` (top ${entry.contested_bills.length} of ${entry.stats.contested_count})`}
+          </h4>
+          <div className="space-y-2">
+            {entry.contested_bills.map(b => (
+              <a key={b.id} href={`/${city}/legislation/${b.id}`}
+                className="block rounded-lg border p-3 hover:bg-muted/50 transition-colors">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium leading-snug">{b.title}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Dissenting: {b.dissenters.join(', ')}
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {b.yeas}–{b.nays}
+                  </span>
+                </div>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center gap-4">
+        <a href={`/${city}/insights/${entry.year}`} className="text-sm text-primary hover:underline">
+          Full {entry.year} year in review →
+        </a>
+        <a href={`/${city}/legislation?year=${entry.year}`} className="text-sm text-primary hover:underline">
+          View all {entry.year} bills →
+        </a>
+      </div>
+    </div>
+  )
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Council Insights, one section at a time.
+ *
+ * This was a single page that rendered all nine analyses stacked vertically,
+ * which meant the interesting material was several screens below the fold.
+ * Each section is now its own route and this component renders whichever one
+ * the route asks for.
+ *
+ * tag and year arrive as props from the server-parsed URL rather than from
+ * useSearchParams, for the same reason the legislation list does it that way:
+ * that hook opts the route out of prerendering. They are in the URL at all
+ * because sections are now separate documents, so component state would not
+ * survive the move from one to the next.
+ */
+export default function InsightsClient({
+  section = 'overview',
+  initialTag = '',
+  initialYear = null,
+  lapsed = null,
+}: {
+  section?: InsightsSection
+  initialTag?: string
+  initialYear?: number | null
+  lapsed?: LapsedPayload | null
+}) {
+  const router = useRouter()
+  const { city } = useParams<{ city: string }>()
+  const [summary, setSummary]           = useState<Summary | null>(null)
+  const [statusData, setStatusData]     = useState<YearStatusRow[]>([])
+  const [tagData, setTagData]           = useState<TagYearRow[]>([])
+  const [tags, setTags]                 = useState<string[]>([])
+  const [impactData, setImpactData]     = useState<ImpactYearRow[]>([])
+  const [narrativeData, setNarrativeData] = useState<NarrativeData | null>(null)
+  const [selectedYear, setSelectedYear] = useState<number | null>(initialYear)
+  const [tagFilter, setTagFilter]       = useState(initialTag)
+  const [selectedTag, setSelectedTag]   = useState(initialTag)
+  const [loadState, setLoadState]       = useState<'loading' | 'ready' | 'error'>('loading')
+
+  const loadStatusData = useCallback(() => {
+    api.getInsightsStatusByYear({ tag: tagFilter || undefined })
+      .then(d => d && setStatusData(d.years ?? []))
+      .catch(() => {})
+  }, [tagFilter])
+
+  // Every section below is gated on its data, so when these loads failed
+  // silently the whole dashboard rendered as a bare <h1> on an empty page.
+  // The summary load stands in for "is the backend reachable" — the secondary
+  // loads can still degrade quietly, since their sections self-hide.
+  const loadSummary = useCallback(() => {
+    setLoadState('loading')
+    api.getInsightsSummary()
+      .then(d => {
+        if (!d) throw new Error('empty response')
+        setSummary(d)
+        setLoadState('ready')
+      })
+      .catch(() => setLoadState('error'))
+  }, [])
+
+  useEffect(() => {
+    loadSummary()
+    api.getInsightsTagByYear({ top_n: 10 }).then(d => { if (!d) return; setTagData(d.years ?? []); setTags(d.tags ?? []) }).catch(() => {})
+    api.getInsightsImpactByYear().then(d => d && setImpactData(d.years ?? [])).catch(() => {})
+    fetch('/data/legislative_history.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.narrative) setNarrativeData(d) })
+      .catch(() => {})
+  }, [loadSummary])
+
+  useEffect(() => { loadStatusData() }, [loadStatusData])
+
+  const handleTagClick = (tag: string) => {
+    const next = selectedTag === tag ? '' : tag
+    setSelectedTag(next)
+    setTagFilter(next)
+  }
+
+  const activeYear = selectedYear ?? statusData[statusData.length - 1]?.year ?? CURRENT_YEAR
+  // Mirror the cross-section state into the URL with replaceState, so moving
+  // to another section carries the current tag and year with it and a shared
+  // link reproduces what the sender was looking at. replaceState rather than
+  // router.replace: this should not push history entries or re-render the
+  // route on every tag click.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams()
+    if (selectedTag) p.set('tag', selectedTag)
+    if (selectedYear) p.set('year', String(selectedYear))
+    const qs = p.toString()
+    window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`)
+  }, [selectedTag, selectedYear])
+
+  const yearList = [...statusData].reverse().map(r => r.year)
+
+  return (
+    <div className="space-y-8">
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-bold">Council Insights</h1>
+          <p className="text-muted-foreground mt-1">
+            Explore Philadelphia City Council legislative activity
+            {summary ? ` from ${summary.years_from} to ${summary.years_to}` : ''}.
+          </p>
+        </div>
+        {summary?.last_fetched_at && (
+          <p className="text-xs text-muted-foreground mt-2 shrink-0">
+            Data updated {new Date(summary.last_fetched_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </p>
+        )}
+      </div>
+
+      <InsightsTabs
+        city={city}
+        active={section}
+        query={{ tag: selectedTag || undefined, year: selectedYear ? String(selectedYear) : undefined }}
+      />
+
+      {loadState === 'loading' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="border rounded-lg p-4 space-y-2">
+              <div className="h-3 w-16 bg-muted rounded animate-pulse" />
+              <div className="h-7 w-20 bg-muted rounded animate-pulse" />
+              <div className="h-3 w-12 bg-muted rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {loadState === 'error' && (
+        <div className="border rounded-lg p-6 text-center space-y-3">
+          <p className="font-medium">Council Insights is temporarily unavailable.</p>
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t load the legislative data. This is usually brief.
+          </p>
+          <div className="flex items-center justify-center gap-3 pt-1">
+            <button
+              onClick={loadSummary}
+              className="inline-flex items-center justify-center rounded-lg px-4 h-9 text-sm font-medium bg-primary text-primary-foreground btn-primary-hover"
+            >
+              Try again
+            </button>
+            <Link href={`/${city}/legislation`} className="text-sm text-muted-foreground hover:text-foreground underline underline-offset-4">
+              Browse legislation
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* Summary stats */}
+      {section === 'overview' && summary && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <StatCard label="Total Bills" value={summary.total_bills} sub="all time" />
+          <StatCard label="Active Now" value={summary.active_bills}
+            sub={summary.current_term_start ? `pending, ${summary.current_term_start}–${summary.current_term_start + 3} term` : 'introduced or in committee'} />
+          <StatCard label="This Year" value={summary.bills_this_year}
+            sub={summary.bills_last_year
+              ? `${summary.bills_this_year >= summary.bills_last_year ? '+' : ''}${summary.bills_this_year - summary.bills_last_year} vs ${CURRENT_YEAR - 1}`
+              : `introduced in ${CURRENT_YEAR}`} />
+          <StatCard label="Signed into Law" value={summary.signed_into_law} sub="all time" />
+          <StatCard label="Pass Rate" value={`${Math.round(summary.pass_rate * 100)}%`} sub="of closed bills" />
+          <StatCard label="Avg Impact Score" value={summary.avg_impact_score ?? '–'} sub="1–10 across analyzed" />
+        </div>
+      )}
+
+      {section === 'overview' && (
+        <>
+          {/* Multi-decade narrative */}
+          <LegislativeHistorySection data={narrativeData} />
+
+          {/* AI year-in-review */}
+          <YearByYearSection data={narrativeData} city={city} />
+        </>
+      )}
+
+      {section === 'what-dies' && <LapsedSection data={lapsed} city={city} />}
+
+      {section === 'activity' && (<>
+      {/* Status funnel */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-lg font-semibold">Bill Status by Year</h2>
+            {selectedTag && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-muted border">
+                <span className="capitalize">{selectedTag.replace(/-/g, ' ')}</span>
+                <button onClick={() => handleTagClick(selectedTag)} className="text-muted-foreground hover:text-foreground ml-0.5">×</button>
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            See how bills flow through the legislative process. Pick a subject under
+            Subjects to filter this chart to it.
+          </p>
+        </div>
+        <StatusFunnelChart data={statusData} selectedYear={selectedYear} onYearChange={setSelectedYear} />
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <button onClick={() => router.push(`/${city}/legislation?year=${activeYear}${tagFilter ? `&tag=${tagFilter}` : ''}`)}
+            className="text-sm text-primary hover:underline">
+            View all {activeYear} bills →
+          </button>
+          {/* The funnel shows bills reaching "lapsed" but not that almost none
+              of them were ever voted on, which is the part worth following.
+              Worded to span the whole corpus rather than "of them": it sits
+              beside a link scoped to one year, and "of them" read as though
+              all 1,624 were that year's. */}
+          <Link href={`/${city}/insights/what-dies`} className="text-sm text-primary hover:underline">
+            1,624 bills since 2000 died without a vote →
+          </Link>
+        </div>
+      </div>
+
+      {/* Bill Type Over Time */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Bill Type Over Time</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            How has the mix of substantive, ceremonial, and procedural legislation shifted year to year?
+          </p>
+        </div>
+        <BillTypeOverTimeSection years={impactData} />
+      </div>
+      </>)}
+
+      {section === 'members' && (<>
+      {/* Sponsor Leaderboard */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Sponsor Leaderboard</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Who introduces the most legislation? Who is most effective at getting bills passed?
+          </p>
+        </div>
+        <SponsorLeaderboard yearList={yearList} />
+      </div>
+
+      {/* Roll-call vote analytics */}
+      <ContestedVotesSection city={city} />
+      </>)}
+
+      {section === 'subjects' && (<>
+      {/* Top Issues */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Top Issues · {activeYear}</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Click a tag to see its full history. The selection follows you to
+            Activity, where it filters the status chart.
+          </p>
+        </div>
+        <TagTrendsChart year={activeYear} data={tagData} tags={tags} selectedTag={selectedTag} onTagClick={handleTagClick} />
+      </div>
+
+      {/* Impact Distribution */}
+      <div className="rounded-xl border bg-card p-5 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold">Impact Distribution</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Is Council producing substantive policy or mostly ceremonial items? Click a segment to browse those bills.
+          </p>
+        </div>
+        <ImpactDistributionSection years={impactData} />
+      </div>
+
+      </>)}
+
+    </div>
+  )
+}

@@ -100,6 +100,16 @@ export const BILL_CATEGORIES: Record<string, BillCategory> = {
 
 // Tag-to-category key mapping (lowercase tags → category key above)
 const TAG_TO_CATEGORY: Record<string, string> = {
+  // Tags the AI actually writes that had no bucket at all. Keep this block in
+  // step with _TAG_TO_CATEGORY in app/api/legislation_routes.py; the two are
+  // separate copies of one mapping and they have already drifted once.
+  'neighborhood': 'community', 'environment': 'environment',
+  'civil-service': 'government', 'ethics': 'government',
+  'historic-preservation': 'zoning', 'leasing': 'zoning',
+  'city-owned-property': 'zoning', 'pensions': 'budget',
+  'telecommunications': 'business', 'technology': 'business',
+  'entertainment': 'business', 'firearms': 'public safety',
+  'sports': 'community', 'honorary': 'community',
   // Zoning
   'zoning': 'zoning', 'land use': 'zoning', 'land-use': 'zoning', 'land_use': 'zoning',
   'land use planning': 'zoning', 'planning': 'zoning', 'development': 'zoning',
@@ -175,17 +185,41 @@ const DEFAULT_CATEGORY: BillCategory = {
 
 /** Reverse map: category key → all tags that belong to it */
 export const CATEGORY_TAGS: Record<string, string[]> = (() => {
-  const map: Record<string, string[]> = {}
+  const map: Record<string, Set<string>> = {}
   for (const [tag, cat] of Object.entries(TAG_TO_CATEGORY)) {
-    if (!map[cat]) map[cat] = []
-    map[cat].push(tag)
+    // Every spelling, not just the one the map happens to use: this list is
+    // what gets sent as &tag=... when a category is selected, so a bucket
+    // written 'public safety' has to query 'public-safety' as well or the
+    // filter returns almost nothing.
+    if (!map[cat]) map[cat] = new Set()
+    for (const v of tagVariants(tag)) map[cat].add(v)
   }
-  return map
+  return Object.fromEntries(Object.entries(map).map(([k, v]) => [k, [...v]]))
 })()
+
+/**
+ * Spelling variants of one tag.
+ *
+ * The map is written with spaces ('public safety') but the tags on bills are
+ * hyphenated ('public-safety'), so the biggest categories matched nothing at
+ * all. Normalising at lookup fixes every such pair at once.
+ */
+function tagVariants(tag: string): string[] {
+  const key = tag.toLowerCase().trim()
+  return [...new Set([key, key.replace(/[-_]/g, ' '), key.replace(/ /g, '-')])]
+}
+
+export function categoryKeyForTag(tag: string): string | undefined {
+  for (const v of tagVariants(tag)) {
+    const hit = TAG_TO_CATEGORY[v]
+    if (hit) return hit
+  }
+  return undefined
+}
 
 export function getBillCategory(tags: string[]): BillCategory {
   for (const tag of tags) {
-    const key = TAG_TO_CATEGORY[tag.toLowerCase().trim()]
+    const key = categoryKeyForTag(tag)
     if (key && BILL_CATEGORIES[key]) return BILL_CATEGORIES[key]
   }
   return DEFAULT_CATEGORY

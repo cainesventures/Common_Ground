@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import type { FacetsResponse } from '@/lib/api-types'
 import type { Bill } from '@/lib/types'
 import Link from 'next/link'
-import { LegislationViewTabs } from '@/components/LegislationViewTabs'
 import { useParams } from 'next/navigation'
 import { api } from '@/lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -360,14 +359,6 @@ export default function LegislationClient({
           total={total}
         />
       </div>
-
-      {/* Two views of the same corpus. Was an amber callout banner, which
-          read as a system warning rather than as navigation. */}
-      {/* No count badge here on purpose: this is a client component with
-          no figure in hand, and hardcoding 1,624 would reintroduce exactly
-          the drift the endpoint exists to prevent. The lapsed page passes
-          the real number. */}
-      <LegislationViewTabs city={city} active="all" />
 
       {/* ── Filter row ── */}
       <div className="sticky top-14 bg-background/95 backdrop-blur z-10 py-2 -mx-4 px-4 space-y-2">

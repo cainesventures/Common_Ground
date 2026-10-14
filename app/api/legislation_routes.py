@@ -245,6 +245,16 @@ async def get_tag_counts(
 
 
 _TAG_TO_CATEGORY: dict[str, str] = {
+    # Tags the AI actually writes that had no bucket at all. Without these,
+    # 'environment' (362 uses) fell through to no category while the
+    # environment bucket was fed only by 'energy' and 'cell towers'.
+    'neighborhood': 'community', 'environment': 'environment',
+    'civil-service': 'government', 'ethics': 'government',
+    'historic-preservation': 'zoning', 'leasing': 'zoning',
+    'city-owned-property': 'zoning', 'pensions': 'budget',
+    'telecommunications': 'business', 'technology': 'business',
+    'entertainment': 'business', 'firearms': 'public safety',
+    'sports': 'community', 'honorary': 'community',
     # Zoning
     'zoning': 'zoning', 'land use': 'zoning', 'land-use': 'zoning', 'land_use': 'zoning',
     'land use planning': 'zoning', 'planning': 'zoning', 'development': 'zoning',
@@ -343,6 +353,26 @@ def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor,
     return q_obj
 
 
+
+def _category_for_tag(tag: str) -> str | None:
+    """Look up a tag's category, tolerating hyphen/underscore/space spelling.
+
+    The map was written with spaces ('public safety') but the tags written on
+    bills are hyphenated ('public-safety'), so the biggest buckets matched
+    nothing: the facets endpoint reported Public Safety 13 against 704 uses of
+    the tag, Environment 6 against 362, Immigration 1. Normalising at lookup
+    fixes every such pair at once instead of listing both spellings forever.
+    """
+    key = (tag or "").lower().strip()
+    if not key:
+        return None
+    for variant in (key, key.replace("-", " ").replace("_", " "), key.replace(" ", "-")):
+        hit = _TAG_TO_CATEGORY.get(variant)
+        if hit:
+            return hit
+    return None
+
+
 @router.get("/facets")
 async def get_facets(
     q: str = Query("", max_length=200),
@@ -393,7 +423,7 @@ async def get_facets(
             for t in json.loads(tags_json):
                 if isinstance(t, str) and t:
                     tag_counter[t] += 1
-                    cat = _TAG_TO_CATEGORY.get(t.lower().strip())
+                    cat = _category_for_tag(t)
                     if cat:
                         category_sets.setdefault(cat, set()).add(bill_id)
         except Exception:

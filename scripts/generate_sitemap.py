@@ -174,8 +174,14 @@ def build_core(member_ids: list[str]) -> ElementTree:
         # ranking signal between them.
         (f"{BASE_URL}/philadelphia",                "1.0", "daily"),
         (f"{BASE_URL}/philadelphia/legislation",    "0.8", "daily"),
-        (f"{BASE_URL}/philadelphia/legislation/lapsed", "0.8", "monthly"),
-        (f"{BASE_URL}/philadelphia/insights",       "0.8", "weekly"),
+        # Council Insights is five routes, one per section. /legislation/lapsed
+        # is gone from here: it permanently redirects into insights/what-dies,
+        # and a sitemap should only list URLs that resolve 200.
+        (f"{BASE_URL}/philadelphia/insights",            "0.8", "weekly"),
+        (f"{BASE_URL}/philadelphia/insights/activity",   "0.7", "weekly"),
+        (f"{BASE_URL}/philadelphia/insights/subjects",   "0.7", "weekly"),
+        (f"{BASE_URL}/philadelphia/insights/what-dies",  "0.8", "monthly"),
+        (f"{BASE_URL}/philadelphia/insights/members",    "0.7", "weekly"),
         (f"{BASE_URL}/philadelphia/councilmembers", "0.7", "weekly"),
         (f"{BASE_URL}/budget",                      "0.8", "monthly"),
         (f"{BASE_URL}/blog",                        "0.7", "weekly"),

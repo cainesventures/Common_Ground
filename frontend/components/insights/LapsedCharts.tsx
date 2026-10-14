@@ -19,8 +19,6 @@
  * lighter amber.
  */
 
-import Link from 'next/link'
-
 const ACCENT = '#d97706'
 
 type Outcome = {
@@ -259,24 +257,12 @@ export function VoteCoverageChart({ outcomes }: { outcomes: Outcome[] }) {
  * Each bar is a link that filters the list below, so the filter survives a page
  * load and can be shared.
  */
-export function TermChart({
-  terms,
-  basePath,
-  activeTerm,
-}: {
-  terms: Term[]
-  basePath: string
-  activeTerm: number | null
-}) {
+export function TermChart({ terms }: { terms: Term[]; city?: string }) {
   const max = Math.max(...terms.map(t => t.count), 1)
   const ticks = [0, 100, 200, 300].filter(t => t <= max)
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground italic">
-        {activeTerm ? 'Showing one term. Select it again to clear.' : 'Select a term to filter the list below.'}
-      </p>
-
       <div className="flex gap-2">
         {/* Value axis */}
         <div aria-hidden className="relative w-7 shrink-0 h-40">
@@ -303,23 +289,17 @@ export function TermChart({
 
           <div className="relative flex h-40 items-end gap-1.5 sm:gap-3">
             {terms.map(t => {
-              const dim = activeTerm !== null && activeTerm !== t.start
               return (
-                <Link
+                <div
                   key={t.start}
-                  href={activeTerm === t.start ? basePath : `${basePath}?term=${t.start}`}
-                  scroll={false}
-                  aria-label={`${t.label} term: ${t.count} bills lapsed with no recorded vote. Filter the list.`}
-                  className="group relative flex h-full flex-1 flex-col justify-end rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+                  className="group relative flex h-full flex-1 flex-col justify-end"
                 >
-                  <span
-                    className={`mb-1 text-center text-[11px] font-medium tabular-nums ${dim ? 'text-muted-foreground' : ''}`}
-                  >{t.count}</span>
+                  <span className="mb-1 text-center text-[11px] font-medium tabular-nums">{t.count}</span>
                   {/* Capped rather than filling the column: at full width on a
                       desktop these read as blocks instead of marks. */}
                   <span
                     className="mx-auto w-full max-w-[56px] rounded-t-[4px] transition-opacity group-hover:opacity-90"
-                    style={{ backgroundColor: ACCENT, height: `${(t.count / max) * 100}%`, opacity: dim ? 0.35 : 1 }}
+                    style={{ backgroundColor: ACCENT, height: `${(t.count / max) * 100}%` }}
                   />
                   <span className={TIP}>
                     <span className="block font-medium">{t.label} Council term</span>
@@ -327,7 +307,7 @@ export function TermChart({
                       {t.count.toLocaleString()} bills lapsed with no recorded vote
                     </span>
                   </span>
-                </Link>
+                </div>
               )
             })}
           </div>
