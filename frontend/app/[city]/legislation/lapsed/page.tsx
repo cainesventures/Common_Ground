@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { siteUrl } from '@/lib/site'
-import { VoteCoverageChart, TermChart } from './LapsedCharts'
+import { VoteCoverageChart, TermChart, RankChart } from './LapsedCharts'
 import { LegislationViewTabs } from '@/components/LegislationViewTabs'
 
 /**
@@ -27,10 +27,24 @@ type Outcome = {
   pct_with_vote: number
 }
 
+type RankRow = { key: string; label: string; total: number; died: number; pct: number }
+
+type WhoAndWhere = {
+  from_year: number
+  to_year: number
+  baseline_pct: number | null
+  baseline_total: number
+  min_committee_bills: number
+  min_sponsor_bills: number
+  by_committee: RankRow[]
+  by_sponsor: RankRow[]
+}
+
 type Payload = {
   totals: { corpus: number; lapsed: number; lapsed_without_vote: number; from_year: number; to_year: number }
   vote_rate_by_outcome: Outcome[]
   by_term: { start: number; end: number; count: number; label: string }[]
+  who_and_where?: WhoAndWhere
   bills: {
     total: number
     limit: number
@@ -109,6 +123,11 @@ export default async function LapsedPage({
   }
 
   const { totals, vote_rate_by_outcome, by_term, bills } = data
+  // Optional on purpose. getData caches for an hour, so right after a deploy
+  // that adds a field the cached body is still the old shape; dereferencing it
+  // blind took the whole page down with a 500 rather than dropping one
+  // section. The rankings render when the payload has them.
+  const ww = data.who_and_where
   const activeTerm = by_term.find(t => t.start === term)
   const pageEnd = Math.min(bills.offset + bills.limit, bills.total)
   const qsFor = (o: number) => {
@@ -182,6 +201,55 @@ export default async function LapsedPage({
           />
         </div>
       </section>
+
+      {ww && (
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Where bills go to die</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Share of each committee&apos;s bills that lapsed without a recorded vote. A bill
+            referred to Law and Government was five times likelier to die unvoted than one sent
+            to Parks and Recreation. Committees with at least{' '}
+            {ww.min_committee_bills} bills; the number in brackets is how many it handled.
+          </p>
+        </div>
+        <div className="border rounded-lg p-4">
+          <RankChart
+            rows={ww.by_committee}
+            baseline={ww.baseline_pct}
+            unit="bills"
+            caption="Share of bills that lapsed without a recorded vote, by committee"
+          />
+        </div>
+      </section>
+      )}
+
+      {ww && (
+      <section className="space-y-3">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Whose bills die</h2>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Share of each member&apos;s bills that lapsed without a recorded vote, for members
+            who introduced at least {ww.min_sponsor_bills}. The spread is wide enough that it is
+            not about how busy a term was: it runs from under 5 percent to nearly three quarters.
+          </p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Read it as a measure of what a member chose to introduce, not of how well they did
+            the job. Members who put forward a lot of position-taking legislation that was never
+            going to move will sit high on this list, and a member whose bills were mostly
+            routine neighbourhood business will sit low.
+          </p>
+        </div>
+        <div className="border rounded-lg p-4">
+          <RankChart
+            rows={ww.by_sponsor}
+            baseline={ww.baseline_pct}
+            unit="bills"
+            caption="Share of bills that lapsed without a recorded vote, by sponsor"
+          />
+        </div>
+      </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
@@ -258,6 +326,27 @@ export default async function LapsedPage({
           any stage. Bills whose status Legistar never updated are not folded in, so this figure
           matches the published one exactly.
         </p>
+        {ww && (
+        <p>
+          The two rankings above cover {ww.from_year} to {ww.to_year} rather than{' '}
+          {totals.to_year}, which is why their totals are smaller than the headline figure. A
+          bill from the sitting {by_term.length ? '2024–2027' : 'current'} term cannot have
+          lapsed yet, because lapsing is what happens when a term ends, so counting those bills
+          would put them in the denominator with no way of reaching the numerator. That drags
+          down every member still in office, and unevenly. Restricting the comparison to terms
+          that have actually finished is the only way the rates compare like with like. Across
+          that window {ww.baseline_pct}% of all bills lapsed without a vote, which is the dashed
+          line on both charts.
+        </p>
+        )}
+        {ww && (
+        <p>
+          Sponsor is the member Legistar records as introducing the bill. Legistar writes the
+          same person two ways depending on whether they held the presidency, so those are
+          merged here; without that, Council President Clarke and Councilmember Clarke read as
+          two people with half a record each.
+        </p>
+        )}
         <p>
           Grouped by council term rather than by calendar year on purpose: vote-record coverage
           dips in 2019 for what looks like a gap in the source data rather than a change in

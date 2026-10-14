@@ -677,6 +677,40 @@ LAPSED_TO_YEAR = 2025
 # "lapsed" is last because it is the punchline.
 _OUTCOME_ORDER = ["vetoed", "signed_into_law", "failed", "lapsed"]
 
+# The "who and where" breakdowns stop at the last completed council term,
+# which is a narrower window than the headline totals above.
+#
+# A bill from the sitting 2024-2027 term cannot have lapsed yet -- lapsing is
+# what happens when the term ends -- so including those bills puts them in the
+# denominator with no chance of landing in the numerator. That biases every
+# currently serving member downward, and not evenly: it hits whoever has been
+# introducing bills lately. Measured, it moved Council President Johnson from
+# 19.9% to 14.4% and Bass from 26.9% to 21.6%, which is large enough to
+# reorder the ranking. Restricting to terms that have actually ended is the
+# only way these rates compare like with like.
+LAPSED_CLOSED_TO_YEAR = 2023
+
+# Floors for appearing in a rate ranking at all. A rate over a handful of
+# bills is noise, and a ranking sorted by noise puts whoever introduced three
+# bills at the top.
+MIN_COMMITTEE_BILLS = 50
+MIN_SPONSOR_BILLS = 80
+
+# Legistar writes the same person two ways depending on whether they held the
+# presidency, so "Council President Clarke" and "Councilmember Clarke" are
+# 775 and 599 bills by one member. Grouping on the raw string splits their
+# record in half and understates it.
+_SPONSOR_TITLES = ("Council President ", "Councilmember ", "Council member ")
+
+
+def _normalize_sponsor(raw: str) -> str:
+    name = (raw or "").strip()
+    for title in _SPONSOR_TITLES:
+        if name.startswith(title):
+            name = name[len(title):]
+            break
+    return name.strip()
+
 
 def _roll_call_subquery(db: Session):
     """Per-bill roll-call size, as a joinable subquery."""
@@ -773,6 +807,59 @@ async def get_lapsed_without_vote(
         for s in sorted(terms)
     ]
 
+    # Who and where: lapse-without-vote rates by committee and by sponsor,
+    # over completed council terms only (see LAPSED_CLOSED_TO_YEAR).
+    def _closed(q):
+        return q.filter(
+            Legislation.level == "local",
+            Legislation.introduced_date.isnot(None),
+            year_col >= LAPSED_FROM_YEAR,
+            year_col <= LAPSED_CLOSED_TO_YEAR,
+        )
+
+    def _rate_rows(group_col, floor, normalize=None):
+        raw = _closed(
+            db.query(
+                group_col,
+                func.count(Legislation.id),
+                func.sum(case((Legislation.status == "lapsed", case((no_vote, 1), else_=0)), else_=0)),
+            ).outerjoin(rc, rc.c.legislation_id == Legislation.id)
+            .filter(group_col.isnot(None), group_col != "")
+        ).group_by(group_col).all()
+
+        merged: dict[str, list[int]] = {}
+        for key, total, died in raw:
+            k = normalize(key) if normalize else (key or "").strip()
+            if not k:
+                continue
+            slot = merged.setdefault(k, [0, 0])
+            slot[0] += int(total)
+            slot[1] += int(died or 0)
+
+        rows = [
+            {
+                "key": k,
+                "label": k,
+                "total": t,
+                "died": d,
+                "pct": round(100.0 * d / t, 1),
+            }
+            for k, (t, d) in merged.items()
+            if t >= floor
+        ]
+        rows.sort(key=lambda r: (-r["pct"], -r["total"]))
+        return rows
+
+    by_committee = _rate_rows(Legislation.committee, MIN_COMMITTEE_BILLS)
+    by_sponsor = _rate_rows(Legislation.sponsor, MIN_SPONSOR_BILLS, _normalize_sponsor)
+
+    closed_total = _closed(db.query(func.count(Legislation.id))).scalar() or 0
+    closed_died = _closed(
+        db.query(func.count(Legislation.id))
+        .outerjoin(rc, rc.c.legislation_id == Legislation.id)
+        .filter(Legislation.status == "lapsed", no_vote)
+    ).scalar() or 0
+
     # The bills themselves, newest first.
     bills_q = _scoped(
         db.query(Legislation)
@@ -799,6 +886,19 @@ async def get_lapsed_without_vote(
         },
         "vote_rate_by_outcome": vote_rate,
         "by_term": by_term,
+        "who_and_where": {
+            # Narrower window than "totals" on purpose; see
+            # LAPSED_CLOSED_TO_YEAR. The frontend states it rather than
+            # quietly presenting both as the same span.
+            "from_year": LAPSED_FROM_YEAR,
+            "to_year": LAPSED_CLOSED_TO_YEAR,
+            "baseline_pct": round(100.0 * closed_died / closed_total, 1) if closed_total else None,
+            "baseline_total": closed_total,
+            "min_committee_bills": MIN_COMMITTEE_BILLS,
+            "min_sponsor_bills": MIN_SPONSOR_BILLS,
+            "by_committee": by_committee,
+            "by_sponsor": by_sponsor,
+        },
         "bills": {
             "total": bills_total,
             "limit": limit,

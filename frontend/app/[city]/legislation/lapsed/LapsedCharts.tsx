@@ -39,6 +39,132 @@ const TIP =
   + ' whitespace-nowrap rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md'
   + ' group-hover:block group-focus-visible:block'
 
+type RankRow = { key: string; label: string; total: number; died: number; pct: number }
+
+/**
+ * A ranked horizontal bar chart on a fixed 0-100% scale.
+ *
+ * Every percentage chart on this page shares that scale deliberately, so a
+ * committee's 47% and a sponsor's 74% and the 90% of signed bills that carry a
+ * roll call can all be read against each other. Scaling each chart to its own
+ * maximum would make a 47% bar and a 95% bar the same length.
+ *
+ * `baseline` draws the corpus average as a dashed rule, which is what turns a
+ * ranking into a comparison: without it every bar looks damning, and with it
+ * you can see that most of the list sits near the norm.
+ */
+function RankBars({
+  rows,
+  baseline,
+  unit,
+}: {
+  rows: RankRow[]
+  baseline?: number | null
+  unit: string
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex gap-3">
+        <div className="w-28 shrink-0 sm:w-52" />
+        <div className="relative flex-1">
+          {baseline != null && (
+            <div
+              className="absolute -top-0.5 z-10 -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground"
+              style={{ left: `${baseline}%` }}
+            >
+              {baseline}% average
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        {rows.map(r => (
+          <div key={r.key} className="flex items-center gap-3">
+            <div className="w-28 shrink-0 text-right text-xs leading-tight sm:w-52">
+              <span className="font-medium">{r.label}</span>{' '}
+              <span className="text-muted-foreground">({r.total.toLocaleString()})</span>
+            </div>
+
+            <div className="relative min-w-0 flex-1">
+              <div aria-hidden className="absolute inset-0 flex justify-between">
+                {[0, 1, 2, 3, 4].map(i => <div key={i} className="w-px bg-foreground/10" />)}
+              </div>
+              {baseline != null && (
+                <div
+                  aria-hidden
+                  className="absolute inset-y-0 z-10 w-px border-l border-dashed border-foreground/40"
+                  style={{ left: `${baseline}%` }}
+                />
+              )}
+
+              <div className="group relative flex h-4 items-center" tabIndex={0}>
+                <div
+                  className="h-4 rounded-r-[4px]"
+                  style={{ backgroundColor: ACCENT, width: `${Math.max(r.pct, 0.8)}%` }}
+                />
+                <span className="ml-2 text-xs font-medium tabular-nums">{r.pct}%</span>
+                <span className={TIP}>
+                  <span className="block font-medium">{r.label}</span>
+                  <span className="block text-muted-foreground">
+                    {r.died.toLocaleString()} of {r.total.toLocaleString()} {unit} died without a vote
+                  </span>
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-3">
+        <div className="w-28 shrink-0 sm:w-52" />
+        <div className="flex flex-1 justify-between text-[10px] text-muted-foreground">
+          {[0, 25, 50, 75, 100].map(t => <span key={t}>{t}%</span>)}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Where bills go to die, and whose bills die. */
+export function RankChart({
+  rows,
+  baseline,
+  unit,
+  caption,
+}: {
+  rows: RankRow[]
+  baseline?: number | null
+  unit: string
+  caption: string
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div className="space-y-3">
+      <RankBars rows={rows} baseline={baseline} unit={unit} />
+      <div className="sr-only">
+        <table>
+          <caption>{caption}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th><th scope="col">Bills</th>
+              <th scope="col">Died without a vote</th><th scope="col">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(r => (
+              <tr key={r.key}>
+                <th scope="row">{r.label}</th>
+                <td>{r.total}</td><td>{r.died}</td><td>{r.pct}%</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 /**
  * Share of bills carrying a recorded vote, by how the bill ended.
  *
