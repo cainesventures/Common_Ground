@@ -324,3 +324,61 @@ def test_fts_match_caps_term_count():
     from app.services.legislation_service import _fts_match
     expr = _fts_match(" ".join(f"word{i}" for i in range(50)))
     assert expr.count(" AND ") == 11  # 12 terms
+
+
+# ---------------------------------------------------------------------------
+# Faceted filters
+#
+# These exist because /facets shipped broken. A refactor deleted
+# _filter_legislation outright and every test still passed, because nothing
+# here called the endpoint. It 500'd in production until someone looked at it
+# by hand. A smoke test over each query shape is enough to catch that class of
+# mistake, which is a missing name rather than a wrong number.
+# ---------------------------------------------------------------------------
+
+def test_facets_returns_every_dimension(client, test_db):
+    make_legislation(test_db, "facet1")
+    test_db.commit()
+
+    r = client.get("/api/legislation/facets?level=federal&analyzed=")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    for key in ("statuses", "sponsors", "tags", "categories"):
+        assert key in body, f"{key} missing from facets response"
+        assert isinstance(body[key], list)
+
+
+def test_facets_accepts_the_lapsed_filter(client, test_db):
+    """The died-without-a-vote filter has to narrow facets, not be ignored."""
+    make_legislation(test_db, "facet2")
+    test_db.commit()
+
+    r = client.get("/api/legislation/facets?level=federal&analyzed=&lapsed_without_vote=true")
+    assert r.status_code == 200, r.text
+    # Nothing in the fixture is lapsed, so the filter should empty the counts
+    # rather than quietly returning the unfiltered corpus.
+    assert all(row["count"] == 0 for row in r.json()["statuses"]) or r.json()["statuses"] == []
+
+
+def test_search_accepts_the_lapsed_filter(client, test_db):
+    make_legislation(test_db, "facet3")
+    test_db.commit()
+
+    r = client.get("/api/legislation/search?level=federal&limit=1&analyzed=&lapsed_without_vote=true")
+    assert r.status_code == 200, r.text
+    assert r.json()["total"] == 0
+
+
+def test_lapsed_without_vote_insight_endpoint(client):
+    r = client.get("/api/insights/lapsed-without-vote?limit=1")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "totals" in body and "by_term" in body
+    assert "who_and_where" in body
+
+
+def test_subject_output_insight_endpoint(client):
+    r = client.get("/api/insights/subject-output")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert "by_category" in body and "by_tag" in body

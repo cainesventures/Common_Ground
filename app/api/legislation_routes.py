@@ -253,6 +253,47 @@ _TAG_TO_CATEGORY = tag_to_category()
 _category_for_tag = category_for_tag
 
 
+def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
+                         lapsed_without_vote=False,
+                         skip_tag=False, skip_status=False, skip_sponsor=False):
+    """Apply standard filters to a SQLAlchemy query. Skip flags omit one dimension for faceted counts."""
+    from sqlalchemy import extract, or_
+    if lapsed_without_vote:
+        # Kept in step with the search route so facet counts reflect the
+        # "died without a vote" filter instead of silently ignoring it.
+        from sqlalchemy import exists as _exists
+        q_obj = q_obj.filter(
+            Legislation.status == "lapsed",
+            ~_exists().where(BillVoteRecord.legislation_id == Legislation.id),
+        )
+    if q:
+        q_obj = q_obj.filter(
+            (Legislation.title.ilike(f"%{q}%")) | (Legislation.bill_number.ilike(f"%{q}%"))
+        )
+    if level:
+        q_obj = q_obj.filter(Legislation.level == level)
+    if analyzed == "true":
+        q_obj = q_obj.filter(Legislation.analyzed_at.isnot(None))
+    elif analyzed == "false":
+        q_obj = q_obj.filter(Legislation.analyzed_at.is_(None))
+    if not skip_tag and tag:
+        tag_list = [t.strip() for t in tag.split(',') if t.strip()]
+        q_obj = q_obj.filter(or_(*[Legislation.tags.ilike(f'%"{t}"%') for t in tag_list]))
+    if impact:
+        q_obj = q_obj.filter(Legislation.impact_level == impact)
+    if not skip_status and status:
+        status_list = [s.strip() for s in status.split(',') if s.strip()]
+        q_obj = q_obj.filter(Legislation.status.in_(status_list))
+    if not skip_sponsor and sponsor:
+        sponsor_list = [s.strip() for s in sponsor.split(',') if s.strip()]
+        q_obj = q_obj.filter(or_(*[Legislation.sponsor.ilike(f"%{s}%") for s in sponsor_list]))
+    if year:
+        q_obj = q_obj.filter(extract("year", Legislation.introduced_date) == year)
+    if month:
+        q_obj = q_obj.filter(extract("month", Legislation.introduced_date) == month)
+    return q_obj
+
+
 @router.get("/facets")
 async def get_facets(
     q: str = Query("", max_length=200),
