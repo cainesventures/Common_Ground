@@ -1,7 +1,11 @@
 /**
- * Maps bill tags to a visual category used in the news-headline card style.
- * Each category has a label, gradient colors, and a lucide icon name.
+ * Presentation for each bill category: label, gradient and icon.
+ *
+ * The tag -> category mapping itself is NOT here. It lives in
+ * app/data/tag_categories.json, shared with the API, and reaches this file via
+ * the generated module imported below.
  */
+import { TAG_TO_CATEGORY } from './tag-categories.generated'
 
 export interface BillCategory {
   label: string
@@ -99,81 +103,16 @@ export const BILL_CATEGORIES: Record<string, BillCategory> = {
 }
 
 // Tag-to-category key mapping (lowercase tags → category key above)
-const TAG_TO_CATEGORY: Record<string, string> = {
-  // Tags the AI actually writes that had no bucket at all. Keep this block in
-  // step with _TAG_TO_CATEGORY in app/api/legislation_routes.py; the two are
-  // separate copies of one mapping and they have already drifted once.
-  'neighborhood': 'community', 'environment': 'environment',
-  'civil-service': 'government', 'ethics': 'government',
-  'historic-preservation': 'zoning', 'leasing': 'zoning',
-  'city-owned-property': 'zoning', 'pensions': 'budget',
-  'telecommunications': 'business', 'technology': 'business',
-  'entertainment': 'business', 'firearms': 'public safety',
-  'sports': 'community', 'honorary': 'community',
-  // Zoning
-  'zoning': 'zoning', 'land use': 'zoning', 'land-use': 'zoning', 'land_use': 'zoning',
-  'land use planning': 'zoning', 'planning': 'zoning', 'development': 'zoning',
-  'neighborhood development': 'zoning', 'construction': 'zoning', 'residential': 'zoning',
-  'physical development': 'zoning', 'urban-planning': 'zoning', 'real estate': 'zoning',
-  'affordable_housing': 'zoning', 'housing': 'zoning',
-
-  // Budget & Finance
-  'budget': 'budget', 'finance': 'budget', 'taxation': 'budget', 'taxes': 'budget',
-  'tax': 'budget', 'revenue': 'budget', 'fees': 'budget', 'funding': 'budget',
-  'capital': 'budget', 'fiscal_policy': 'budget', 'capital_budget': 'budget',
-  'capital spending': 'budget', 'city finances': 'budget', 'procurement': 'budget',
-  'inheritance': 'budget', 'trade': 'budget',
-
-  // Transportation
-  'transportation': 'transportation', 'public transportation': 'transportation',
-  'infrastructure': 'transportation', 'traffic': 'transportation', 'parking': 'transportation',
-  'parking regulations': 'transportation', 'towing': 'transportation',
-  'street improvements': 'transportation', 'street management': 'transportation',
-  'right-of-way': 'transportation', 'encroachments': 'transportation',
-
-  // Public Safety
-  'law enforcement': 'public safety', 'public safety': 'public safety',
-  'criminal justice': 'public safety', 'civil enforcement': 'public safety',
-
-  // Civil Rights
-  'civil rights': 'civil rights', 'discrimination': 'civil rights',
-  'immigration': 'immigration', 'elections': 'civil rights',
-  'personal data protection': 'civil rights', 'transparency': 'civil rights',
-  'fair practices ordinance': 'civil rights', 'referendum': 'civil rights',
-  'home rule charter amendment': 'government',
-
-  // Environment
-  'energy': 'environment', 'utilities': 'environment', 'air management': 'environment',
-  'asbestos': 'environment', 'cell towers': 'environment', 'cell_towers': 'environment',
-
-  // Health
-  'public health': 'health', 'health': 'health', 'social services': 'health',
-  'children and youth': 'health', 'alcohol': 'health',
-
-  // Education
-  'education': 'education', 'school district': 'education',
-
-  // Business
-  'business': 'business', 'licensing': 'business', 'permits': 'business',
-  'regulation': 'business', 'regulations': 'business', 'commerce': 'business',
-  'retail': 'business', 'hotels': 'business',
-  'sidewalk cafes': 'business', 'sidewalk_cafes': 'business',
-  'outdoor entertainment': 'business', 'outdoor_entertainment': 'business',
-  'economic development': 'business', 'economic-development': 'business',
-
-  // Government
-  'government': 'government', 'city government': 'government',
-  'city-government': 'government', 'city_government': 'government',
-  'government regulation': 'government', 'government policy': 'government',
-  'government structure': 'government', 'city services': 'government',
-  'procurement contracts': 'government', 'office': 'government',
-
-  // Community
-  'community': 'community', 'community spaces': 'community', 'public space': 'community',
-  'public_space': 'community', 'arts': 'community', 'culture': 'community',
-  'street renaming': 'community', 'renaming': 'community', 'naming': 'community',
-  'celebration': 'community', 'decorations': 'community',
-}
+/**
+ * Re-exported from the generated module so there is one mapping, not two.
+ *
+ * This was a hand-maintained literal here and a second one in
+ * app/api/legislation_routes.py. They drifted, and nothing noticed until the
+ * Categories filter was measured: the API reported Public Safety 13 against
+ * 704 uses of the tag. Edit app/data/tag_categories.json instead; this file
+ * keeps only the presentation (labels, gradients, icons), which the API has no
+ * use for.
+ */
 
 const DEFAULT_CATEGORY: BillCategory = {
   label: 'City Council',

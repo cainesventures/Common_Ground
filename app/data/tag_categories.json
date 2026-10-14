@@ -1,0 +1,146 @@
+{
+  "$comment": "Canonical tag -> category mapping, shared by the API and the web app. Edit ONLY this file: app/api/legislation_routes.py reads it directly and frontend/lib/tag-categories.generated.ts is produced from it by scripts/sync_tag_categories.py. tests/test_tag_categories.py fails if the generated file is stale, so drift cannot reach main. Tags are matched case-insensitively and hyphen/underscore/space are interchangeable, so list each tag once in whichever spelling reads best.",
+  "categories": {
+    "budget": [
+      "budget",
+      "capital",
+      "capital spending",
+      "capital_budget",
+      "city finances",
+      "fees",
+      "finance",
+      "fiscal_policy",
+      "funding",
+      "inheritance",
+      "pensions",
+      "procurement",
+      "revenue",
+      "tax",
+      "taxation",
+      "taxes",
+      "trade"
+    ],
+    "business": [
+      "business",
+      "commerce",
+      "economic development",
+      "economic-development",
+      "entertainment",
+      "hotels",
+      "licensing",
+      "outdoor entertainment",
+      "outdoor_entertainment",
+      "permits",
+      "regulation",
+      "regulations",
+      "retail",
+      "sidewalk cafes",
+      "sidewalk_cafes",
+      "technology",
+      "telecommunications"
+    ],
+    "civil rights": [
+      "civil rights",
+      "discrimination",
+      "elections",
+      "fair practices ordinance",
+      "personal data protection",
+      "referendum",
+      "transparency"
+    ],
+    "community": [
+      "arts",
+      "celebration",
+      "community",
+      "community spaces",
+      "culture",
+      "decorations",
+      "honorary",
+      "naming",
+      "neighborhood",
+      "public space",
+      "public_space",
+      "renaming",
+      "sports",
+      "street renaming"
+    ],
+    "education": [
+      "education",
+      "school district"
+    ],
+    "environment": [
+      "air management",
+      "asbestos",
+      "cell towers",
+      "cell_towers",
+      "energy",
+      "environment",
+      "utilities"
+    ],
+    "government": [
+      "city government",
+      "city services",
+      "city-government",
+      "city_government",
+      "civil-service",
+      "ethics",
+      "government",
+      "government policy",
+      "government regulation",
+      "government structure",
+      "home rule charter amendment",
+      "office",
+      "procurement contracts"
+    ],
+    "health": [
+      "alcohol",
+      "children and youth",
+      "health",
+      "public health",
+      "social services"
+    ],
+    "immigration": [
+      "immigration"
+    ],
+    "public safety": [
+      "civil enforcement",
+      "criminal justice",
+      "firearms",
+      "law enforcement",
+      "public safety"
+    ],
+    "transportation": [
+      "encroachments",
+      "infrastructure",
+      "parking",
+      "parking regulations",
+      "public transportation",
+      "right-of-way",
+      "street improvements",
+      "street management",
+      "towing",
+      "traffic",
+      "transportation"
+    ],
+    "zoning": [
+      "affordable_housing",
+      "city-owned-property",
+      "construction",
+      "development",
+      "historic-preservation",
+      "housing",
+      "land use",
+      "land use planning",
+      "land-use",
+      "land_use",
+      "leasing",
+      "neighborhood development",
+      "physical development",
+      "planning",
+      "real estate",
+      "residential",
+      "urban-planning",
+      "zoning"
+    ]
+  }
+}

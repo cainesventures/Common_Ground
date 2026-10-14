@@ -3,6 +3,7 @@
 import asyncio
 import json as _json
 import logging
+from pathlib import Path as _Path
 import re
 import uuid as _uuid
 from typing import Optional
@@ -244,72 +245,27 @@ async def get_tag_counts(
     return result
 
 
-_TAG_TO_CATEGORY: dict[str, str] = {
-    # Tags the AI actually writes that had no bucket at all. Without these,
-    # 'environment' (362 uses) fell through to no category while the
-    # environment bucket was fed only by 'energy' and 'cell towers'.
-    'neighborhood': 'community', 'environment': 'environment',
-    'civil-service': 'government', 'ethics': 'government',
-    'historic-preservation': 'zoning', 'leasing': 'zoning',
-    'city-owned-property': 'zoning', 'pensions': 'budget',
-    'telecommunications': 'business', 'technology': 'business',
-    'entertainment': 'business', 'firearms': 'public safety',
-    'sports': 'community', 'honorary': 'community',
-    # Zoning
-    'zoning': 'zoning', 'land use': 'zoning', 'land-use': 'zoning', 'land_use': 'zoning',
-    'land use planning': 'zoning', 'planning': 'zoning', 'development': 'zoning',
-    'neighborhood development': 'zoning', 'construction': 'zoning', 'residential': 'zoning',
-    'physical development': 'zoning', 'urban-planning': 'zoning', 'real estate': 'zoning',
-    'affordable_housing': 'zoning', 'housing': 'zoning',
-    # Budget
-    'budget': 'budget', 'finance': 'budget', 'taxation': 'budget', 'taxes': 'budget',
-    'tax': 'budget', 'revenue': 'budget', 'fees': 'budget', 'funding': 'budget',
-    'capital': 'budget', 'fiscal_policy': 'budget', 'capital_budget': 'budget',
-    'capital spending': 'budget', 'city finances': 'budget', 'procurement': 'budget',
-    'inheritance': 'budget', 'trade': 'budget',
-    # Transportation
-    'transportation': 'transportation', 'public transportation': 'transportation',
-    'infrastructure': 'transportation', 'traffic': 'transportation', 'parking': 'transportation',
-    'parking regulations': 'transportation', 'towing': 'transportation',
-    'street improvements': 'transportation', 'street management': 'transportation',
-    'right-of-way': 'transportation', 'encroachments': 'transportation',
-    # Public Safety
-    'law enforcement': 'public safety', 'public safety': 'public safety',
-    'criminal justice': 'public safety', 'civil enforcement': 'public safety',
-    # Civil Rights
-    'civil rights': 'civil rights', 'discrimination': 'civil rights',
-    'elections': 'civil rights', 'personal data protection': 'civil rights',
-    'transparency': 'civil rights', 'fair practices ordinance': 'civil rights',
-    'referendum': 'civil rights',
-    # Immigration
-    'immigration': 'immigration',
-    # Government
-    'home rule charter amendment': 'government', 'government': 'government',
-    'city government': 'government', 'city-government': 'government',
-    'city_government': 'government', 'government regulation': 'government',
-    'government policy': 'government', 'government structure': 'government',
-    'city services': 'government', 'procurement contracts': 'government', 'office': 'government',
-    # Environment
-    'energy': 'environment', 'utilities': 'environment', 'air management': 'environment',
-    'asbestos': 'environment', 'cell towers': 'environment', 'cell_towers': 'environment',
-    # Health
-    'public health': 'health', 'health': 'health', 'social services': 'health',
-    'children and youth': 'health', 'alcohol': 'health',
-    # Education
-    'education': 'education', 'school district': 'education',
-    # Business
-    'business': 'business', 'licensing': 'business', 'permits': 'business',
-    'regulation': 'business', 'regulations': 'business', 'commerce': 'business',
-    'retail': 'business', 'hotels': 'business', 'sidewalk cafes': 'business',
-    'sidewalk_cafes': 'business', 'outdoor entertainment': 'business',
-    'outdoor_entertainment': 'business', 'economic development': 'business',
-    'economic-development': 'business',
-    # Community
-    'community': 'community', 'community spaces': 'community', 'public space': 'community',
-    'public_space': 'community', 'arts': 'community', 'culture': 'community',
-    'street renaming': 'community', 'renaming': 'community', 'naming': 'community',
-    'celebration': 'community', 'decorations': 'community',
-}
+def _load_tag_categories() -> dict[str, str]:
+    """Read the canonical tag -> category mapping.
+
+    This used to be a literal here and a second literal in
+    frontend/lib/bill-categories.ts. The two drifted, and the drift was
+    invisible until the Categories filter was measured: this endpoint reported
+    Public Safety 13 against 704 uses of the tag. One file now feeds both, and
+    the web app's copy is generated from it by scripts/sync_tag_categories.py
+    with a test that fails when it goes stale.
+    """
+    path = _Path(__file__).resolve().parents[2] / "app" / "data" / "tag_categories.json"
+    with path.open(encoding="utf-8") as fh:
+        data = _json.load(fh)
+    mapping: dict[str, str] = {}
+    for category, tags in data["categories"].items():
+        for tag in tags:
+            mapping[str(tag).lower().strip()] = category
+    return mapping
+
+
+_TAG_TO_CATEGORY: dict[str, str] = _load_tag_categories()
 
 
 def _filter_legislation(q, q_obj, level, analyzed, tag, impact, status, sponsor, year, month,
