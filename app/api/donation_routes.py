@@ -47,7 +47,6 @@ async def create_checkout(body: CheckoutRequest, db: Session = Depends(get_db)):
 
         base = settings.frontend_base_url.rstrip("/")
         session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
             line_items=[{
                 "price_data": {
                     "currency": "usd",
