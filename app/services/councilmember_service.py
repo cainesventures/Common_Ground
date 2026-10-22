@@ -213,6 +213,27 @@ def _sponsored_counts(db: Session, member_name: str, term_start: int | None) -> 
     return int(total or 0), int(passed or 0)
 
 
+def sponsored_bill_counts(db: Session, members: list[Councilmember]) -> dict[str, int]:
+    """{member.id: bills_sponsored} for many members in one query.
+
+    Same match as _sponsored_filter (surname ilike, scoped to term_start), as
+    one SUM(CASE ...) column per member, so the members list doesn't run a
+    count query per member.
+    """
+    from app.services.name_matching import surname
+    if not members:
+        return {}
+    cols = []
+    for m in members:
+        cond = Legislation.sponsor.ilike(f"%{surname(m.name)}%")
+        if m.term_start:
+            cond = cond & (extract("year", Legislation.introduced_date) >= m.term_start)
+        cols.append(func.sum(case((cond, 1), else_=0)))
+    # select_from names the table, so the multi-bind session can route the query
+    row = db.query(*cols).select_from(Legislation).one()
+    return {m.id: int(n or 0) for m, n in zip(members, row)}
+
+
 _TERMINAL_STATUSES = ("signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed")
 
 

@@ -23,6 +23,7 @@ from app.services.councilmember_service import (
     get_legislative_profile,
     scrape_and_upsert_councilmembers,
     backfill_missing_emails,
+    sponsored_bill_counts,
 )
 
 # Known Philadelphia City Council district GeoJSON sources (tried in order)
@@ -114,6 +115,7 @@ async def scrape_councilmembers(
 async def list_councilmembers(db: Session = Depends(get_db)):
     """List all Philadelphia City Council members."""
     members = get_all_councilmembers(db)
+    sponsored = sponsored_bill_counts(db, members)
     return {
         "success": True,
         "total": len(members),
@@ -126,7 +128,7 @@ async def list_councilmembers(db: Session = Depends(get_db)):
                 "email": m.email,
                 "phone": m.phone,
                 "photo_url": m.photo_url,
-                "bills_sponsored": get_councilmember_bills(db, m.name, term_start=m.term_start, limit=1, offset=0)[1],
+                "bills_sponsored": sponsored[m.id],
                 "profile_url": m.profile_url,
                 "term_start": m.term_start,
                 "years_serving": (datetime.utcnow().year - m.term_start) if m.term_start else None,
