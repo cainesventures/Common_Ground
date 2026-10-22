@@ -10,16 +10,18 @@
 #   happened here: the task's last run was 18 seconds after the last real boot,
 #   and nothing fired in the six days of sleep/wake cycles afterwards.
 #
-#   So: logon AND startup AND a daily clock trigger. The daily one is the
-#   dependable one -- with StartWhenAvailable, a trigger missed because the
-#   machine was asleep runs shortly after it wakes. The publish script's own
-#   -MinDaysSinceLastRun gate is what stops three triggers causing three
-#   publishes.
+#   So: logon AND startup AND wake AND a daily clock trigger. Wake is the one
+#   that matches "I turned the PC on": every power-on here logs either a boot
+#   or Power-Troubleshooter event 1 (resume from sleep/hibernate, which is what
+#   Fast Startup produces). The daily one is the backstop -- with
+#   StartWhenAvailable, a trigger missed while asleep runs shortly after wake.
+#   The publish script's own -MinDaysSinceLastRun gate (calendar days) is what
+#   stops four triggers causing four publishes: the first one each day wins.
 #
 # Run once as Administrator to register. Re-run to update settings.
 #
 # Usage:
-#   .\scripts\schedule_publish.ps1                  - register (default: 5-day gate, 10:00 daily)
+#   .\scripts\schedule_publish.ps1                  - register (default: once per day, 10:00 backstop)
 #   .\scripts\schedule_publish.ps1 -MinDays 7       - publish at most once per week
 #   .\scripts\schedule_publish.ps1 -DailyAt 03:30   - move the daily check
 #   .\scripts\schedule_publish.ps1 -Status          - trigger/settings/last-run diagnostics
@@ -27,7 +29,7 @@
 #   Start-ScheduledTask -TaskName CommonGroundPublish - run now (gate still applies)
 
 param(
-    [int]$MinDays = 5,
+    [int]$MinDays = 1,
     [string]$DailyAt = "10:00",
     [int]$StartupDelayMinutes = 5,
     [switch]$Status,
@@ -95,9 +97,9 @@ if ($Status) {
     Write-Host ""
     if (Test-Path $lastFile) {
         $lp   = [datetime](Get-Content $lastFile -Raw).Trim()
-        $days = [math]::Round(((Get-Date) - $lp).TotalDays, 1)
-        Write-Host "Last publish (.last_publish): $lp  ($days days ago)"
-        Write-Host "  The gate skips a run until this is $MinDays+ days old. Manual publishes count."
+        $days = ((Get-Date).Date - $lp.Date).Days
+        Write-Host "Last publish (.last_publish): $lp  ($days calendar day(s) ago)"
+        Write-Host "  The gate skips a run until this is $MinDays+ calendar day(s) old. Manual publishes count."
     } else {
         Write-Host "Last publish (.last_publish): never"
     }
@@ -160,8 +162,19 @@ $tLogon.Delay = $delay
 $tStartup = New-ScheduledTaskTrigger -AtStartup
 $tStartup.Delay = $delay
 
-# The dependable trigger. StartWhenAvailable turns one missed while the machine
-# was asleep into a run shortly after wake.
+# Wake from sleep/hibernate (including a Fast Startup "boot"), which fires
+# neither of the triggers above. The cmdlets have no switch for event triggers,
+# so build the CIM instance directly.
+$evClass = Get-CimClass -ClassName MSFT_TaskEventTrigger -Namespace Root/Microsoft/Windows/TaskScheduler
+$tWake = $evClass | New-CimInstance -ClientOnly
+$tWake.Enabled = $true
+$tWake.Delay   = $delay
+$tWake.Subscription = @"
+<QueryList><Query Id="0" Path="System"><Select Path="System">*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and EventID=1]]</Select></Query></QueryList>
+"@
+
+# The backstop. StartWhenAvailable turns one missed while the machine was
+# asleep into a run shortly after wake.
 $tDaily = New-ScheduledTaskTrigger -Daily -At $DailyAt
 
 $Settings = New-ScheduledTaskSettingsSet `
@@ -187,13 +200,13 @@ $Principal = New-ScheduledTaskPrincipal `
     -LogonType Interactive `
     -RunLevel Limited
 
-$desc = "Common Ground publish pipeline - logon, startup and daily at $DailyAt; " +
-        "publishes only if $MinDays+ days since the last one. Logs to logs\publish-*.log."
+$desc = "Common Ground publish pipeline - logon, startup, wake and daily at $DailyAt; " +
+        "publishes only if $MinDays+ calendar day(s) since the last one. Logs to logs\publish-*.log."
 
 Register-ScheduledTask `
     -TaskName $TaskName `
     -Action $Action `
-    -Trigger @($tLogon, $tStartup, $tDaily) `
+    -Trigger @($tLogon, $tStartup, $tWake, $tDaily) `
     -Settings $Settings `
     -Principal $Principal `
     -Description $desc `
@@ -202,16 +215,16 @@ Register-ScheduledTask `
 
 # Read the task back rather than trusting that the call above took effect.
 $check = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
-if (-not $check -or $check.Triggers.Count -lt 3) {
-    Write-Error "Registration did not take: expected 3 triggers, found $($check.Triggers.Count). Run -Status to inspect."
+if (-not $check -or $check.Triggers.Count -lt 4) {
+    Write-Error "Registration did not take: expected 4 triggers, found $($check.Triggers.Count). Run -Status to inspect."
     exit 1
 }
 
 Write-Host ""
 Write-Host "Registered: $TaskName"
-Write-Host "  Triggers : at logon (+$StartupDelayMinutes min), at startup (+$StartupDelayMinutes min), daily at $DailyAt"
+Write-Host "  Triggers : at logon, at startup, on wake (each +$StartupDelayMinutes min), daily at $DailyAt"
 Write-Host "  Catch-up : StartWhenAvailable - a trigger missed while asleep runs after wake"
-Write-Host "  Gate     : publishes only if the last publish was $MinDays+ days ago"
+Write-Host "  Gate     : publishes only if the last publish was $MinDays+ calendar day(s) ago"
 Write-Host "  Logs     : $ProjectRoot\logs\publish-<timestamp>.log"
 Write-Host ""
 Write-Host "Commands:"

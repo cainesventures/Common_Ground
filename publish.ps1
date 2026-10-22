@@ -128,14 +128,20 @@ if ($MinDaysSinceLastRun -gt 0 -and (Test-Path $LAST_RUN_FILE)) {
         Warn "Could not parse $LAST_RUN_FILE; treating this as never published."
     }
     if ($lastRun) {
-        $daysSince = ((Get-Date) - $lastRun).TotalDays
+        # Calendar days, not elapsed time. A publish takes ~9 minutes, so with
+        # elapsed time the recorded finish always lands just after the daily
+        # trigger, and on day N that trigger missed by minutes -- an N-day gate
+        # really ran every N+1 days. With -MinDaysSinceLastRun 1 this is "the
+        # first trigger of each day publishes, the rest skip".
+        $daysSince = ((Get-Date).Date - $lastRun.Date).Days
         if ($daysSince -lt $MinDaysSinceLastRun) {
-            Log ("GATED - last publish was {0} days ago, minimum is {1}. Nothing to do." -f [math]::Round($daysSince,1), $MinDaysSinceLastRun)
+            $when = if ($daysSince -eq 0) { "earlier today" } else { "$daysSince day(s) ago" }
+            Log ("GATED - last publish was {0} ({1}), minimum is {2} day(s). Nothing to do." -f $when, $lastRun.ToString("yyyy-MM-dd HH:mm"), $MinDaysSinceLastRun)
             Log "Run .\publish.ps1 with no -MinDaysSinceLastRun to publish regardless."
             try { Stop-Transcript | Out-Null } catch { }
             exit 0
         }
-        Log ("Gate open - last publish was {0} days ago (minimum {1})." -f [math]::Round($daysSince,1), $MinDaysSinceLastRun)
+        Log ("Gate open - last publish was {0} day(s) ago ({1}; minimum {2})." -f $daysSince, $lastRun.ToString("yyyy-MM-dd HH:mm"), $MinDaysSinceLastRun)
     }
 }
 
