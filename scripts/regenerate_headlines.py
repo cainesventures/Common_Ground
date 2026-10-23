@@ -73,9 +73,7 @@ import json
 import logging
 import os
 import re
-import subprocess
 import sys
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -145,70 +143,8 @@ def misleading(headline: str) -> bool:
     return bool(ASSERTS_RULE.search(headline)) and not HEDGES_PROPOSAL.search(headline)
 
 
-# ── VRAM supervision ─────────────────────────────────────────────────────────
-
-class VramGuard:
-    """Keeps a floor of free VRAM, and gives up rather than thrashing.
-
-    The failure this exists to prevent is not an exception -- it is the driver
-    quietly spilling to system RAM, after which everything still "works" and
-    the machine becomes unusable. So the check has to happen on our side,
-    before each request, while there is still headroom to protect.
-    """
-
-    def __init__(self, floor_mb: int, max_consecutive_pauses: int,
-                 pause_seconds: int, unload):
-        self.floor_mb = floor_mb
-        self.max_consecutive_pauses = max_consecutive_pauses
-        self.pause_seconds = pause_seconds
-        self._unload = unload
-        self.peak_used_mb = 0
-
-    @staticmethod
-    def sample() -> tuple[int, int] | None:
-        """(used_mb, total_mb), or None when nvidia-smi is unavailable."""
-        try:
-            out = subprocess.run(
-                ["nvidia-smi", "--query-gpu=memory.used,memory.total",
-                 "--format=csv,noheader,nounits"],
-                capture_output=True, text=True, timeout=15,
-            ).stdout.strip().splitlines()[0]
-            used, total = (int(x.strip()) for x in out.split(","))
-            return used, total
-        except Exception:
-            return None
-
-    def wait_for_headroom(self) -> None:
-        """Block until free VRAM is above the floor. Raise if it never is."""
-        pauses = 0
-        while True:
-            s = self.sample()
-            if s is None:
-                return  # no GPU telemetry (CI, non-NVIDIA) -- nothing to guard
-            used, total = s
-            self.peak_used_mb = max(self.peak_used_mb, used)
-            free = total - used
-            if free >= self.floor_mb:
-                return
-
-            pauses += 1
-            if pauses > self.max_consecutive_pauses:
-                raise RuntimeError(
-                    f"Free VRAM stayed under {self.floor_mb}MB for "
-                    f"{pauses} checks ({free}MB free of {total}MB). Stopping "
-                    "rather than pushing the GPU into system-memory fallback. "
-                    "Progress is checkpointed -- close what is using the GPU "
-                    "and re-run to continue."
-                )
-            log.warning(
-                "Only %dMB VRAM free (floor %dMB) — unloading and waiting %ds "
-                "[pause %d/%d]",
-                free, self.floor_mb, self.pause_seconds, pauses,
-                self.max_consecutive_pauses,
-            )
-            self._unload()
-            time.sleep(self.pause_seconds)
-
+# VRAM supervision lives in scripts/gpu_guard.py (preflight, VramGuard,
+# Budget). This script's private copy predated it and had no preflight.
 
 # ── Checkpoint ───────────────────────────────────────────────────────────────
 
@@ -254,8 +190,8 @@ def build_args() -> argparse.Namespace:
                    help="Ollama model (default llama3.2:3b, ~2.0GB)")
     p.add_argument("--num-ctx", type=int, default=2048,
                    help="Context window per request (default 2048)")
-    p.add_argument("--vram-floor-mb", type=int, default=1200,
-                   help="Pause when free VRAM drops below this (default 1200)")
+    p.add_argument("--vram-floor-mb", type=int, default=1500,
+                   help="VRAM to keep for the desktop (default 1500, gpu_guard's floor)")
     p.add_argument("--pause-seconds", type=int, default=30)
     p.add_argument("--max-pauses", type=int, default=10)
     p.add_argument("--max-failures", type=int, default=5,
@@ -384,31 +320,41 @@ def main() -> int:
         get_ai_provider, InferencePaused, InferenceTimeout,
     )
 
+    from gpu_guard import Budget, BudgetExhausted, VramExhausted, VramGuard, preflight
+
     provider = get_ai_provider()
+    # Refuse an impossible run in the first second, not the thirtieth minute.
+    peak = preflight(args.model, args.vram_floor_mb)
     guard = VramGuard(
         floor_mb=args.vram_floor_mb,
         max_consecutive_pauses=args.max_pauses,
         pause_seconds=args.pause_seconds,
-        unload=getattr(provider, "_unload", lambda: None),
+        unload=getattr(provider, "_unload", None),
+        model_peak_mb=peak,
+        resident_mb=getattr(provider, "resident_vram_mb", None),
     )
+    budget = Budget(minutes=args.budget_minutes)
 
     s = VramGuard.sample()
     log.info("Model %s | num_ctx %s | VRAM %s",
              args.model, args.num_ctx,
              f"{s[0]}MB used of {s[1]}MB" if s else "unknown")
 
-    deadline = time.monotonic() + args.budget_minutes * 60
     done = failed = skipped = 0
     consecutive_failures = 0
 
     try:
         for i, bill in enumerate(pending, 1):
-            if time.monotonic() > deadline:
+            try:
+                budget.check()
+                guard.wait_for_headroom()
+            except BudgetExhausted:
                 log.warning("Wall-clock budget of %dmin reached — stopping cleanly.",
                             args.budget_minutes)
                 break
-
-            guard.wait_for_headroom()
+            except VramExhausted as e:
+                log.error("Stopping to protect the desktop: %s", e)
+                break
 
             old = bill.headline
             try:

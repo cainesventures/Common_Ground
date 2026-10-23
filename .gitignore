@@ -93,3 +93,4 @@ scripts/.persona_refresh_checkpoint.json
 .headline_regen_checkpoint.json
 .headline_quality_checkpoint.json
 .lede_clear_checkpoint.json
+.lede_regen_checkpoint.json
