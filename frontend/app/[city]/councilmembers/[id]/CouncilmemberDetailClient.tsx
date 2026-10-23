@@ -250,9 +250,9 @@ function Metric({ value, label, sub, onClick, expanded }: {
       <p className="text-xl font-bold tabular-nums leading-none">{value}</p>
       <p className="text-xs font-medium mt-1.5 flex items-center gap-1">
         {label}
-        {interactive && <span className="text-muted-foreground text-[10px]">{expanded ? '▲' : '▼'}</span>}
+        {interactive && <span className="text-muted-foreground text-xs">{expanded ? '▲' : '▼'}</span>}
       </p>
-      {sub && <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{sub}</p>}
     </button>
   )
 }

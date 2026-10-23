@@ -218,10 +218,10 @@ function MemberCard({ member, highlighted }: { member: Member; highlighted?: boo
         <p className="text-xs text-muted-foreground mt-1">
           {member.bills_sponsored} bill{member.bills_sponsored !== 1 ? 's' : ''} sponsored
           {member.term_start && (
-            <span className="ml-2 text-muted-foreground/60">· since {member.term_start}</span>
+            <span className="ml-2 text-muted-foreground">· since {member.term_start}</span>
           )}
           {member.next_election && (
-            <span className="ml-2 text-muted-foreground/60">· up {member.next_election}</span>
+            <span className="ml-2 text-muted-foreground">· up {member.next_election}</span>
           )}
         </p>
       </div>
@@ -258,7 +258,11 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
   const filtered = search.trim()
     ? members.filter((m) => m.name.toLowerCase().includes(search.trim().toLowerCase()))
     : members
-  const district = filtered.filter((m) => m.district !== 'At-Large')
+  // Numeric, not string, order: the API's text sort put District 10 after 1.
+  const districtNo = (d?: string | null) => Number(d?.match(/\d+/)?.[0] ?? 99)
+  const district = filtered
+    .filter((m) => m.district !== 'At-Large')
+    .sort((a, b) => districtNo(a.district) - districtNo(b.district))
   const atLarge = filtered.filter((m) => m.district === 'At-Large')
 
   return (

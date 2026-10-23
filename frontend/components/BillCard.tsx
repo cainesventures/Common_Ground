@@ -89,20 +89,20 @@ export function BillCard({ bill, query = '', showDate = false, tab, citySlug = '
       <div className="flex-1 min-w-0 py-3 pr-3 pl-2">
         {/* Category label + meta row */}
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className={`text-[10px] font-semibold uppercase tracking-wide ${category.iconColor}`}>
+          <span className={`text-xs font-semibold uppercase tracking-wide ${category.iconColor}`}>
             {category.label}
           </span>
-          <span className="text-muted-foreground/30 text-[10px]">·</span>
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize ${statusClass}`}>
+          <span className="text-muted-foreground/30 text-xs">·</span>
+          <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full capitalize ${statusClass}`}>
             {fmtStatus(bill.status)}
           </span>
           {hearingSoon && !isTerminal && (
-            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${HEARING_BADGE}`}>
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${HEARING_BADGE}`}>
               Hearing {new Date(bill.next_hearing_date!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </span>
           )}
           {showDate && dateLabel && (
-            <span className="text-[10px] text-muted-foreground/50 ml-auto shrink-0">
+            <span className="text-xs text-muted-foreground ml-auto shrink-0">
               {dateLabel.label} {new Date(dateLabel.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </span>
           )}
@@ -121,7 +121,7 @@ export function BillCard({ bill, query = '', showDate = false, tab, citySlug = '
         )}
 
         {/* Bill number footer */}
-        <p className="text-[10px] font-mono text-muted-foreground/40 mt-1.5">{bill.bill_number}</p>
+        <p className="text-xs font-mono text-muted-foreground mt-1.5">{bill.bill_number}</p>
       </div>
 
       <div className="flex items-center pr-3 shrink-0">

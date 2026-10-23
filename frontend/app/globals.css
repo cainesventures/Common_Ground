@@ -1,6 +1,23 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* `dark:` utilities must follow the same rule as the tokens below: the manual
+   .dark class wins, .light vetoes the OS, otherwise the OS decides. Tailwind
+   v4's default `dark:` is the media query alone, so before this every `dark:`
+   class ignored the theme toggle. A visitor who chose dark on a light OS got
+   dark tokens with light pills, light prose (near-invisible blog text) and a
+   white hero capsule. */
+@custom-variant dark {
+  &:where(.dark, .dark *) {
+    @slot;
+  }
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not(.light), :root:not(.light) *) {
+      @slot;
+    }
+  }
+}
+
 /* ── Design tokens ────────────────────────────────────────────────────────────
    Every token below is referenced by Tailwind utility classes already in use
    across the app (text-muted-foreground ×525, bg-muted ×183, bg-primary,
@@ -308,6 +325,14 @@ body {
   }
 }
 
+/* Map tiles in dark mode. OSM only serves light tiles, so they are inverted
+   and hue-rotated back, which keeps water blue and parks green. Same theme rule
+   as the tokens: .dark class, or the OS when .light is not set. */
+.dark .cg-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9); }
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .cg-map-tiles { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9); }
+}
+
 /* Global focus rings — keyboard navigation */
 button:focus-visible,
 a:focus-visible,
@@ -316,7 +341,7 @@ select:focus-visible,
 textarea:focus-visible,
 [role="switch"]:focus-visible,
 [role="tab"]:focus-visible {
-  outline: 2px solid #3b82f6;
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 4px;
 }

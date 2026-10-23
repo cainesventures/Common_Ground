@@ -85,7 +85,7 @@ export function BudgetExplorer({ data, fundOrder }: { data: BudgetData; fundOrde
           <select
             value={fund}
             onChange={(e) => onFundChange(e.target.value)}
-            className="rounded-lg border bg-background px-3 py-2 text-sm min-w-[220px]"
+            className="rounded-lg border bg-background px-3 py-2 text-sm w-full sm:w-auto sm:min-w-[220px] max-w-full"
           >
             {fundOrder.map((f) => (
               <option key={f} value={f}>{pretty(f)}</option>
@@ -272,16 +272,16 @@ function BreakdownView(props: {
                   <li key={d.name}>
                     <button
                       onClick={() => setExpanded(isOpen ? null : d.name)}
-                      className="w-full flex items-center gap-3 text-sm text-left cursor-pointer"
+                      className="w-full flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 text-sm text-left cursor-pointer"
                     >
-                      <span className="w-56 shrink-0 truncate flex items-center gap-1" title={pretty(d.name)}>
+                      <span className="w-full sm:w-56 shrink-0 sm:truncate flex items-center gap-1" title={pretty(d.name)}>
                         <span className={`text-muted-foreground transition-transform ${isOpen ? 'rotate-90' : ''}`}>›</span>
                         {pretty(d.name)}
                       </span>
-                      <span className="flex-1 h-5 rounded bg-muted overflow-hidden">
+                      <span className="flex-1 min-w-0 h-5 rounded bg-muted overflow-hidden">
                         <span className="block h-full rounded bg-blue-500/80" style={{ width: `${(v / maxDept) * 100}%` }} />
                       </span>
-                      <span className="w-24 text-right tabular-nums shrink-0">{fmt(v, mode)}</span>
+                      <span className="w-20 sm:w-24 text-right tabular-nums shrink-0">{fmt(v, mode)}</span>
                       <span className="w-10 text-right tabular-nums text-muted-foreground shrink-0">{pct.toFixed(0)}%</span>
                     </button>
                     {isOpen && (
@@ -326,7 +326,7 @@ function BreakdownView(props: {
                             <ul className="space-y-1">
                               {Object.entries(d.classes!).sort((a, b) => b[1] - a[1]).map(([cls, amt]) => (
                                 <li key={cls} className="flex items-center gap-3 text-xs text-muted-foreground">
-                                  <span className="w-52 shrink-0 truncate" title={CLASS_INFO[cls] ?? cls}>{cls}</span>
+                                  <span className="w-28 sm:w-52 shrink-0 truncate" title={CLASS_INFO[cls] ?? cls}>{cls}</span>
                                   <span className="flex-1 h-3 rounded bg-muted overflow-hidden">
                                     <span className="block h-full rounded bg-blue-400/60" style={{ width: `${(amt / d.total) * 100}%` }} />
                                   </span>
@@ -391,7 +391,7 @@ function CompareView(props: {
   const YearPick = ({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) => (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-muted-foreground">{label}</span>
-      <select value={value} onChange={(e) => onChange(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm">
+      <select value={value} onChange={(e) => onChange(Number(e.target.value))} className="rounded-lg border bg-background px-3 py-2 text-sm max-w-full">
         {Array.from({ length: lastFY - firstFY + 1 }, (_, i) => firstFY + i).map((fy) => (
           <option key={fy} value={fy}>FY{fy}</option>
         ))}
@@ -432,11 +432,11 @@ function CompareView(props: {
             const pct = r.b ? Math.round((r.delta / r.b) * 100) : null
             const up = r.delta >= 0
             return (
-              <li key={r.name} className="flex items-center gap-3 text-sm">
-                <span className="w-52 shrink-0 truncate" title={pretty(r.name)}>{pretty(r.name)}</span>
-                <span className="w-20 text-right tabular-nums text-muted-foreground shrink-0">{fmt(r.b, mode)}</span>
+              <li key={r.name} className="flex flex-wrap sm:flex-nowrap items-center gap-x-3 gap-y-1 text-sm">
+                <span className="w-full sm:w-52 shrink-0 sm:truncate" title={pretty(r.name)}>{pretty(r.name)}</span>
+                <span className="hidden sm:inline w-20 text-right tabular-nums text-muted-foreground shrink-0">{fmt(r.b, mode)}</span>
                 {/* diverging bar */}
-                <span className="flex-1 relative h-4">
+                <span className="flex-1 min-w-0 relative h-4">
                   <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
                   <span
                     className={`absolute inset-y-0 rounded ${up ? 'bg-green-500/70' : 'bg-red-500/70'}`}
@@ -490,7 +490,7 @@ function TrackView(props: {
     <>
       <label className="flex flex-col gap-1 text-sm mb-6 max-w-lg">
         <span className="text-muted-foreground">Department / line item</span>
-        <select value={activeDept} onChange={(e) => setDept(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm">
+        <select value={activeDept} onChange={(e) => setDept(e.target.value)} className="rounded-lg border bg-background px-3 py-2 text-sm w-full max-w-full">
           {deptNames.map((n) => (
             <option key={n} value={n}>{pretty(n)}</option>
           ))}

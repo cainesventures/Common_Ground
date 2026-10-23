@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Geist } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
@@ -33,6 +33,14 @@ export const metadata: Metadata = {
   },
 }
 
+// Browser chrome (mobile address bar, installed-app title bar) follows the theme.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
+  ],
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     // suppressHydrationWarning is required, not cosmetic. The inline theme script
@@ -64,7 +72,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script {...jsonLdProps(siteGraph())} />
       </head>
       <body className={`${geist.variable} font-sans antialiased bg-background text-foreground`}>
-        <img src="/libertybell.svg" alt="" aria-hidden="true" className="fixed top-[80px] left-1/2 -translate-x-1/2 w-[340px] max-w-none opacity-[0.07] dark:opacity-[0.12] dark:invert pointer-events-none select-none -z-10" />
         {/*
           Skip link. Every page puts 8+ nav links before the content, so without
           this a keyboard or screen-reader user tabs through the whole header on

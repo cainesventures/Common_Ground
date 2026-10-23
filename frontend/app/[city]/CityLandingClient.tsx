@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { api } from '@/lib/api'
 import { startGoogleSignIn } from '@/lib/auth'
 import { BillCard, type BillCardBill } from '@/components/BillCard'
+import { Pause, Play } from 'lucide-react'
 
 /**
  * Tracks prefers-reduced-motion. CSS handles the keyframes (see globals.css),
@@ -79,32 +80,6 @@ const FEATURES = [
 
 // STEPS replaced by inline JSX below
 
-// ── Liberty Bell silhouette ───────────────────────────────────────────────────
-function LibertyBell({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 300 340" fill="currentColor" className={className} aria-hidden="true">
-      {/* Yoke / crown — top mounting bar */}
-      <rect x="90" y="10" width="120" height="18" rx="4" />
-      {/* Yoke arms */}
-      <rect x="108" y="28" width="16" height="28" rx="3" />
-      <rect x="176" y="28" width="16" height="28" rx="3" />
-      {/* Shoulder / top of bell */}
-      <path d="M100 56 Q150 44 200 56 L210 90 Q150 78 90 90 Z" />
-      {/* Bell body */}
-      <path d="M90 90 Q60 140 55 200 Q50 250 70 270 L230 270 Q250 250 245 200 Q240 140 210 90 Q150 78 90 90 Z" />
-      {/* Waist band / sound bow at bottom */}
-      <path d="M70 270 Q150 285 230 270 L235 285 Q150 302 65 285 Z" />
-      {/* The famous crack */}
-      <path d="M152 100 Q149 130 154 160 Q157 185 151 210" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" opacity="0.5" />
-      {/* Clapper */}
-      <line x1="150" y1="90" x2="150" y2="190" stroke="currentColor" strokeWidth="4" strokeLinecap="round" opacity="0.35" />
-      <ellipse cx="150" cy="198" rx="9" ry="11" opacity="0.35" />
-      {/* Inscription band */}
-      <path d="M82 180 Q150 167 218 180" fill="none" stroke="currentColor" strokeWidth="6" opacity="0.12" />
-    </svg>
-  )
-}
-
 // ── Both Sides Slideshow ───────────────────────────────────────────────────────
 // Was a persona carousel: one bill, then a nested index stepping through up to
 // 17 perspectives. It is now one bill showing both cases at once, which drops
@@ -116,123 +91,126 @@ function LibertyBell({ className }: { className?: string }) {
 function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
   const { city } = useParams<{ city: string }>()
   const [billIdx, setBillIdx] = useState(0)
-  const [fading, setFading] = useState(false)
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const pausedRef = useRef(false)
-  const billIdxRef = useRef(billIdx)
   const reducedMotion = usePrefersReducedMotion()
   // Hover-pause alone is unreachable by keyboard and touch, so autoplay also
   // needs a real control. This is the explicit one; pausedRef stays for hover.
   const [paused, setPaused] = useState(false)
 
-  useEffect(() => { billIdxRef.current = billIdx }, [billIdx])
-
-  const goToBill = useCallback((next: number) => {
-    setFading(true)
-    setTimeout(() => {
-      setBillIdx(next)
-      setFading(false)
-    }, 250)
-  }, [])
-
-  const nextBill = useCallback(() => {
-    goToBill((billIdxRef.current + 1) % items.length)
-  }, [items.length, goToBill])
-
   useEffect(() => {
     if (items.length === 0) return
     // Never auto-advance when the visitor asked for reduced motion, or when
-    // they paused it — they can still step through with the arrows and dots.
+    // they paused it. They can still step through with the arrows and dots.
     if (reducedMotion || paused) return
-    // Slower than the old 10s: a visitor now has two arguments to read on each
-    // slide instead of one quoted sentence.
-    intervalRef.current = setInterval(() => {
+    // Slower than the old 10s: a visitor has two arguments to read per slide.
+    const t = setInterval(() => {
       if (pausedRef.current) return
-      goToBill((billIdxRef.current + 1) % items.length)
+      setBillIdx((i) => (i + 1) % items.length)
     }, 14000)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
-  }, [items, goToBill, reducedMotion, paused])
+    return () => clearInterval(t)
+  }, [items, reducedMotion, paused])
 
   if (items.length === 0) return null
 
-  const bill = items[billIdx]
-  const lanes = [
-    { key: 'for', label: 'The case for', text: bill.case_for, accent: 'border-emerald-400/40' },
-    { key: 'against', label: 'The case against', text: bill.case_against, accent: 'border-rose-400/40' },
-  ]
+  const go = (i: number) => setBillIdx((i + items.length) % items.length)
 
   return (
     <div
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Bills being decided now, with the case for and against"
       className="bg-gradient-to-br from-slate-900 to-slate-800 dark:from-slate-950 dark:to-slate-900 rounded-2xl overflow-hidden"
       onMouseEnter={() => { pausedRef.current = true }}
       onMouseLeave={() => { pausedRef.current = false }}
+      onFocus={() => { pausedRef.current = true }}
+      onBlur={() => { pausedRef.current = false }}
     >
-      <div
-        className="px-6 pt-8 pb-6 sm:px-10 sm:pt-10 transition-opacity duration-250"
-        style={{ opacity: fading ? 0 : 1 }}
-      >
-        <p className="text-white/40 text-xs font-mono mb-2 uppercase tracking-wider">{bill.bill_number}</p>
+      {/* Every slide sits in the same grid cell, so the card is always as tall
+          as the tallest slide. It used to size to the current slide, which
+          moved everything below it by up to ~114px on each autoplay tick, and
+          the fade swapped content mid-transition, flashing an empty card. */}
+      <div className="grid" aria-live={paused || reducedMotion ? 'polite' : 'off'}>
+        {items.map((bill, i) => {
+          const current = i === billIdx
+          return (
+            <div
+              key={bill.id}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${i + 1} of ${items.length}`}
+              aria-hidden={!current}
+              inert={!current}
+              className={`[grid-area:1/1] px-6 pt-8 pb-6 sm:px-10 sm:pt-10 transition-opacity duration-300 ${current ? 'opacity-100' : 'opacity-0'}`}
+            >
+              <p className="text-white/70 text-xs font-mono mb-2 uppercase tracking-wider">{bill.bill_number}</p>
 
-        <Link href={`/${city}/legislation/${bill.id}`}>
-          <h3 className="text-white text-xl sm:text-2xl font-bold leading-snug mb-3 max-w-2xl hover:text-white/80 transition-colors">
-            {bill.headline}
-          </h3>
-        </Link>
+              <Link href={`/${city}/legislation/${bill.id}`} className="group">
+                <h3 className="text-white text-xl sm:text-2xl font-bold leading-snug mb-3 max-w-2xl group-hover:underline underline-offset-4 decoration-white/40">
+                  {bill.headline}
+                </h3>
+              </Link>
 
-        {bill.lede && (
-          <p className="text-white/60 text-sm leading-relaxed mb-6 max-w-2xl">
-            {bill.lede}
-          </p>
-        )}
+              {bill.lede && (
+                <p className="text-white/80 text-sm leading-relaxed mb-6 max-w-2xl">{bill.lede}</p>
+              )}
 
-        <div className="border-t border-white/10 pt-5 grid gap-5 sm:grid-cols-2">
-          {lanes.map(({ key, label, text, accent }) => (
-            <div key={key} className={`border-l-2 pl-4 ${accent}`}>
-              <p className="text-white/40 text-xs uppercase tracking-widest font-semibold mb-2">{label}</p>
-              <p className="text-white/70 text-sm leading-relaxed">{text}</p>
+              <div className="border-t border-white/10 pt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl bg-emerald-400/10 ring-1 ring-emerald-300/20 p-4">
+                  <p className="text-emerald-200 text-xs uppercase tracking-widest font-semibold mb-2">The case for</p>
+                  <p className="text-white/85 text-sm leading-relaxed">{bill.case_for}</p>
+                </div>
+                <div className="rounded-xl bg-rose-400/10 ring-1 ring-rose-300/20 p-4">
+                  <p className="text-rose-200 text-xs uppercase tracking-widest font-semibold mb-2">The case against</p>
+                  <p className="text-white/85 text-sm leading-relaxed">{bill.case_against}</p>
+                </div>
+              </div>
+
+              <p className="text-white/70 text-xs mt-5">
+                AI-written arguments, checked against the bill text. Neither side is the site&apos;s position.
+              </p>
             </div>
-          ))}
-        </div>
-
-        <p className="text-white/25 text-[11px] mt-5">
-          AI-written arguments, checked against the bill text. Neither side is the site&apos;s position.
-        </p>
+          )
+        })}
       </div>
 
       {items.length > 1 && (
-        <div className="flex items-center justify-between px-6 sm:px-10 py-3 border-t border-white/10">
+        <div className="flex items-center justify-between gap-2 px-4 sm:px-8 py-2 border-t border-white/10">
           <button
-            onClick={() => goToBill((billIdx - 1 + items.length) % items.length)}
-            className="text-xs text-white/70 hover:text-white transition-colors flex items-center gap-1"
+            onClick={() => go(billIdx - 1)}
+            className="min-h-11 px-2 text-sm text-white/80 hover:text-white transition-colors"
           >
-            ← Prev bill
+            ← Prev
           </button>
-          <div className="flex gap-1.5">
+          <div className="flex items-center gap-1">
             {items.map((_, i) => (
               <button
                 key={i}
-                onClick={() => goToBill(i)}
+                onClick={() => go(i)}
                 aria-label={`Go to bill ${i + 1}`}
-                className={`rounded-full transition-all ${i === billIdx ? 'w-5 h-1.5 bg-white/60' : 'w-1.5 h-1.5 bg-white/20 hover:bg-white/40'}`}
-              />
+                aria-current={i === billIdx ? 'true' : undefined}
+                className="p-1.5 group"
+              >
+                <span className={`block rounded-full transition-all ${i === billIdx ? 'w-6 h-2 bg-white' : 'w-2 h-2 bg-white/40 group-hover:bg-white/70'}`} />
+              </button>
             ))}
+            <span className="ml-2 text-xs text-white/70 tabular-nums hidden sm:inline">{billIdx + 1} / {items.length}</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             {!reducedMotion && (
               <button
                 onClick={() => setPaused((p) => !p)}
                 aria-pressed={paused}
                 aria-label={paused ? 'Resume automatic slideshow' : 'Pause automatic slideshow'}
-                className="text-xs text-white/70 hover:text-white transition-colors"
+                className="min-h-11 min-w-11 flex items-center justify-center text-white/80 hover:text-white transition-colors"
               >
-                {paused ? '▶ Play' : '❚❚ Pause'}
+                {paused ? <Play className="w-4 h-4" aria-hidden="true" /> : <Pause className="w-4 h-4" aria-hidden="true" />}
               </button>
             )}
             <button
-              onClick={nextBill}
-              className="text-xs text-white/70 hover:text-white transition-colors flex items-center gap-1"
+              onClick={() => go(billIdx + 1)}
+              className="min-h-11 px-2 text-sm text-white/80 hover:text-white transition-colors"
             >
-              Next bill →
+              Next →
             </button>
           </div>
         </div>
@@ -241,11 +219,19 @@ function BothSidesSlideshow({ items }: { items: SpotlightItem[] }) {
   )
 }
 
+// Every quote here is checked against a primary source. The site's pitch is
+// accuracy, so a fake founder quote on the home page is not decoration.
+// Removed: "The cornerstone of democracy rests on ... an educated electorate"
+// (not in Jefferson's writings; Monticello lists the family as spurious) and
+// "An investment in knowledge pays the best interest" (first printed 1849,
+// unverified as Franklin's).
 const FOUNDERS_QUOTES = [
-  { text: "Liberty cannot be preserved without general knowledge among the people.", author: "John Adams" },
-  { text: "The cornerstone of democracy rests on the foundation of an educated electorate.", author: "Thomas Jefferson" },
+  // A Dissertation on the Canon and the Feudal Law, 1765
+  { text: "Liberty cannot be preserved without a general knowledge among the people.", author: "John Adams" },
+  // Letter to Richard Price, Paris, January 8, 1789
+  { text: "Wherever the people are well informed they can be trusted with their own government.", author: "Thomas Jefferson" },
+  // Letter to W. T. Barry, August 4, 1822
   { text: "Knowledge will forever govern ignorance; and a people who mean to be their own governors must arm themselves with the power which knowledge gives.", author: "James Madison" },
-  { text: "An investment in knowledge pays the best interest.", author: "Benjamin Franklin" },
 ]
 
 function FoundersQuote() {
@@ -269,10 +255,10 @@ function FoundersQuote() {
   return (
     <div className="max-w-xl mx-auto text-center px-8" style={{ minHeight: '4.5rem' }}>
       <div className="transition-opacity duration-400" style={{ opacity: visible ? 1 : 0 }}>
-        <p className="text-sm text-muted-foreground/70 italic leading-relaxed">
+        <p className="text-sm text-muted-foreground italic leading-relaxed">
           &ldquo;{quote.text}&rdquo;
         </p>
-        <p className="text-xs font-medium text-muted-foreground/50 mt-1">– {quote.author}</p>
+        <p className="text-xs font-medium text-muted-foreground mt-1">– {quote.author}</p>
       </div>
     </div>
   )
@@ -398,11 +384,21 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
 
       {/* ── Hero ── */}
       <section className="relative pt-12 pb-4 text-center max-w-3xl mx-auto overflow-hidden">
+        {/* The bell lives in the hero only. It was a fixed, site-wide
+            watermark that sat behind bill titles and blog paragraphs on every
+            page, adding noise to text that was already low contrast. */}
+        <img src="/libertybell.svg" alt="" aria-hidden="true" className="absolute top-0 left-1/2 -translate-x-1/2 w-[340px] max-w-none opacity-[0.06] dark:opacity-[0.1] dark:invert pointer-events-none select-none" />
         <div className="absolute bottom-0 inset-x-0 h-24 bg-gradient-to-t from-background to-transparent pointer-events-none" />
 
         <div className="relative z-10 anim-hero">
-          <div className="inline-block bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200 dark:border-blue-700">
-            Philadelphia City Council · {billCount ? `${billCount.toLocaleString()} bills tracked` : 'Free'} · {freshnessLabel(lastUpdated)}
+          {/* Each phrase is a no-wrap unit, so a narrow screen breaks between
+              phrases rather than stranding "today" on its own line. */}
+          <div className="inline-flex flex-wrap justify-center gap-x-1.5 bg-blue-50 text-blue-800 dark:bg-blue-950/60 dark:text-blue-200 text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-200 dark:border-blue-800">
+            <span className="whitespace-nowrap">Philadelphia City Council</span>
+            <span aria-hidden="true">·</span>
+            <span className="whitespace-nowrap">{billCount ? `${billCount.toLocaleString()} bills tracked` : 'Free'}</span>
+            <span aria-hidden="true">·</span>
+            <span className="whitespace-nowrap">{freshnessLabel(lastUpdated)}</span>
           </div>
           <h1 className="type-display text-4xl sm:text-5xl mb-5">
             Your City Council is voting on bills right now.<br className="hidden sm:block" /> Do you know what&apos;s in them?
@@ -573,7 +569,7 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
               <div className="bg-muted/60 rounded p-2 text-muted-foreground line-through leading-snug">
                 An Ordinance amending Title 14 of The Philadelphia Code, entitled &ldquo;Zoning and Planning,&rdquo; by…
               </div>
-              <div className="flex items-center justify-center text-muted-foreground/40 text-base">↓</div>
+              <div className="flex items-center justify-center text-muted-foreground text-base">↓</div>
               <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded p-2 text-green-800 dark:text-green-300 font-medium leading-snug">
                 Zoning change near the Navy Yard that affects density limits for new housing
               </div>
@@ -598,7 +594,7 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
                 <p className="font-semibold text-rose-700 dark:text-rose-400 mb-0.5">The case against</p>
                 <p className="text-muted-foreground leading-snug">Shifts the enforcement burden onto the City, with no funding named to carry it.</p>
               </div>
-              <p className="text-muted-foreground/50 pt-1">Every figure checked against the bill text.</p>
+              <p className="text-muted-foreground pt-1">Every figure checked against the bill text.</p>
             </div>
           </div>
 

@@ -233,8 +233,8 @@ export default function MyBillsPage() {
                       {bill.plain_title
                         ? <>
                             <p className="text-sm font-semibold leading-snug pr-8">{bill.plain_title}</p>
-                            <p className="text-xs text-muted-foreground/70 mt-0.5 line-clamp-1">
-                              <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Legal:</span>
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                              <span className="uppercase tracking-wide font-medium text-xs mr-1">Legal:</span>
                               {bill.title}
                             </p>
                           </>

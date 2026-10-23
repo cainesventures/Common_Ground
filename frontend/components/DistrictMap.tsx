@@ -85,12 +85,17 @@ export function DistrictMap({ district, members = [], height = 320 }: Props) {
         zoomAnimation: false,
         fadeAnimation: false,
         markerZoomAnimation: false,
+        // Fractional zoom lets fitBounds frame the city tightly. At whole
+        // steps it fell back a level and showed Trenton to Chester.
+        zoomSnap: 0.25,
       })
       mapRef.current = map
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 19,
+        // Dark-mode styling hooks onto this class in globals.css.
+        className: 'cg-map-tiles',
       }).addTo(map)
 
       fetch(DISTRICTS_GEOJSON_URL)

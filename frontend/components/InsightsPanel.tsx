@@ -96,7 +96,7 @@ export function InsightsPanel({ insights }: { insights?: string | null }) {
           {items.map((item, i) => (
             <li key={i} className="flex gap-2.5 text-sm text-muted-foreground leading-relaxed">
               <span
-                className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-muted text-foreground/70 text-[11px] font-semibold inline-flex items-center justify-center tabular-nums"
+                className="shrink-0 mt-0.5 w-5 h-5 rounded-full bg-muted text-foreground/70 text-xs font-semibold inline-flex items-center justify-center tabular-nums"
                 aria-hidden="true"
               >
                 {i + 1}

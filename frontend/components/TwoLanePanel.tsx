@@ -82,7 +82,7 @@ export function TwoLanePanel({
         ))}
       </div>
 
-      <p className="text-[11px] text-muted-foreground/60">
+      <p className="text-xs text-muted-foreground">
         Neither side is the site&apos;s position. They are here so you can weigh the bill yourself.
       </p>
 

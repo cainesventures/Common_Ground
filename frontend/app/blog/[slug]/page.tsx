@@ -148,7 +148,7 @@ export default async function BlogPostPage({
                     </span>
                     <span className="shrink-0 flex items-center gap-2">
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badgeClass}`}
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
                       >
                         {b.outcome}
                       </span>

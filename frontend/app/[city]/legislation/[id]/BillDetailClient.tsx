@@ -440,87 +440,84 @@ function LapsedWithoutVoteNotice({ term }: { term?: { start: number; end: number
   )
 }
 
-const STATUS_STEPS = [
-  { key: 'introduced',      label: 'Introduced' },
-  { key: 'in_committee',    label: 'In Committee' },
-  { key: 'signed_into_law', label: 'Signed into Law' },
-] as const
+const STATUS_STEPS = ['Introduced', 'In Committee', 'Passed Council', 'Signed into Law'] as const
 
-type StepKey = typeof STATUS_STEPS[number]['key']
+// Every status the data uses, mapped to a step. This used to list only three
+// keys and send anything else to step 0, so a bill awaiting the Mayor's
+// signature displayed as "Introduced".
+const STATUS_TO_STEP: Record<string, number> = {
+  introduced: 0, pending: 0,
+  in_committee: 1, active: 1,
+  passed: 2, passed_chamber: 2, passed_both: 2, awaiting_mayor: 2,
+  signed: 3, signed_into_law: 3,
+}
 
 const TERMINAL_FAIL: Record<string, string> = {
   failed: 'Failed',
   vetoed: 'Vetoed',
+  lapsed: 'Lapsed',
 }
 
+/**
+ * Colors come from theme tokens, not hex. The old version hardcoded a white
+ * circle and #111 labels, which in dark mode made the current step's label
+ * invisible and painted every future step as a solid white "done" disc.
+ */
 function StatusTimeline({ status }: { status: string }) {
   const failLabel = TERMINAL_FAIL[status]
-  const activeIdx = STATUS_STEPS.findIndex((s) => s.key === status)
-  // Unknown non-terminal status — treat as introduced (index 0)
-  const effectiveIdx = activeIdx >= 0 ? activeIdx : (failLabel ? -1 : 0)
-
-  // primary blue used by this app
-  const PRIMARY = 'hsl(221.2 83.2% 53.3%)'
-  const GRAY    = '#d1d5db'
-  const FADED   = '#e5e7eb'
+  const currentIdx = failLabel ? -1 : (STATUS_TO_STEP[status] ?? 0)
+  const labels = STATUS_STEPS.map((s, i) =>
+    i === 2 && status === 'awaiting_mayor' ? 'Awaiting Mayor' : s)
+  const nowLabel = failLabel ?? labels[currentIdx]
 
   return (
-    <div className="flex items-center w-full py-1">
-      {STATUS_STEPS.map((step, i) => {
-        const isPast    = !failLabel && effectiveIdx > i
-        const isCurrent = !failLabel && effectiveIdx === i
-        const active    = isPast || isCurrent
-
-        return (
-          <div key={step.key} className="flex items-center flex-1 min-w-0">
-            <div className="flex flex-col items-center shrink-0">
-              <div
-                className="w-5 h-5 rounded-full border-2 flex items-center justify-center"
-                style={{
-                  backgroundColor: active ? PRIMARY : 'white',
-                  borderColor:     active ? PRIMARY : GRAY,
-                }}
-              >
-                {isPast && (
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={3}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-                {isCurrent && <div className="w-2 h-2 rounded-full bg-white" />}
+    <div className="w-full py-1">
+      <p className="sr-only">
+        Status: {nowLabel}{failLabel ? '' : `, step ${currentIdx + 1} of ${STATUS_STEPS.length}`}
+      </p>
+      <ol className="flex items-start w-full" aria-hidden="true">
+        {labels.map((label, i) => {
+          const isPast    = !failLabel && currentIdx > i
+          const isCurrent = !failLabel && currentIdx === i
+          return (
+            <li key={label} className="flex items-start flex-1 min-w-0 last:flex-none">
+              <div className="flex flex-col items-center shrink-0 w-16 sm:w-24">
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                  isPast || isCurrent ? 'bg-primary border-primary' : 'bg-background border-input'
+                } ${isCurrent ? 'ring-4 ring-primary/20' : ''}`}>
+                  {isPast && (
+                    <svg className="w-3 h-3 text-primary-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {isCurrent && <div className="w-2 h-2 rounded-full bg-primary-foreground" />}
+                </div>
+                <span className={`text-xs mt-1 text-center leading-tight ${
+                  isCurrent ? 'font-semibold text-foreground' : isPast ? 'text-foreground' : 'text-muted-foreground'
+                }`}>
+                  {label}
+                </span>
+                {isCurrent && <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-primary mt-0.5">Now</span>}
               </div>
-              <span
-                className="text-[10px] mt-1 whitespace-nowrap"
-                style={{ color: active ? '#111' : '#9ca3af', fontWeight: active ? 600 : 400 }}
-              >
-                {step.label}
-              </span>
+              {(i < labels.length - 1 || failLabel) && (
+                <div className={`flex-1 h-0.5 mt-2.5 -mx-4 sm:-mx-6 ${isPast ? 'bg-primary' : 'bg-border'}`} />
+              )}
+            </li>
+          )
+        })}
+        {failLabel && (
+          <li className="flex items-start shrink-0">
+            <div className="flex flex-col items-center w-16 sm:w-24">
+              <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center bg-destructive border-destructive">
+                <svg className="w-3 h-3 text-destructive-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </div>
+              <span className="text-xs mt-1 font-semibold text-destructive">{failLabel}</span>
             </div>
-            {i < STATUS_STEPS.length - 1 && (
-              <div
-                className="flex-1 h-0.5 mx-1"
-                style={{ backgroundColor: isPast ? PRIMARY : FADED, marginTop: '-10px' }}
-              />
-            )}
-          </div>
-        )
-      })}
-      {/* Terminal failure node */}
-      {failLabel && (
-        <div className="flex items-center flex-1 min-w-0">
-          <div className="flex-1 h-0.5 mx-1 mt-[-10px]" style={{ backgroundColor: FADED }} />
-          <div className="flex flex-col items-center shrink-0">
-            <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center"
-              style={{ backgroundColor: '#ef4444', borderColor: '#ef4444' }}>
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="white" strokeWidth={3}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </div>
-            <span className="text-[10px] mt-1 whitespace-nowrap font-medium" style={{ color: '#ef4444' }}>
-              {failLabel}
-            </span>
-          </div>
-        </div>
-      )}
+          </li>
+        )}
+      </ol>
     </div>
   )
 }
@@ -586,7 +583,7 @@ function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[
               )}
             </div>
             {b.impact_level && (
-              <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full capitalize font-medium mt-0.5 ${IMPACT_COLORS[b.impact_level] ?? ''}`}>{b.impact_level}</span>
+              <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full capitalize font-medium mt-0.5 ${IMPACT_COLORS[b.impact_level] ?? ''}`}>{b.impact_level}</span>
             )}
           </Link>
         ))}
@@ -885,8 +882,8 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
             {readableTitle
               ? <>
                   <h1 ref={titleRef} className="text-2xl font-bold leading-snug">{readableTitle}</h1>
-                  <p className="text-xs text-muted-foreground/70 mt-1 leading-snug">
-                    <span className="uppercase tracking-wide font-medium text-[10px] mr-1">Official:</span>
+                  <p className="text-xs text-muted-foreground mt-1 leading-snug">
+                    <span className="uppercase tracking-wide font-medium text-xs mr-1">Official:</span>
                     {leg.title}
                   </p>
                 </>
@@ -1065,7 +1062,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
             >
               {tab.label}
               {badge !== null && (
-                <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${
                   activeTab === tab.key
                     ? 'bg-primary/10 text-primary'
                     : 'bg-muted text-muted-foreground'
@@ -1132,7 +1129,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
                         </li>
                       ))}
                     </ul>
-                    <p className="text-[10px] text-muted-foreground/50 pt-0.5">{section.source}</p>
+                    <p className="text-xs text-muted-foreground pt-0.5">{section.source}</p>
                   </div>
                 ))}
               </div>
@@ -1363,12 +1360,12 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: B
                     <span className="flex items-center justify-between">
                       <span>{running === key ? runningLabel : label}</span>
                       {disabled && disabledReason && (
-                        <span className="text-[10px] text-muted-foreground font-normal">{disabledReason}</span>
+                        <span className="text-xs text-muted-foreground font-normal">{disabledReason}</span>
                       )}
                     </span>
                   </button>
                   {result && (
-                    <p className={`text-[10px] px-1 mt-0.5 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
+                    <p className={`text-xs px-1 mt-0.5 ${result.ok ? 'text-green-600' : 'text-destructive'}`}>
                       {result.message}
                     </p>
                   )}
@@ -1440,7 +1437,7 @@ function VoteSentimentBar({ voteCounts }: { voteCounts: VoteTally }) {
         {totals.neutral > 0 && <div className="bg-gray-400 transition-all"  style={{ width: `${pct(totals.neutral)}%` }} />}
         {totals.oppose  > 0 && <div className="bg-red-500 transition-all"   style={{ width: `${pct(totals.oppose)}%`  }} />}
       </div>
-      <p className="text-[10px] text-muted-foreground/50">
+      <p className="text-xs text-muted-foreground">
         {total} {total === 1 ? 'vote' : 'votes'} from signed-in readers
       </p>
     </div>
@@ -1450,9 +1447,9 @@ function VoteSentimentBar({ voteCounts }: { voteCounts: VoteTally }) {
 // ── Vote Panel ────────────────────────────────────────────────────────────────
 
 const VOTE_OPTIONS = [
-  { value: 'support', label: 'Support', active: 'bg-green-500 text-white border-green-500', inactive: 'hover:border-green-400 hover:text-green-700' },
-  { value: 'neutral', label: 'Neutral', active: 'bg-gray-500 text-white border-gray-500', inactive: 'hover:border-gray-400 hover:text-gray-700' },
-  { value: 'oppose',  label: 'Oppose',  active: 'bg-red-500 text-white border-red-500',   inactive: 'hover:border-red-400 hover:text-red-700' },
+  { value: 'support', label: 'Support', active: 'bg-green-700 text-white border-green-700', inactive: 'hover:border-green-400 hover:text-green-700' },
+  { value: 'neutral', label: 'Neutral', active: 'bg-gray-600 text-white border-gray-600', inactive: 'hover:border-gray-400 hover:text-gray-700' },
+  { value: 'oppose',  label: 'Oppose',  active: 'bg-red-600 text-white border-red-600',   inactive: 'hover:border-red-400 hover:text-red-700' },
 ] as const
 
 function _getOrCreateVoterToken(): string {
@@ -1518,6 +1515,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
       {showLogin && (
         <LoginModal
           onClose={() => setShowLogin(false)}
+          title="Sign in to vote"
           reason="Sign in to vote on legislation and see how your community stands."
         />
       )}
@@ -1542,6 +1540,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
               <button
                 key={value}
                 onClick={() => handleVote(value)}
+                aria-pressed={isSelected}
                 disabled={loading}
                 className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-sm font-medium transition-all ${
                   isSelected ? active : `border-border text-muted-foreground ${inactive}`

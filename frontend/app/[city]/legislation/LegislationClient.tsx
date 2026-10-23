@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { FacetsResponse } from '@/lib/api-types'
 import type { Bill } from '@/lib/types'
-import Link from 'next/link'
 import { useParams } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { api } from '@/lib/api'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { MultiSelect } from '@/components/ui/multi-select'
@@ -264,12 +264,27 @@ export default function LegislationClient({
     setAnalyzedOnly(true); setQuery(''); setQueryInput('')
   }
 
-  // Close drawer on Escape
+  // The drawer is a modal: Escape closes it, the page behind it stops
+  // scrolling, focus moves into it and goes back to the Filters button after.
+  // Before, the page scrolled underneath and focus stayed behind the backdrop.
+  const filtersButtonRef = useRef<HTMLButtonElement>(null)
+  const drawerRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (!mobileFiltersOpen) return
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setMobileFiltersOpen(false) }
+    const handler = (e: KeyboardEvent) => {
+      // A dropdown inside the drawer handles its own Escape first.
+      if (e.key === 'Escape' && !e.defaultPrevented) setMobileFiltersOpen(false)
+    }
     document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    drawerRef.current?.focus()
+    const opener = filtersButtonRef.current
+    return () => {
+      document.removeEventListener('keydown', handler)
+      document.body.style.overflow = prevOverflow
+      opener?.focus()
+    }
   }, [mobileFiltersOpen])
 
   // Count active drawer filters (excludes search query)
@@ -286,6 +301,15 @@ export default function LegislationClient({
   ].filter(Boolean).length
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  // Once facets load, offer only statuses that have bills (plus any already
+  // selected). Listing Awaiting Mayor, Active, Passed and Signed with no count
+  // led readers to filters that could only return "0 bills".
+  const statusOptions = STATUSES.flatMap(st => {
+    const fc = facets.statuses.find(fs => fs.value === st.value)
+    if (fc) return [{ ...st, label: `${st.label} (${fc.count.toLocaleString()})` }]
+    return facets.statuses.length === 0 || selectedStatuses.includes(st.value) ? [st] : []
+  })
 
   const filterParts: string[] = []
   if (selectedLevel  && selectedLevel !== 'local') filterParts.push(selectedLevel)
@@ -378,7 +402,7 @@ export default function LegislationClient({
                   aria-label="Search bills"
                   className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
-                <button type="submit" disabled={loading} className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 h-8 text-sm font-semibold bg-primary text-primary-foreground hover:bg-emerald-600 hover:border-emerald-500 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors">
+                <button type="submit" disabled={loading} className="inline-flex items-center justify-center gap-1.5 rounded-md px-4 h-8 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors">
                   <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" /></svg>
                   Search
                 </button>
@@ -394,12 +418,12 @@ export default function LegislationClient({
               )}
               <button
                 onClick={() => setFiltersExpanded(true)}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-input text-xs font-medium text-muted-foreground hover:bg-amber-50 hover:border-amber-400 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-colors"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3 h-8 rounded-md border border-input text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M10 12h4" /></svg>
                 Filters
                 {drawerFilterCount > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">{drawerFilterCount}</span>
+                  <span className="w-4 h-4 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">{drawerFilterCount}</span>
                 )}
               </button>
             </div>
@@ -408,21 +432,24 @@ export default function LegislationClient({
 
         {/* Mobile: search always visible + toggle button */}
         <div className="flex gap-2 sm:hidden">
-          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1">
+          <form onSubmit={(e) => { e.preventDefault(); setPage(1); setQuery(queryInput); if (queryInput.trim()) posthog?.capture('search_performed', { query: queryInput.trim() }) }} className="flex gap-2 flex-1 min-w-0">
             <input
               type="text"
               value={queryInput}
               onChange={(e) => setQueryInput(e.target.value)}
               placeholder="Search bills…"
               aria-label="Search bills"
-              className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
-            <button type="submit" disabled={loading} className="inline-flex items-center justify-center rounded-md px-4 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <button type="submit" disabled={loading} className="shrink-0 inline-flex items-center justify-center rounded-md px-3 h-9 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
               Search
             </button>
           </form>
           <button
+            ref={filtersButtonRef}
             onClick={() => setMobileFiltersOpen((v) => !v)}
+            aria-expanded={mobileFiltersOpen}
+            aria-haspopup="dialog"
             className="relative inline-flex items-center gap-1.5 px-3 h-9 rounded-md border text-sm font-medium hover:bg-muted transition-colors shrink-0"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -430,7 +457,7 @@ export default function LegislationClient({
             </svg>
             Filters
             {drawerFilterCount > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-xs flex items-center justify-center font-bold">
                 {drawerFilterCount}
               </span>
             )}
@@ -453,7 +480,7 @@ export default function LegislationClient({
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md px-5 h-9 text-sm font-semibold bg-primary text-primary-foreground hover:bg-emerald-600 hover:border-emerald-500 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 rounded-md px-5 h-9 text-sm font-semibold bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 shrink-0 border-2 border-primary/60 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 15.803 7.5 7.5 0 0015.803 15.803z" />
@@ -463,7 +490,7 @@ export default function LegislationClient({
             <button
               onClick={() => setFiltersExpanded(false)}
               title="Collapse filters"
-              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-md border border-input text-muted-foreground hover:bg-amber-50 hover:border-amber-400 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-colors"
+              className="shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-md border border-input text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" /></svg>
             </button>
@@ -523,10 +550,7 @@ export default function LegislationClient({
               />
             )}
             <MultiSelect
-              options={STATUSES.map(s => {
-                const f = facets.statuses.find(fs => fs.value === s.value)
-                return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
-              })}
+              options={statusOptions}
               selected={selectedStatuses}
               onChange={(v) => reset({ statuses: v })}
               placeholder="All Statuses"
@@ -549,6 +573,7 @@ export default function LegislationClient({
               <span className="text-xs text-muted-foreground mr-1">Impact:</span>
               <button
                 onClick={() => reset({ impact: '' })}
+                aria-pressed={!selectedImpact}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                   !selectedImpact
                     ? 'bg-foreground text-background border-foreground'
@@ -559,14 +584,15 @@ export default function LegislationClient({
                 <button
                   key={imp}
                   onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                  aria-pressed={selectedImpact === imp}
                   className={`px-2.5 py-1 rounded-full text-xs font-medium capitalize border transition-colors ${
                     selectedImpact === imp
-                      ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
-                      : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
-                      :                   'bg-green-500 text-white border-green-500'
-                      : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400'
-                      : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400'
-                      :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400'
+                      ? imp === 'high'   ? 'bg-red-600 text-white border-red-600'
+                      : imp === 'medium' ? 'bg-amber-700 text-white border-amber-700'
+                      :                   'bg-green-700 text-white border-green-700'
+                      : imp === 'high'   ? 'bg-background text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 hover:bg-red-50 hover:border-red-400'
+                      : imp === 'medium' ? 'bg-background text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 hover:border-amber-400'
+                      :                   'bg-background text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 hover:bg-green-50 hover:border-green-400'
                   }`}
                 >
                   {imp}
@@ -616,22 +642,29 @@ export default function LegislationClient({
       </div>
 
       {/* ── Mobile Filter Drawer ── */}
-      {mobileFiltersOpen && (
-        <div className="sm:hidden fixed inset-0 z-50 flex flex-col justify-end">
+      {mobileFiltersOpen && createPortal(
+        <div className="sm:hidden fixed inset-0 z-[60] flex flex-col justify-end">
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setMobileFiltersOpen(false)}
           />
           {/* Sheet */}
-          <div className="relative bg-background rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col">
+          <div
+            ref={drawerRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="filters-drawer-title"
+            tabIndex={-1}
+            className="relative bg-background rounded-t-2xl shadow-xl max-h-[85vh] flex flex-col pb-[env(safe-area-inset-bottom)] focus:outline-none"
+          >
             {/* Drag handle */}
             <div className="flex justify-center pt-3 pb-1 shrink-0">
               <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
             </div>
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
-              <span className="font-semibold text-sm">Filters</span>
+              <h2 id="filters-drawer-title" className="font-semibold text-sm">Filters</h2>
               <div className="flex items-center gap-4">
                 {drawerFilterCount > 0 && (
                   <button
@@ -727,10 +760,7 @@ export default function LegislationClient({
               <div className="space-y-2">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
                 <MultiSelect
-                  options={STATUSES.map(s => {
-                    const f = facets.statuses.find(fs => fs.value === s.value)
-                    return f ? { ...s, label: `${s.label} (${f.count.toLocaleString()})` } : s
-                  })}
+                  options={statusOptions}
                   selected={selectedStatuses}
                   onChange={(v) => reset({ statuses: v })}
                   placeholder="All Statuses"
@@ -758,6 +788,7 @@ export default function LegislationClient({
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => reset({ impact: '' })}
+                aria-pressed={!selectedImpact}
                     className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
                       !selectedImpact
                         ? 'bg-foreground text-background border-foreground'
@@ -768,14 +799,15 @@ export default function LegislationClient({
                     <button
                       key={imp}
                       onClick={() => reset({ impact: selectedImpact === imp ? '' : imp })}
+                  aria-pressed={selectedImpact === imp}
                       className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize border transition-colors ${
                         selectedImpact === imp
-                          ? imp === 'high'   ? 'bg-red-500 text-white border-red-500'
-                          : imp === 'medium' ? 'bg-amber-500 text-white border-amber-500'
-                          :                   'bg-green-500 text-white border-green-500'
-                          : imp === 'high'   ? 'bg-background text-red-600 border-red-300 hover:bg-red-50 hover:border-red-400 dark:hover:bg-red-900/20'
-                          : imp === 'medium' ? 'bg-background text-amber-600 border-amber-300 hover:bg-amber-50 hover:border-amber-400 dark:hover:bg-amber-900/20'
-                          :                   'bg-background text-green-600 border-green-300 hover:bg-green-50 hover:border-green-400 dark:hover:bg-green-900/20'
+                          ? imp === 'high'   ? 'bg-red-600 text-white border-red-600'
+                          : imp === 'medium' ? 'bg-amber-700 text-white border-amber-700'
+                          :                   'bg-green-700 text-white border-green-700'
+                          : imp === 'high'   ? 'bg-background text-red-700 dark:text-red-400 border-red-300 dark:border-red-800 hover:bg-red-50 hover:border-red-400 dark:hover:bg-red-900/20'
+                          : imp === 'medium' ? 'bg-background text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800 hover:bg-amber-50 hover:border-amber-400 dark:hover:bg-amber-900/20'
+                          :                   'bg-background text-green-700 dark:text-green-400 border-green-300 dark:border-green-800 hover:bg-green-50 hover:border-green-400 dark:hover:bg-green-900/20'
                       }`}
                     >
                       {imp}
@@ -818,7 +850,8 @@ export default function LegislationClient({
 
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
 
@@ -867,12 +900,9 @@ export default function LegislationClient({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.966 8.966 0 00-6 2.292m0-14.25v14.25" />
               </svg>
               <div className="space-y-1">
-                <p className="text-sm font-semibold">No legislation yet</p>
-                <p className="text-sm text-muted-foreground">Bills will appear here once they&apos;ve been ingested.</p>
+                <p className="text-sm font-semibold">No bills to show right now</p>
+                <p className="text-sm text-muted-foreground">Please check back shortly.</p>
               </div>
-              <Link href="/admin" className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline font-medium">
-                Go to admin panel →
-              </Link>
             </>
           )}
         </div>
@@ -893,7 +923,7 @@ export default function LegislationClient({
                 <button
                   onClick={() => goToPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                  className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted transition-colors shrink-0"
                 >
                   ← Previous
                 </button>
@@ -922,7 +952,7 @@ export default function LegislationClient({
                   <button
                     onClick={() => goToPage(Math.min(totalPages, page + 1))}
                     disabled={page === totalPages}
-                    className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                    className="px-3 py-1.5 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted transition-colors shrink-0"
                   >
                     Next →
                   </button>
@@ -943,7 +973,7 @@ export default function LegislationClient({
                 <button
                   onClick={() => goToPage(Math.max(1, page - 1))}
                   disabled={page === 1}
-                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted transition-colors shrink-0"
                 >
                   ← Previous
                 </button>
@@ -963,7 +993,7 @@ export default function LegislationClient({
                 <button
                   onClick={() => goToPage(Math.min(totalPages, page + 1))}
                   disabled={page === totalPages}
-                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-emerald-50 hover:border-emerald-400 hover:text-emerald-700 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-400 transition-colors shrink-0"
+                  className="px-3 py-1 rounded-md border text-sm font-medium disabled:opacity-40 hover:bg-muted transition-colors shrink-0"
                 >
                   Next →
                 </button>
