@@ -959,7 +959,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
                 title={tracked ? 'Unsave bill' : 'Save bill'}
                 aria-label={tracked ? 'Unsave bill' : 'Save bill'}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5" fill={tracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className={`w-5 h-5 ${tracked ? 'anim-pop' : ''}`} fill={tracked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
                 </svg>
               </button>
@@ -1567,9 +1567,10 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
 
         {total > 0 && (
           <div className="flex h-1.5 rounded-full overflow-hidden gap-px">
-            {counts.support > 0 && <div className="bg-green-500" style={{ width: `${(counts.support / total) * 100}%` }} />}
-            {counts.neutral > 0 && <div className="bg-gray-400"  style={{ width: `${(counts.neutral / total) * 100}%` }} />}
-            {counts.oppose  > 0 && <div className="bg-red-500"   style={{ width: `${(counts.oppose  / total) * 100}%` }} />}
+            {/* Widths animate, so casting a vote visibly moves the tally. */}
+            {counts.support > 0 && <div className="bg-green-500 transition-[width] duration-500 ease-out" style={{ width: `${(counts.support / total) * 100}%` }} />}
+            {counts.neutral > 0 && <div className="bg-gray-400 transition-[width] duration-500 ease-out"  style={{ width: `${(counts.neutral / total) * 100}%` }} />}
+            {counts.oppose  > 0 && <div className="bg-red-500 transition-[width] duration-500 ease-out"   style={{ width: `${(counts.oppose  / total) * 100}%` }} />}
           </div>
         )}
 
