@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useMyDistrict } from '@/lib/my-district'
+import { Term } from '@/components/Term'
 import type { CouncilmemberWithTenure as Member } from '@/lib/types'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -365,7 +366,7 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
 
       {district.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">District Members</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3"><Term id="district_member">District Members</Term></h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {district.map((m) => <MemberCard key={m.id} member={m} highlighted={highlightedId === m.id} />)}
           </div>
@@ -374,7 +375,7 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
 
       {atLarge.length > 0 && (
         <div>
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">At-Large Members</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3"><Term id="at_large">At-Large Members</Term></h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {atLarge.map((m) => <MemberCard key={m.id} member={m} highlighted={highlightedId === m.id} />)}
           </div>

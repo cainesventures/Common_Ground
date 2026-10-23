@@ -186,6 +186,7 @@ def build_core(member_ids: list[str]) -> ElementTree:
         (f"{BASE_URL}/budget",                      "0.8", "monthly"),
         (f"{BASE_URL}/blog",                        "0.7", "weekly"),
         (f"{BASE_URL}/about",                       "0.6", "monthly"),
+        (f"{BASE_URL}/glossary",                    "0.6", "monthly"),
         (f"{BASE_URL}/donate",                      "0.5", "monthly"),
         # /pricing and /legal are thin but public. The genuinely private
         # routes carry NOINDEX in the app and stay out of here.

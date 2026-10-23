@@ -17,6 +17,8 @@ import { CITY } from '@/lib/city'
 import { LoginModal } from '@/components/LoginModal'
 import { ShareBar } from '@/components/ShareBar'
 import { ShareStoryButton } from '@/components/ShareStoryButton'
+import { Term } from '@/components/Term'
+import { STATUS_TERM, billTypeTerm } from '@/lib/civic-glossary'
 import { siteUrl } from '@/lib/site'
 import { useTabs } from '@/lib/use-tabs'
 import type { Bill, Councilmember, DistrictGeoJSON, VoteRecord } from '@/lib/types'
@@ -419,8 +421,8 @@ function LapsedWithoutVoteNotice({ term }: { term?: { start: number; end: number
       </h2>
       <p className="text-sm text-muted-foreground leading-relaxed">
         {term
-          ? `This bill was introduced in the ${term.start}–${term.end} Council term and lapsed when that term ran out. `
-          : 'This bill lapsed when the Council term it was introduced in ran out. '}
+          ? <>This bill was introduced in the {term.start}–{term.end} Council term and <Term id="lapsed">lapsed</Term> when that term ran out. </>
+          : <>This bill <Term id="lapsed">lapsed</Term> when the Council term it was introduced in ran out. </>}
         The public record shows no committee vote and no floor vote at any
         stage, so no member of Council ever went on record for or against it.
       </p>
@@ -863,7 +865,9 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
             {(leg.level ? LEVEL_LABELS[leg.level] : undefined) ?? leg.level}
           </Badge>
           <Badge variant="outline" className={`text-xs ${statusColor}`}>
-            {leg.status ? fmtStatus(leg.status) : ''}
+            {leg.status && STATUS_TERM[leg.status]
+              ? <Term id={STATUS_TERM[leg.status]}>{fmtStatus(leg.status)}</Term>
+              : leg.status ? fmtStatus(leg.status) : ''}
           </Badge>
           {impactColor && (
             <Badge variant="outline" className={`text-xs ${impactColor}`}>
@@ -872,7 +876,9 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           )}
           {leg.bill_type && (
             <Badge variant="outline" className="text-xs capitalize">
-              {leg.bill_type}
+              {billTypeTerm(leg.bill_type)
+                ? <Term id={billTypeTerm(leg.bill_type)!}>{leg.bill_type}</Term>
+                : leg.bill_type}
             </Badge>
           )}
           <span className="text-sm text-muted-foreground">{leg.bill_number}</span>
@@ -975,7 +981,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         )}
         {leg.committee && (
           <p className="text-sm text-muted-foreground">
-            Committee: {leg.committee}
+            <Term id="in_committee">Committee</Term>: {leg.committee}
           </p>
         )}
 
