@@ -27,11 +27,6 @@ export function Navbar() {
   const [adminMode, setAdminMode] = useAdminMode()
   const pathname = usePathname()
   const menuRef = useRef<HTMLDivElement>(null)
-  // Shortcut hint follows the platform; set after mount so SSR stays stable.
-  const [shortcut, setShortcut] = useState('⌘K')
-  useEffect(() => {
-    if (!/Mac|iPhone|iPad/i.test(navigator.userAgent)) setShortcut('Ctrl K')
-  }, [])
 
   // Close mobile menu on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
@@ -157,15 +152,13 @@ export function Navbar() {
             aria-label="Search the site"
             aria-keyshortcuts="Control+K Meta+K /"
             // Below xl: an icon, like the theme toggle. At xl: a field-like
-            // pill that matches the Donate button's height and border, with
-            // the shortcut as one muted chip (it used to wrap to two lines).
-            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 xl:w-44 xl:border xl:border-foreground/20 xl:pl-2.5 xl:pr-1.5"
+            // pill matching the Donate button's height and border, set apart
+            // from it by lg:ml-4. The keyboard shortcut still works; it is
+            // listed in the palette's footer rather than crowding this box.
+            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 lg:ml-4 xl:w-40 xl:border xl:border-foreground/20 xl:px-3"
           >
             <Search className="w-4 h-4 shrink-0" aria-hidden="true" />
-            <span className="hidden xl:inline flex-1 text-left">Search</span>
-            <kbd className="hidden xl:inline-flex items-center whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-sans text-[0.7rem] font-medium leading-none text-muted-foreground">
-              {shortcut}
-            </kbd>
+            <span className="hidden xl:inline">Search</span>
           </button>
           <ThemeToggle />
 
