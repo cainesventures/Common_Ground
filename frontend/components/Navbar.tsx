@@ -10,6 +10,8 @@ import { api } from '@/lib/api'
 import { getToken, clearToken, startGoogleSignIn } from '@/lib/auth'
 import { useAdminMode } from '@/lib/admin-mode'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import { openCommandPalette } from '@/components/CommandPalette'
+import { Search } from 'lucide-react'
 import type { AuthUser as User } from '@/lib/types'
 
 function avatarSrc(user: User): string {
@@ -25,6 +27,11 @@ export function Navbar() {
   const [adminMode, setAdminMode] = useAdminMode()
   const pathname = usePathname()
   const menuRef = useRef<HTMLDivElement>(null)
+  // Shortcut hint follows the platform; set after mount so SSR stays stable.
+  const [shortcut, setShortcut] = useState('⌘K')
+  useEffect(() => {
+    if (!/Mac|iPhone|iPad/i.test(navigator.userAgent)) setShortcut('Ctrl K')
+  }, [])
 
   // Close mobile menu on route change
   useEffect(() => { setMobileOpen(false) }, [pathname])
@@ -144,6 +151,16 @@ export function Navbar() {
         <div className="flex items-center gap-3">
           {/* Outside the md-only auth block so the toggle is reachable on mobile
               too. Before this it existed only inside /profile, behind sign-in. */}
+          <button
+            onClick={openCommandPalette}
+            aria-label="Search the site"
+            aria-keyshortcuts="Control+K Meta+K /"
+            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 lg:border lg:pl-2.5 lg:pr-1.5"
+          >
+            <Search className="w-4 h-4" aria-hidden="true" />
+            <span className="hidden lg:inline">Search</span>
+            <kbd className="hidden lg:inline text-[0.7rem] border rounded px-1 py-0.5 leading-none">{shortcut}</kbd>
+          </button>
           <ThemeToggle />
 
           {/* Auth — hidden on mobile to keep nav clean */}

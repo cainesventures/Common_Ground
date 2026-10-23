@@ -3,6 +3,7 @@ import { Geist } from 'next/font/google'
 import './globals.css'
 import { Navbar } from '@/components/Navbar'
 import { Footer } from '@/components/Footer'
+import { CommandPalette } from '@/components/CommandPalette'
 import { PipelineProvider } from '@/app/contexts/pipeline-context'
 import { Toaster } from 'sonner'
 import { PostHogProvider } from '@/components/PostHogProvider'
@@ -96,6 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
             <Footer />
             <Toaster richColors closeButton position="bottom-right" />
+            <CommandPalette />
           </PipelineProvider>
         </PostHogProvider>
       </body>
