@@ -60,10 +60,10 @@ def _check_endpoint(endpoint: str) -> None:
 
 @router.get("/vapid-public-key")
 async def vapid_public_key():
+    # "Not configured" is a state, not a failure: a 503 here was reported to
+    # Sentry on every page view of a live bill. The bell hides when key is null.
     key = webpush.public_key()
-    if not key:
-        raise HTTPException(status_code=503, detail="Notifications are not set up")
-    return {"key": key}
+    return {"key": key, "enabled": bool(key)}
 
 
 @router.post("/watch")

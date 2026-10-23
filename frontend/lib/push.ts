@@ -32,6 +32,17 @@ async function registration(): Promise<ServiceWorkerRegistration> {
   return existing ?? navigator.serviceWorker.register('/sw.js', { scope: '/' })
 }
 
+let keyPromise: Promise<string | null> | null = null
+
+/** The server's VAPID key, or null when alerts are switched off. Fetched once. */
+export function serverKey(): Promise<string | null> {
+  keyPromise ??= fetch('/api/notifications/vapid-public-key')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((d) => d?.key ?? null)
+    .catch(() => null)
+  return keyPromise
+}
+
 /** The current subscription, or null. Never prompts. */
 export async function currentSubscription(): Promise<PushSubscription | null> {
   if (pushSupport() !== 'supported') return null
@@ -47,9 +58,8 @@ export async function followBill(billId: string): Promise<'on' | 'denied'> {
   await navigator.serviceWorker.ready
   let sub = await reg.pushManager.getSubscription()
   if (!sub) {
-    const res = await fetch('/api/notifications/vapid-public-key')
-    if (!res.ok) throw new Error('Notifications are not set up yet')
-    const { key } = await res.json()
+    const key = await serverKey()
+    if (!key) throw new Error('Notifications are not set up yet')
     sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) })
   }
   const res = await fetch('/api/notifications/watch', {

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Bell, BellRing, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { usePostHog } from 'posthog-js/react'
-import { followBill, isFollowing, pushSupport, unfollowBill, type PushSupport } from '@/lib/push'
+import { followBill, isFollowing, pushSupport, serverKey, unfollowBill, type PushSupport } from '@/lib/push'
 
 /**
  * "Notify me" for one bill: a reminder the day before a hearing, and an alert
@@ -19,8 +19,13 @@ export function NotifyButton({ billId, compact = false }: { billId: string; comp
 
   useEffect(() => {
     const s = pushSupport()
-    setSupport(s)
-    if (s === 'supported') isFollowing(billId).then(setOn).catch(() => {})
+    if (s === 'unsupported') return
+    // Stay hidden while alerts are switched off on the server.
+    serverKey().then((key) => {
+      if (!key) return
+      setSupport(s)
+      if (s === 'supported') isFollowing(billId).then(setOn).catch(() => {})
+    })
   }, [billId])
 
   if (support === 'unsupported') return null
