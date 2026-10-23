@@ -44,6 +44,16 @@ LOADED = re.compile(
     re.I,
 )
 
+# A pending bill described as though it were already law ("Parking Lots Now
+# Mandated To Install Video Surveillance Under New City Ordinance", on a bill
+# still in committee).
+_ACTIVE = {"introduced", "in_committee", "awaiting_mayor"}
+_READS_AS_LAW = re.compile(
+    r"\b(now (?:mandated|required|banned|prohibited|must)|takes? effect|took effect|"
+    r"under (?:a )?new (?:city )?(?:ordinance|law)|new law|is now law|signed into law)\b",
+    re.I,
+)
+
 _MONEY = re.compile(r"\$\s?(\d[\d,]*(?:\.\d+)?)\s*(million|billion|thousand|[mbk])?\b", re.I)
 _SCALE = {"thousand": 1e3, "k": 1e3, "million": 1e6, "m": 1e6, "billion": 1e9, "b": 1e9}
 
@@ -81,7 +91,7 @@ def loaded_words(text: str | None) -> list[str]:
 
 
 def headline_problems(headline: str | None, source: str | None,
-                      summary: str | None = None) -> list[str]:
+                      summary: str | None = None, status: str | None = None) -> list[str]:
     """Human-readable reasons a headline should not ship. Empty list = fine.
 
     `source` is the bill's own text (title, description, full text). `summary`
@@ -90,6 +100,8 @@ def headline_problems(headline: str | None, source: str | None,
     treated as a contradiction.
     """
     problems = []
+    if status in _ACTIVE and _READS_AS_LAW.search(headline or ""):
+        problems.append("describes a bill that is still pending as if it were already law")
     places = unsupported_places(headline, source)
     if places:
         problems.append(f"names {', '.join(places)}, which the bill text never mentions")

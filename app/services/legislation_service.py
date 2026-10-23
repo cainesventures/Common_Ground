@@ -224,7 +224,7 @@ def _ai_headline(bill, provider) -> str:
         # the output and give it one retry that names the specific problem.
         from app.services.headline_checks import headline_problems
         source = " ".join(filter(None, [bill.title, bill.description, bill.full_text]))
-        problems = headline_problems(result, source, bill.summary)
+        problems = headline_problems(result, source, bill.summary, bill.status)
         if problems:
             retry = (
                 f"{text}\n\nA previous headline was rejected: \"{result}\". It "

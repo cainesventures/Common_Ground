@@ -331,7 +331,7 @@ def main() -> int:
             .order_by(Legislation.introduced_date.desc())
             .all()
         )
-        targets = [b for b in candidates if headline_problems(b.headline, bill_source(b), b.summary)]
+        targets = [b for b in candidates if headline_problems(b.headline, bill_source(b), b.summary, b.status)]
         log.info("%d bills with a headline; %d fail the quality checks.",
                  len(candidates), len(targets))
     else:
@@ -453,7 +453,7 @@ def main() -> int:
                 skipped += 1
                 continue
 
-            still = headline_problems(new, bill_source(bill), bill.summary)
+            still = headline_problems(new, bill_source(bill), bill.summary, bill.status)
             if still:
                 log.warning("[%d/%d] %s — regenerated headline still %s, not saving: %s",
                             i, len(pending), bill.bill_number, "; ".join(still), new)

@@ -35,3 +35,10 @@ def test_best_title_repairs_grid_truncation_from_full_text():
 def test_best_title_never_replaces_a_different_title():
     assert best_title("A zoning bill", "A completely different bill title", None) == "A zoning bill"
     assert best_title(None, "Fresh title", None) == "Fresh title"
+
+
+def test_pending_bill_written_as_law_is_flagged():
+    h = "Parking Lots Now Mandated To Install Video Surveillance Under New City Ordinance"
+    assert headline_problems(h, "parking lots", status="in_committee") != []
+    # The same words are fine once it is law.
+    assert headline_problems(h, "parking lots", status="signed_into_law") == []

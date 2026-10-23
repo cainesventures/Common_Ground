@@ -1,5 +1,6 @@
 import { ThumbsUp, ThumbsDown } from 'lucide-react'
 import { TwoLaneSeen } from './TwoLaneSeen'
+import { ShareStoryButton } from './ShareStoryButton'
 
 /**
  * The case for and the case against, side by side.
@@ -82,9 +83,12 @@ export function TwoLanePanel({
         ))}
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Neither side is the site&apos;s position. They are here so you can weigh the bill yourself.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-xs text-muted-foreground">
+          Neither side is the site&apos;s position. They are here so you can weigh the bill yourself.
+        </p>
+        <ShareStoryButton billId={billId} />
+      </div>
 
       {/* Last, so the event means "read to the end of both cases". */}
       <TwoLaneSeen billId={billId} />

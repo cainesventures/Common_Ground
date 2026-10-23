@@ -16,6 +16,7 @@ import { fmtStatus } from '@/lib/utils'
 import { CITY } from '@/lib/city'
 import { LoginModal } from '@/components/LoginModal'
 import { ShareBar } from '@/components/ShareBar'
+import { ShareStoryButton } from '@/components/ShareStoryButton'
 import { siteUrl } from '@/lib/site'
 import { useTabs } from '@/lib/use-tabs'
 import type { Bill, Councilmember, DistrictGeoJSON, VoteRecord } from '@/lib/types'
@@ -1223,13 +1224,14 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         icon was the only option anywhere, which left the dynamic OG image for
         this page with essentially no way of being used.
       */}
-      <div className="border-t pt-5">
+      <div className="border-t pt-5 space-y-3">
         <ShareBar
           url={shareUrl}
           title={leg.plain_title || leg.headline || leg.title || `Bill ${leg.bill_number ?? ''}`}
           event="bill_shared"
           eventProps={{ bill_id: id }}
         />
+        <ShareStoryButton billId={id} billNumber={leg.bill_number} label="Share as an image for stories" />
       </div>
 
       {/* Admin floating panel — always visible */}

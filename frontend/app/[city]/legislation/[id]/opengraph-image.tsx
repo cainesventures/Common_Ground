@@ -28,6 +28,8 @@ export default async function OGImage({ params }: { params: Promise<{ city: stri
   let status = ''
   let hearingDate = ''
   let summary = ''
+  let caseFor = ''
+  let caseAgainst = ''
 
   try {
     const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`)
@@ -44,6 +46,10 @@ export default async function OGImage({ params }: { params: Promise<{ city: stri
       impactLevel = bill?.impact_level ?? ''
       status = bill?.status ?? ''
       summary = bill?.summary ? bill.summary.slice(0, 180) : ''
+      if (bill?.two_lane_state === 'argued' && bill?.case_for && bill?.case_against) {
+        caseFor = bill.case_for
+        caseAgainst = bill.case_against
+      }
       if (bill?.next_hearing_date) {
         hearingDate = new Date(bill.next_hearing_date).toLocaleDateString('en-US', {
           month: 'short', day: 'numeric', year: 'numeric',
@@ -99,7 +105,20 @@ export default async function OGImage({ params }: { params: Promise<{ city: stri
             {title.length > 120 ? title.slice(0, 117) + '…' : title}
           </div>
 
-          {summary && (
+          {/* An argued bill previews as both sides, at equal weight, so a link
+              dropped in a group chat already shows it is not one-sided. */}
+          {caseFor ? (
+            <div style={{ display: 'flex', gap: '20px' }}>
+              {[['The case for', caseFor, '#047857', '#ecfdf5'], ['The case against', caseAgainst, '#be123c', '#fff1f2']].map(([label, text, ink, tint]) => (
+                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, background: tint, borderRadius: '16px', padding: '18px 22px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 800, letterSpacing: '1.5px', textTransform: 'uppercase', color: ink }}>{label}</div>
+                  <div style={{ fontSize: '19px', color: '#374151', lineHeight: 1.4 }}>
+                    {text.length > 150 ? text.slice(0, text.lastIndexOf(' ', 147)) + '…' : text}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : summary && (
             <div style={{ fontSize: '22px', color: '#6b7280', lineHeight: 1.5 }}>
               {summary.length > 180 ? summary.slice(0, 177) + '…' : summary}
             </div>
