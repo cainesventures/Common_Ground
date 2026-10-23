@@ -23,16 +23,19 @@ black==23.12.1
 flake8==6.1.0
 mypy==1.8.0
 python-multipart==0.0.27
-authlib>=1.3
-python-jose[cryptography]>=3.3
-duckduckgo-search>=6.0
-google-genai>=1.0.0
-playwright>=1.40.0
-pymupdf>=1.23.0
-resend>=2.0.0
-stripe>=7.0.0
-beautifulsoup4>=4.12.0
-lxml>=5.0.0
-psycopg2-binary>=2.9.9
-sentry-sdk[fastapi]>=2.0.0
-slowapi>=0.1.9
+# Pinned to what prod ran on 2026-10-22 (read from a Sentry event's module
+# list). An open >= let stripe float to an SDK whose API version rejected
+# payment_method_types and broke checkout; any of these could do the same.
+authlib==1.9.1
+python-jose[cryptography]==3.5.0
+duckduckgo-search==8.1.1
+google-genai==2.31.0
+playwright==1.64.0
+pymupdf==1.28.2
+resend==2.50.0
+stripe==16.0.0
+beautifulsoup4==4.15.0
+lxml==6.1.3
+psycopg2-binary==2.9.13
+sentry-sdk[fastapi]==2.72.0
+slowapi==0.1.10
