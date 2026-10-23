@@ -174,7 +174,11 @@ function StatusFunnelChart({
   const innerW = CHART_W - PAD.left - PAD.right
   const innerH = CHART_H - PAD.top - PAD.bottom
   const maxVal = bucketed ? Math.max(...FUNNEL_STAGES.map(s => bucketed[s]), 1) : 1
-  const xPos = (i: number) => (i / (FUNNEL_STAGES.length - 1)) * innerW
+  // Bars, not a line. These five are separate outcomes, not a sequence, and a
+  // line joining them drew a trend between categories that has no order.
+  const band = innerW / FUNNEL_STAGES.length
+  const barW = Math.min(band * 0.6, 72)
+  const xPos = (i: number) => (i + 0.5) * band
   const yPos = (val: number) => innerH - (val / maxVal) * innerH
   const yTicks = [0, 0.25, 0.5, 0.75, 1].map(f => Math.round(f * maxVal))
 
@@ -209,37 +213,50 @@ function StatusFunnelChart({
                   </g>
                 ))}
                 {FUNNEL_STAGES.map((s, i) => (
-                  <text key={s} x={xPos(i)} y={innerH + 20}
-                    textAnchor={i === 0 ? 'start' : i === FUNNEL_STAGES.length - 1 ? 'end' : 'middle'}
-                    fontSize={10} fill={selectedStage === s ? FUNNEL_COLORS[s] : 'currentColor'}
-                    fillOpacity={selectedStage === s ? 1 : 0.55} fontWeight={selectedStage === s ? 600 : 400}>
+                  <text key={s} x={xPos(i)} y={innerH + 20} textAnchor="middle"
+                    fontSize={11} fill="currentColor"
+                    fillOpacity={selectedStage === s ? 1 : 0.7} fontWeight={selectedStage === s ? 600 : 400}>
                     {FUNNEL_LABELS[s]}
                   </text>
                 ))}
-                {FUNNEL_STAGES.map((s, i) => (
-                  <line key={s} x1={xPos(i)} x2={xPos(i)} y1={0} y2={innerH} stroke="currentColor" strokeOpacity={0.06} strokeWidth={1} />
-                ))}
-                <path
-                  d={FUNNEL_STAGES.map((s, i) => `${i === 0 ? 'M' : 'L'} ${xPos(i)} ${yPos(bucketed[s])}`).join(' ')}
-                  fill="none" stroke="#6366f1" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"
-                />
-                {FUNNEL_STAGES.map((s, i) => (
-                  <circle key={s} cx={xPos(i)} cy={yPos(bucketed[s])}
-                    r={selectedStage === s ? 7 : tooltip?.stage === s ? 6 : 4.5}
-                    fill={FUNNEL_COLORS[s]} stroke="var(--background)"
-                    strokeWidth={selectedStage === s ? 2.5 : 1.5}
-                    style={{ cursor: 'pointer', transition: 'r 100ms ease' }}
-                    onMouseEnter={(e) => {
-                      const svg = (e.target as SVGElement).closest('svg')!
-                      const rect = svg.getBoundingClientRect()
-                      const svgX = ((xPos(i) + PAD.left) / CHART_W) * rect.width + rect.left
-                      const svgY = ((yPos(bucketed[s]) + PAD.top) / CHART_H) * rect.height + rect.top
-                      setTooltip({ x: svgX, y: svgY, stage: s, count: bucketed[s] })
-                    }}
-                    onMouseLeave={() => setTooltip(null)}
-                    onClick={() => handleStageClick(s)}
-                  />
-                ))}
+                {FUNNEL_STAGES.map((s, i) => {
+                  const v = bucketed[s]
+                  const h = Math.max(innerH - yPos(v), v > 0 ? 2 : 0)
+                  const x = xPos(i) - barW / 2
+                  const r = Math.min(4, h, barW / 2)
+                  // Rounded top only; the bar stays square on the baseline.
+                  const d = `M ${x} ${innerH} V ${innerH - h + r} Q ${x} ${innerH - h} ${x + r} ${innerH - h} H ${x + barW - r} Q ${x + barW} ${innerH - h} ${x + barW} ${innerH - h + r} V ${innerH} Z`
+                  const showTip = (e: React.MouseEvent | React.FocusEvent) => {
+                    const svg = (e.target as SVGElement).closest('svg')!
+                    const rect = svg.getBoundingClientRect()
+                    setTooltip({
+                      x: ((xPos(i) + PAD.left) / CHART_W) * rect.width + rect.left,
+                      y: ((innerH - h + PAD.top) / CHART_H) * rect.height + rect.top,
+                      stage: s, count: v,
+                    })
+                  }
+                  return (
+                    <g key={s} style={{ cursor: 'pointer' }}
+                      role="button" tabIndex={0}
+                      aria-label={`${FUNNEL_LABELS[s]}: ${v.toLocaleString()} bills. Show them.`}
+                      aria-pressed={selectedStage === s}
+                      onMouseEnter={showTip} onFocus={showTip}
+                      onMouseLeave={() => setTooltip(null)} onBlur={() => setTooltip(null)}
+                      onClick={() => handleStageClick(s)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleStageClick(s) } }}>
+                      {/* Hit target spans the whole band, taller than the mark. */}
+                      <rect x={xPos(i) - band / 2} y={0} width={band} height={innerH} fill="transparent" />
+                      <path d={d} fill={FUNNEL_COLORS[s]}
+                        fillOpacity={selectedStage && selectedStage !== s ? 0.35 : 1} />
+                      {v > 0 && (
+                        <text x={xPos(i)} y={innerH - h - 6} textAnchor="middle" fontSize={11}
+                          fontWeight={600} fill="currentColor" className="tabular-nums">
+                          {v.toLocaleString()}
+                        </text>
+                      )}
+                    </g>
+                  )
+                })}
               </g>
             </svg>
           </div>
@@ -621,9 +638,9 @@ function SponsorLeaderboard({ yearList }: { yearList: number[] }) {
         </div>
         <div className="flex rounded border overflow-hidden text-xs">
           {(['active', 'effective'] as const).map(s => (
-            <button key={s} onClick={() => setSort(s)}
-              className={`px-3 py-1.5 capitalize transition-colors ${sort === s ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
-              Most {s}
+            <button key={s} onClick={() => setSort(s)} aria-pressed={sort === s}
+              className={`px-3 py-1.5 transition-colors ${sort === s ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+              {s === 'active' ? 'Bills introduced' : 'Share signed into law'}
             </button>
           ))}
         </div>
@@ -1219,9 +1236,15 @@ export default function InsightsClient({
       {/* Sponsor Leaderboard */}
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <div>
-          <h2 className="text-lg font-semibold">Sponsor Leaderboard</h2>
+          <h2 className="text-lg font-semibold">Bills by Sponsor</h2>
+          {/* Neutral labels on purpose: "leaderboard" and "most effective"
+              scored councilmembers, which a site that takes no side should not
+              do. Volume and pass rate are facts; the ranking is the reader's.
+              Counts are bills where this name is the SOLE sponsor, which is why
+              they run a little under the council page's totals (those include
+              co-sponsored bills). */}
           <p className="text-xs text-muted-foreground mt-0.5">
-            Who introduces the most legislation? Who is most effective at getting bills passed?
+            Bills each member introduced as sole sponsor, and the share of their closed bills signed into law. Council member pages count co-sponsored bills too, so their totals run higher.
           </p>
         </div>
         <SponsorLeaderboard yearList={yearList} />

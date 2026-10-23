@@ -9,10 +9,14 @@ import { getCityConfig } from '@/lib/city'
 function useLastFetched() {
   const [date, setDate] = useState<string | null>(null)
   useEffect(() => {
-    api.getInsightsSummary()
+    // Same endpoint and timestamp as the home page pill, so the two can never
+    // disagree. This used to run the whole Insights summary (a dozen
+    // aggregates) on every page view just to read one date, and read a
+    // different column than the pill did.
+    api.getPublicStats()
       .then((d) => {
-        if (d?.last_fetched_at) {
-          const parsed = new Date(d.last_fetched_at)
+        if (d?.last_updated) {
+          const parsed = new Date(d.last_updated)
           setDate(parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }))
         }
       })

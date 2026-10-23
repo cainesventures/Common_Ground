@@ -757,10 +757,15 @@ async def public_stats(db: Session = Depends(get_db)):
     # count() with no argument renders `count(*)`. `count(Legislation.id)`
     # names a column, which makes SQLite fetch each row to prove it non-null
     # and throws away the covering index -- the same trap as the search count.
+    #
+    # `total` counts analyzed bills, the same set the legislation list shows by
+    # default. It counted every local bill, so the hero said 8,697 and the list
+    # one click away said 8,680, and a reader comparing them had no way to know
+    # both were right.
     total = (
         db.query(func.count())
         .select_from(Legislation)
-        .filter(Legislation.level == "local")
+        .filter(Legislation.level == "local", Legislation.analyzed_at.isnot(None))
         .scalar()
     )
     last_analyzed = (
@@ -770,7 +775,10 @@ async def public_stats(db: Session = Depends(get_db)):
     )
     return {
         "total": total or 0,
-        "last_updated": last_analyzed.isoformat() if last_analyzed else None,
+        # analyzed_at is stored naive UTC. Without an offset the browser reads
+        # it as local time, so a 9pm Eastern run showed as "Updated today" the
+        # next morning while the footer said the day before.
+        "last_updated": last_analyzed.isoformat() + "Z" if last_analyzed else None,
     }
 
 

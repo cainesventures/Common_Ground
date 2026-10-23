@@ -291,8 +291,10 @@ def _step_text(bill, db, label: str) -> str:
         parsed = scraper._parse_detail(detail, matter_id, guid, full_text)
         if parsed.get("full_text"):
             bill.full_text = parsed["full_text"]
-        if parsed.get("title") and not bill.title:
-            bill.title = parsed["title"]
+        # Fills an empty title, and also repairs one the search grid cut at
+        # 600 chars, from the detail page or the full text.
+        from app.integrations.legistar_scraper import best_title
+        bill.title = best_title(bill.title, parsed.get("title"), parsed.get("full_text"))
         if parsed.get("sponsor") and not bill.sponsor:
             bill.sponsor = parsed["sponsor"]
         if parsed.get("committee") and not bill.committee:

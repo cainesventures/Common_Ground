@@ -871,7 +871,7 @@ export default function CouncilmemberDetailClient({ initialData = null, initialP
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="border rounded-lg p-4 text-center">
               <p className="text-2xl font-bold">{member.bills_sponsored}</p>
-              <p className="text-xs text-muted-foreground mt-1">Bills Sponsored</p>
+              <p className="text-xs text-muted-foreground mt-1">Bills sponsored or co-sponsored</p>
             </div>
             {member.term_start && (
               <div className="border rounded-lg p-4 text-center">

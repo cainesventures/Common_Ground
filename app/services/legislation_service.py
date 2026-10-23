@@ -210,15 +210,37 @@ def _ai_headline(bill, provider) -> str:
         "Respond with ONLY the headline, or the single word EMPTY. No quotes, "
         "no punctuation at the end."
     )
+    system += (
+        "\n\nStay neutral. Do not use words that tell the reader how to feel, "
+        "such as sweeping, controversial, crackdown, cracks down, chaos, "
+        "bracing for, skyrocketing, slams or towering. Describe what the bill "
+        "does and let the reader judge it."
+    )
     try:
-        result = provider.complete(system_prompt=system, user_prompt=text)
-        result = result.strip().strip('"\'').strip()
-        if result.upper() == "EMPTY" or not result:
+        result = _clean(provider.complete(system_prompt=system, user_prompt=text))
+        if not result:
             return ""
+        # The prompt rules are requests the model sometimes ignores, so check
+        # the output and give it one retry that names the specific problem.
+        from app.services.headline_checks import headline_problems
+        source = " ".join(filter(None, [bill.title, bill.description, bill.full_text]))
+        problems = headline_problems(result, source, bill.summary)
+        if problems:
+            retry = (
+                f"{text}\n\nA previous headline was rejected: \"{result}\". It "
+                f"{'; it '.join(problems)}. Write a new headline that fixes this."
+            )
+            result = _clean(provider.complete(system_prompt=system, user_prompt=retry)) or result
         return result[:200]
     except Exception as e:
         logger.warning(f"Headline failed for bill {bill.id}: {e}")
     return ""
+
+
+def _clean(result: str) -> str:
+    """Strip quotes/whitespace; the model's EMPTY sentinel becomes ''."""
+    result = (result or "").strip().strip('"\'').strip()
+    return "" if result.upper() == "EMPTY" else result
 
 
 def _ai_lede(bill, provider) -> str:

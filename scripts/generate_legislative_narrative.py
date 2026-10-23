@@ -104,7 +104,18 @@ def gather_overall_stats(conn: sqlite3.Connection) -> dict:
     status_counts = dict(c.fetchall())
     signed   = status_counts.get("signed_into_law", 0)
     terminal = sum(status_counts.get(s, 0) for s in TERMINAL_STATUSES)
-    active   = sum(status_counts.get(s, 0) for s in ["introduced", "in_committee", "awaiting_mayor"])
+    # Active means pending in the CURRENT council term, the same rule as
+    # /api/insights/summary. Counting every term's pending bills included
+    # ones that died when their term ended, so this said 190 beside the live
+    # card's 187 on the same page.
+    now = datetime.now(timezone.utc).year
+    term_start = now - (now % 4)
+    c.execute("""
+        SELECT COUNT(*) FROM legislation
+        WHERE level='local' AND status IN ('introduced','in_committee','awaiting_mayor')
+          AND CAST(strftime('%Y', introduced_date) AS INTEGER) >= ?
+    """, (term_start,))
+    active = c.fetchone()[0]
 
     c.execute("""
         SELECT sponsor, COUNT(*) as n FROM legislation
@@ -564,7 +575,7 @@ def main():
         "key_stats": [
             {"label": "Bills Introduced", "value": f"{overall['total']:,}",  "note": f"{overall['year_from']}–{overall['year_to']}"},
             {"label": "Signed into Law",  "value": f"{overall['signed']:,}", "note": f"{round(overall['pass_rate']*100)}% of closed bills"},
-            {"label": "Active Bills",     "value": f"{overall['active']:,}", "note": "in committee or introduced"},
+            {"label": "Active Bills",     "value": f"{overall['active']:,}", "note": "pending this council term"},
             {
                 "label": "Top Issue",
                 "value": overall["top_tags"][0][0].replace("-", " ").title() if overall["top_tags"] else "—",

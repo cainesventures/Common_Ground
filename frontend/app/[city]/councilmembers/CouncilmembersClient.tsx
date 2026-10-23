@@ -159,7 +159,7 @@ function SponsorshipChart({ members }: { members: Member[] }) {
 
   return (
     <div className="rounded-xl border bg-card p-4 space-y-2">
-      <p className="text-sm font-semibold mb-3">Bills Sponsored</p>
+      <p className="text-sm font-semibold mb-3">Bills sponsored or co-sponsored since taking office</p>
       {sorted.map((m) => {
         const pct = max > 0 ? Math.max(((m.bills_sponsored ?? 0) / max) * 100, 2) : 2
         const isHovered = hoveredId === m.id

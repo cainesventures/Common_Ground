@@ -238,6 +238,11 @@ def save_checkpoint(data: dict) -> None:
 def build_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--target", choices=["never-enacted", "quality"], default="never-enacted",
+                   help="never-enacted: dead bills whose headline reads as law (the "
+                        "original job). quality: any headline that fails "
+                        "app/services/headline_checks.py (invented neighborhood, "
+                        "editorializing word, contradicted dollar figure).")
     p.add_argument("--apply", action="store_true",
                    help="Write to the database. Without it, nothing is saved.")
     p.add_argument("--limit", type=int, default=0, help="Only the first N targets")
@@ -273,6 +278,17 @@ def main() -> int:
     from app.models.database import SessionLocal
     from app.models import Legislation
 
+    # Each target keeps its own checkpoint, so --revert on one never touches
+    # headlines the other run wrote.
+    global CHECKPOINT
+    if args.target == "quality":
+        CHECKPOINT = CHECKPOINT.with_name(".headline_quality_checkpoint.json")
+
+    from app.services.headline_checks import headline_problems
+
+    def bill_source(b) -> str:
+        return " ".join(filter(None, [b.title, b.description, b.full_text]))
+
     db = SessionLocal()
     checkpoint = load_checkpoint()
 
@@ -303,7 +319,23 @@ def main() -> int:
     # Only the columns a headline needs. `full_text` averages 6.5KB and reaches
     # 221KB, and _headline_source never looks at it, so there is no reason to
     # pull it across for 1,782 rows.
-    candidates = (
+    if args.target == "quality":
+        # full_text stays loaded here: the place check needs the whole bill.
+        candidates = (
+            db.query(Legislation)
+            .options(defer(Legislation.supplementary_data), defer(Legislation.news_links),
+                     defer(Legislation.case_for), defer(Legislation.case_against),
+                     defer(Legislation.two_lane_insights))
+            .filter(Legislation.level == "local", Legislation.headline.isnot(None),
+                    Legislation.headline != "")
+            .order_by(Legislation.introduced_date.desc())
+            .all()
+        )
+        targets = [b for b in candidates if headline_problems(b.headline, bill_source(b), b.summary)]
+        log.info("%d bills with a headline; %d fail the quality checks.",
+                 len(candidates), len(targets))
+    else:
+      candidates = (
         db.query(Legislation)
         .options(
             defer(Legislation.full_text),
@@ -321,9 +353,9 @@ def main() -> int:
         .order_by(Legislation.introduced_date.desc())
         .all()
     )
-    targets = [b for b in candidates if misleading(b.headline)]
-    log.info("%d never-enacted bills with a headline; %d read as enacted.",
-             len(candidates), len(targets))
+      targets = [b for b in candidates if misleading(b.headline)]
+      log.info("%d never-enacted bills with a headline; %d read as enacted.",
+               len(candidates), len(targets))
 
     pending = [b for b in targets if b.id not in checkpoint]
     if len(pending) != len(targets):
@@ -411,13 +443,20 @@ def main() -> int:
                          i, len(pending), bill.bill_number)
                 continue
 
-            if misleading(new):
+            if bill.status in NEVER_ENACTED and misleading(new):
                 # The new headline has the same defect. Worth knowing about:
                 # it means the prompt change did not take for this bill, and
                 # silently storing it would hide that.
                 log.warning("[%d/%d] %s — regenerated headline STILL reads as "
                             "enacted, not saving: %s",
                             i, len(pending), bill.bill_number, new)
+                skipped += 1
+                continue
+
+            still = headline_problems(new, bill_source(bill), bill.summary)
+            if still:
+                log.warning("[%d/%d] %s — regenerated headline still %s, not saving: %s",
+                            i, len(pending), bill.bill_number, "; ".join(still), new)
                 skipped += 1
                 continue
 

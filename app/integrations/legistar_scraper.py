@@ -69,6 +69,36 @@ STATUS_MAP: Dict[str, str] = {
 }
 
 
+_TITLE_BLOCK = re.compile(r"\nTitle:\n(.+?)\n(?:Sponsors|Indexes|Attachments|Code sections):", re.S)
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def best_title(current: Optional[str], detail_title: Optional[str] = None,
+               full_text: Optional[str] = None) -> Optional[str]:
+    """The longest complete version of a bill's title we have.
+
+    The Legistar search grid cuts titles at 600 characters, mid-word ("under
+    certain terms and co"), and that is what the first ingest stores. The
+    detail page and the full-text PDF both carry the whole title, but the
+    worker only filled the title when it was empty, so 844 bills kept the cut
+    version. A candidate replaces the current title only when it extends it,
+    so a genuinely different title is never overwritten.
+    """
+    cur = _squash(current or "")
+    candidates = [_squash(detail_title or "")]
+    if full_text:
+        m = _TITLE_BLOCK.search(full_text)
+        if m:
+            candidates.append(_squash(m.group(1)))
+    for cand in sorted(candidates, key=len, reverse=True):
+        if cand and len(cand) > len(cur) and (not cur or cand.lower().startswith(cur.lower()[:-2])):
+            return cand
+    return current
+
+
 def _parse_date(raw: str) -> Optional[datetime]:
     if not raw or raw.strip() in ("", "N/A", "-"):
         return None

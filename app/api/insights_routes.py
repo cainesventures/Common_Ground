@@ -255,7 +255,7 @@ async def get_insights_summary(db: Session = Depends(get_db)):
         "avg_impact_score": round(float(avg_impact), 1) if avg_impact else None,
         "years_from": int(years_covered[0]) if years_covered[0] else current_year,
         "years_to": int(years_covered[1]) if years_covered[1] else current_year,
-        "last_fetched_at": last_fetched.isoformat() if last_fetched else None,
+        "last_fetched_at": last_fetched.isoformat() + "Z" if last_fetched else None,  # naive UTC, see /stats
     }
 
 

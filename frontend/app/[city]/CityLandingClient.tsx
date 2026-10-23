@@ -285,6 +285,11 @@ function freshnessLabel(lastUpdated: string | null): string {
   const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
   const days = Math.round((startOfDay(new Date()) - startOfDay(then)) / 86_400_000)
 
+  // Within the day, say how long ago. "Updated today" at 11pm reads the
+  // same as at 8am, and the hours are what tell a reader it is live.
+  const hours = Math.floor((Date.now() - then.getTime()) / 3_600_000)
+  if (hours < 1) return 'Updated just now'
+  if (hours < 12) return `Updated ${hours} hour${hours === 1 ? '' : 's'} ago`
   if (days <= 0) return 'Updated today'
   if (days === 1) return 'Updated yesterday'
   if (days < 7) return `Updated ${days} days ago`
@@ -699,10 +704,10 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
       <section className="max-w-2xl mx-auto text-center">
         <h2 className="type-section mb-4">Built for Philadelphians, by Philadelphians</h2>
         <p className="type-body-sm text-muted-foreground mb-4">
-          City Council passes hundreds of bills every year: zoning changes that reshape your block in East Kensington, tax breaks that shift the burden onto renters in West Philly, public safety measures that affect every neighborhood from Roxborough to Point Breeze. Most residents never find out until it&apos;s already law.
+          City Council passes hundreds of bills every year: zoning changes that reshape your block in East Kensington, tax abatements that decide who pays for what in West Philly, public safety measures that reach every neighborhood from Roxborough to Point Breeze. Most residents never find out until it&apos;s already law.
         </p>
         <p className="type-body-sm text-muted-foreground mb-8">
-          Open Common Ground is a free, independent civic tool with no ads, no corporate backing, and no political agenda. We just want Philly residents to know what their council is doing.
+          Open Common Ground is a free, independent civic tool with no ads and no corporate backing. The bill pages take no side: summaries stick to what each bill says, and a bill still in play gets the case for and the case against. The blog is where the site&apos;s own opinions live, and it is labeled that way.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
           <button
