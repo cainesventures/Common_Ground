@@ -18,7 +18,7 @@ Get the app running locally in about 10 minutes.
 
 ```bash
 # Backend
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 playwright install chromium   # headless browser for Legistar scraper
 
 # Frontend

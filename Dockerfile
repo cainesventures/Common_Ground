@@ -14,9 +14,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://github.com/benbjohnson/litestream/releases/download/v0.5.11/litestream-0.5.11-linux-x86_64.tar.gz \
     | tar -xz -C /usr/local/bin
 
-# Install Python dependencies first (layer caches until requirements change)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies first (layer caches until requirements change).
+# constraints.txt pins every transitive package to prod's versions, so a
+# rebuild reproduces prod rather than resolving to whatever is newest.
+COPY requirements.txt constraints.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 # Copy application code
 COPY . .

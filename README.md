@@ -61,7 +61,7 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full walkthrough.
 ### 1. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt -c constraints.txt
 playwright install chromium
 cd frontend && npm install
 ```
