@@ -156,11 +156,16 @@ export function Navbar() {
             onClick={openCommandPalette}
             aria-label="Search the site"
             aria-keyshortcuts="Control+K Meta+K /"
-            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 xl:border xl:pl-2.5 xl:pr-1.5"
+            // Below xl: an icon, like the theme toggle. At xl: a field-like
+            // pill that matches the Donate button's height and border, with
+            // the shortcut as one muted chip (it used to wrap to two lines).
+            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 xl:w-44 xl:border xl:border-foreground/20 xl:pl-2.5 xl:pr-1.5"
           >
-            <Search className="w-4 h-4" aria-hidden="true" />
-            <span className="hidden xl:inline">Search</span>
-            <kbd className="hidden xl:inline text-[0.7rem] border rounded px-1 py-0.5 leading-none">{shortcut}</kbd>
+            <Search className="w-4 h-4 shrink-0" aria-hidden="true" />
+            <span className="hidden xl:inline flex-1 text-left">Search</span>
+            <kbd className="hidden xl:inline-flex items-center whitespace-nowrap rounded bg-muted px-1.5 py-0.5 font-sans text-[0.7rem] font-medium leading-none text-muted-foreground">
+              {shortcut}
+            </kbd>
           </button>
           <ThemeToggle />
 
