@@ -257,6 +257,27 @@ def test_rate_limit_key_distinguishes_two_visitors_behind_one_proxy():
     assert client_identifier(a) != client_identifier(b)
 
 
+def test_rate_limit_key_uses_vercel_header_on_the_browser_path():
+    """Header shapes as measured in prod: XFF leftmost is Vercel's egress."""
+    from app.rate_limit import client_identifier
+    req = _fake_request({
+        "x-forwarded-for": "54.147.34.52, 152.233.47.67",
+        "x-real-ip": "54.147.34.52",
+        "x-vercel-forwarded-for": "203.0.113.7",
+    }, peer="100.64.0.5")
+    assert client_identifier(req) == "203.0.113.7"
+
+
+def test_rate_limit_key_uses_cloudflare_header_on_the_api_subdomain():
+    """XFF leftmost is a Cloudflare edge, which changes between requests."""
+    from app.rate_limit import client_identifier
+    req = _fake_request({
+        "x-forwarded-for": "104.22.195.24, 152.233.47.68",
+        "cf-connecting-ip": "203.0.113.7",
+    }, peer="100.64.0.6")
+    assert client_identifier(req) == "203.0.113.7"
+
+
 def test_rate_limit_key_falls_back_to_peer():
     """No forwarding header -- local dev, or a direct call to Railway."""
     from app.rate_limit import client_identifier

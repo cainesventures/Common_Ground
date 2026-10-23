@@ -1,46 +1,45 @@
 """Rate limiting.
 
-The key function is the whole point of this module. slowapi's default,
-`get_remote_address`, returns `request.client.host` -- the TCP peer -- and in
-this deployment the TCP peer is never the visitor:
+The key function is the whole point of this module. The TCP peer is always a
+Railway-internal address (100.64.x.x), so slowapi's default would put every
+visitor in one bucket. Which header carries the real visitor depends on the
+path the request took. Measured on 2026-10-22 from a known client IP:
 
-    browser -> Vercel (Next.js /api/* rewrite) -> Cloudflare -> Railway
+    browser -> Vercel rewrite -> railway.app      x-vercel-forwarded-for
+    caller  -> Cloudflare (api.*) -> railway.app  cf-connecting-ip
+    caller  -> railway.app directly               x-forwarded-for (leftmost)
 
-`frontend/lib/api.ts` sets `API_URL = ''`, so every browser call is a relative
-URL proxied by Next, and the backend sees Vercel's edge address. uvicorn 0.27
-only honours `X-Forwarded-For` from `forwarded_allow_ips`, which defaults to
-127.0.0.1, so the proxy's headers are not trusted and `client.host` stays the
-proxy. The result was a single shared bucket: `/search` allows 30/minute, so
-thirty searches *in total across every visitor* exhausted it and the next
-person got a 429. One impatient user clicking filters could take search down
-for everyone, and a traffic spike -- the thing the project is trying to cause
--- would have guaranteed it.
+The Vercel rewrite targets the railway.app URL, so browser API calls never
+pass through Cloudflare. Railway's edge rewrites X-Forwarded-For to
+"<whoever connected to it>, <railway hop>", which is Vercel's AWS egress on
+the first path and a Cloudflare edge on the second. Keying on the leftmost
+X-Forwarded-For alone, as this used to, meant the key was a proxy address
+that changed between requests, so in prod nobody ever reached a limit.
 
-So the key is the leftmost `X-Forwarded-For` entry, which is the original
-client as Vercel recorded it before Cloudflare appended its own hop.
-
-The trade-off, stated plainly: a client can spoof `X-Forwarded-For` and get a
-fresh bucket, so this does not stop a determined attacker. It is not meant to
--- Cloudflare sits in front for that. It is meant to stop one visitor's normal
-browsing from rate-limiting everybody else, and for that a spoofable key is
-strictly better than a key that is identical for all users.
-
-`cf-connecting-ip` is deliberately not preferred: Cloudflare sets it to *its*
-client, which on the proxied path is Vercel, not the visitor.
+The trade-off, stated plainly: a direct caller can send any of these headers
+and get a fresh bucket, so this does not stop a determined attacker. It is
+meant to stop one visitor's ordinary browsing (or a naive script) from
+hammering the one instance, and to never lump unrelated visitors together.
 """
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+# Most specific first: each is set by the proxy that saw the visitor directly.
+_CLIENT_HEADERS = ("x-vercel-forwarded-for", "cf-connecting-ip")
+
 
 def client_identifier(request: Request) -> str:
     """Return the best available identity for the real caller.
 
     Falls back to the peer address when no forwarding header is present, which
-    covers local development and any direct call to the Railway URL (the
-    Bluesky bot does this, bypassing Cloudflare).
+    covers local development.
     """
+    for name in _CLIENT_HEADERS:
+        value = (request.headers.get(name) or "").split(",")[0].strip()
+        if value:
+            return value
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded:
         # "client, proxy1, proxy2" -- leftmost is the original client. Guard
@@ -48,7 +47,6 @@ def client_identifier(request: Request) -> str:
         first = forwarded.split(",")[0].strip()
         if first:
             return first
-    # Some proxies send only this one.
     real_ip = request.headers.get("x-real-ip")
     if real_ip and real_ip.strip():
         return real_ip.strip()
