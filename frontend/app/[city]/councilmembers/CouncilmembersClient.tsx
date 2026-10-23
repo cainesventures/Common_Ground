@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useMyDistrict } from '@/lib/my-district'
 import type { CouncilmemberWithTenure as Member } from '@/lib/types'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
@@ -69,6 +70,8 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<Member | null>(null)
+  // Remembered, so the home page opens on this district next time.
+  const { save } = useMyDistrict()
 
   const handleFind = async () => {
     if (!address.trim()) return
@@ -96,6 +99,7 @@ function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound:
       if (!member) { setError(`Found District ${districtNum} but no matching council member on file.`); return }
 
       setResult(member)
+      save({ address: address.trim(), district: districtNum })
       onFound(member.id)
     } catch (e: unknown) {
       setError(errorMessage(e, 'Something went wrong.'))

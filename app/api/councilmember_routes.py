@@ -222,7 +222,7 @@ async def get_member_bills_by_outcome(
             {
                 "id": b.id,
                 "bill_number": b.bill_number,
-                "title": b.plain_title or b.title,
+                "title": b.headline or b.plain_title or b.title,  # plain English first, like every other list
                 "status": b.status,
                 "introduced_date": b.introduced_date.isoformat() if b.introduced_date else None,
                 "impact_level": b.impact_level,

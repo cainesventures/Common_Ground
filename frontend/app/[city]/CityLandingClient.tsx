@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import { startGoogleSignIn } from '@/lib/auth'
 import { BillCard, type BillCardBill } from '@/components/BillCard'
 import { Pause, Play } from 'lucide-react'
+import { NearYou } from '@/components/NearYou'
 
 /**
  * Tracks prefers-reduced-motion. CSS handles the keyframes (see globals.css),
@@ -453,7 +454,7 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
               See what&apos;s on the agenda →
             </Link>
             <Link
-              href={`/${city}/councilmembers`}
+              href="#near-you"
               className="px-6 py-3 rounded-lg border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400 font-medium text-base hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
             >
               Find your rep
@@ -461,6 +462,11 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
           </div>
         </div>
       </section>
+
+      {/* ── Your district ── */}
+      <div id="near-you" className="scroll-mt-20">
+        <NearYou city={city} />
+      </div>
 
       {/* ── Founders Quote ── */}
       <FoundersQuote />
