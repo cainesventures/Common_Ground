@@ -782,6 +782,70 @@ async def public_stats(db: Session = Depends(get_db)):
     }
 
 
+@router.get("/week")
+async def legislation_week(
+    end: str = Query("", max_length=10, description="YYYY-MM-DD, last day of the week; default = latest activity"),
+    db: Session = Depends(get_db),
+):
+    """One week of Council activity, for the "This week in Council" page.
+
+    The window is the seven days ending at `end`. With no `end` it ends at the
+    most recent introduction or final action in the data, not today: Council
+    meets weekly and takes a summer recess, and a page that opens on "nothing
+    happened this week" whenever the publish ran on a quiet day would be
+    useless. `prev`/`next` let the page step between weeks.
+    """
+    from datetime import datetime, timedelta
+    from sqlalchemy import func
+
+    if end:
+        try:
+            end_d = datetime.strptime(end, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="end must be YYYY-MM-DD")
+    else:
+        latest = db.query(func.max(Legislation.introduced_date)).filter(Legislation.level == "local").scalar()
+        latest_final = db.query(func.max(Legislation.final_date)).filter(Legislation.level == "local").scalar()
+        end_d = max(d for d in (latest, latest_final, datetime(2000, 1, 1)) if d is not None)
+    end_d = end_d.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_d = end_d - timedelta(days=6)
+    upper = end_d + timedelta(days=1)
+
+    def row(leg):
+        return {
+            "id": leg.id, "bill_number": leg.bill_number, "title": leg.title,
+            "plain_title": leg.plain_title, "headline": leg.headline, "lede": leg.lede,
+            "summary": leg.summary, "status": leg.status, "sponsor": leg.sponsor,
+            "impact_level": leg.impact_level, "bill_type": leg.bill_type, "tags": leg.tags,
+            "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
+            "final_date": leg.final_date.isoformat() if leg.final_date else None,
+            "two_lane_state": leg.two_lane_state,
+        }
+
+    base = db.query(Legislation).filter(Legislation.level == "local", Legislation.analyzed_at.isnot(None))
+    introduced = (
+        base.filter(Legislation.introduced_date >= start_d, Legislation.introduced_date < upper)
+        .order_by(Legislation.impact_score.desc().nullslast(), Legislation.introduced_date.desc())
+        .all()
+    )
+    decided = (
+        base.filter(
+            Legislation.final_date >= start_d, Legislation.final_date < upper,
+            Legislation.status.in_(["signed_into_law", "failed", "vetoed"]),
+        )
+        .order_by(Legislation.final_date.desc())
+        .all()
+    )
+    return {
+        "start": start_d.date().isoformat(),
+        "end": end_d.date().isoformat(),
+        "prev": (start_d - timedelta(days=1)).date().isoformat(),
+        "next": (end_d + timedelta(days=7)).date().isoformat(),
+        "introduced": [row(b) for b in introduced],
+        "decided": [row(b) for b in decided],
+    }
+
+
 @router.get("/spotlight")
 async def spotlight_bills(
     limit: int = Query(6, ge=1, le=20),

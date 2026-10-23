@@ -111,6 +111,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: `${p}/legislation`, label: 'Legislation' },
+    { href: `${p}/this-week`, label: 'This Week' },
     { href: `${p}/councilmembers`, label: 'Council' },
     { href: `${p}/insights`, label: 'Insights' },
     { href: '/budget', label: 'Budget' },
@@ -129,7 +130,7 @@ export function Navbar() {
         </Link>
 
         {/* Desktop links */}
-        <div className="hidden md:flex items-center gap-6">
+        <div className="hidden lg:flex items-center gap-6">
           {navLinks.map((l) => (
             <Link key={l.href} href={l.href} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
@@ -155,16 +156,16 @@ export function Navbar() {
             onClick={openCommandPalette}
             aria-label="Search the site"
             aria-keyshortcuts="Control+K Meta+K /"
-            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 lg:border lg:pl-2.5 lg:pr-1.5"
+            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 xl:border xl:pl-2.5 xl:pr-1.5"
           >
             <Search className="w-4 h-4" aria-hidden="true" />
-            <span className="hidden lg:inline">Search</span>
-            <kbd className="hidden lg:inline text-[0.7rem] border rounded px-1 py-0.5 leading-none">{shortcut}</kbd>
+            <span className="hidden xl:inline">Search</span>
+            <kbd className="hidden xl:inline text-[0.7rem] border rounded px-1 py-0.5 leading-none">{shortcut}</kbd>
           </button>
           <ThemeToggle />
 
           {/* Auth — hidden on mobile to keep nav clean */}
-          <div className="hidden md:flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
             {loading ? null : user ? (
               <>
                 {user.is_admin && (
@@ -212,7 +213,7 @@ export function Navbar() {
 
           {/* Hamburger — mobile only */}
           <button
-            className="md:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="lg:hidden p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             onClick={() => setMobileOpen((o) => !o)}
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
@@ -232,7 +233,7 @@ export function Navbar() {
 
       {/* Mobile menu */}
       {mobileOpen && (
-        <div className="md:hidden border-t bg-background/95 backdrop-blur px-4 py-3 space-y-1">
+        <div className="lg:hidden border-t bg-background/95 backdrop-blur px-4 py-3 space-y-1">
           {navLinks.map((l) => (
             <Link
               key={l.href}

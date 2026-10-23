@@ -183,6 +183,7 @@ def build_core(member_ids: list[str]) -> ElementTree:
         (f"{BASE_URL}/philadelphia/insights/what-dies",  "0.8", "monthly"),
         (f"{BASE_URL}/philadelphia/insights/members",    "0.7", "weekly"),
         (f"{BASE_URL}/philadelphia/councilmembers", "0.7", "weekly"),
+        (f"{BASE_URL}/philadelphia/this-week",      "0.7", "weekly"),
         (f"{BASE_URL}/budget",                      "0.8", "monthly"),
         (f"{BASE_URL}/blog",                        "0.7", "weekly"),
         (f"{BASE_URL}/about",                       "0.6", "monthly"),

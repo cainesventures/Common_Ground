@@ -524,9 +524,14 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
             <h2 className="type-eyebrow text-muted-foreground">
               Bills in front of Council
             </h2>
-            <Link href={`/${city}/legislation?analyzed=true`} className="text-sm text-primary hover:underline">
-              See all →
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href={`/${city}/this-week`} className="text-sm text-primary hover:underline">
+                This week&apos;s recap
+              </Link>
+              <Link href={`/${city}/legislation?analyzed=true`} className="text-sm text-primary hover:underline">
+                See all →
+              </Link>
+            </div>
           </div>
           <div className="flex flex-col gap-3 anim-fade-in">
             {recentBills.map((bill) => (
