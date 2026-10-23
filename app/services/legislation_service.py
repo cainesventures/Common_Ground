@@ -116,7 +116,7 @@ _CATEGORY_TAGS_SET = set(CATEGORY_TAGS)
 # Legistar returns this literal when a bill's record has no title field.
 _NO_TITLE = "(no title)"
 # Statuses where the bill is still in play; anything else gets past tense.
-_HEADLINE_ACTIVE = {"introduced", "in_committee"}
+_HEADLINE_ACTIVE = {"introduced", "in_committee", "awaiting_mayor"}
 # Statuses where the bill died. These need their own instruction, not a shared
 # "it concluded" one: 459 of the 1,782 bills in these states carry headlines
 # asserting that a rule is in force -- "Muzzle Mandate Takes Effect Immediately
@@ -976,7 +976,7 @@ class LegislationIngestionService:
         in_flight = (
             self.db.query(Legislation)
             .filter(
-                Legislation.status.in_(["introduced", "in_committee"]),
+                Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
                 Legislation.id.like("legistar_%"),
             )
             .all()

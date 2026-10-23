@@ -286,7 +286,7 @@ def get_legislative_profile(db: Session, member_id: str, member_name: str,
                 passage_spans.append((r.final_date - r.introduced_date).days)
         elif st in ("failed", "vetoed", "withdrawn", "tabled"):
             failed_vetoed += 1
-        elif st in ("introduced", "in_committee"):
+        elif st in ("introduced", "in_committee", "awaiting_mayor"):
             yr = r.introduced_date.year if r.introduced_date else now_year
             if yr < current_term:
                 died += 1
@@ -529,12 +529,12 @@ def _apply_outcome_filter(query, outcome: str):
         return query.filter(Legislation.status.in_(["failed", "vetoed", "withdrawn", "tabled"]))
     if outcome == "active":
         return query.filter(
-            Legislation.status.in_(["introduced", "in_committee"]),
+            Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
             extract("year", Legislation.introduced_date) >= current_term,
         )
     if outcome == "died":
         return query.filter(
-            Legislation.status.in_(["introduced", "in_committee"]),
+            Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
             extract("year", Legislation.introduced_date) < current_term,
         )
     return query

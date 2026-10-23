@@ -766,7 +766,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
   const visibleTabs = TABS.filter((tab) => {
     if (!leg) return tab.key === 'summary'
     if (tab.key === 'text') return !!(leg.full_text && leg.full_text !== leg.description)
-    const isOpenBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '')
+    const isOpenBill = ['introduced', 'in_committee', 'awaiting_mayor'].includes(leg.status?.toLowerCase() ?? '')
     if (tab.key === 'news') return isOpenBill || hasNewsLinks(leg)
     return true
   })
@@ -1282,7 +1282,7 @@ function AdminFloatingPanel({ billId, leg, onRefresh }: { billId: string; leg: B
 
   const isBusy = running !== null
 
-  const isActiveBill = ['introduced', 'in_committee'].includes(leg.status?.toLowerCase() ?? '')
+  const isActiveBill = ['introduced', 'in_committee', 'awaiting_mayor'].includes(leg.status?.toLowerCase() ?? '')
 
   const actions: { key: string; label: string; runningLabel: string; fn: () => Promise<ActionResult | null>; warn?: boolean; disabled?: boolean; disabledReason?: string }[] = [
     {

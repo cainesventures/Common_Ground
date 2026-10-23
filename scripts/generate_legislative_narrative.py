@@ -104,7 +104,7 @@ def gather_overall_stats(conn: sqlite3.Connection) -> dict:
     status_counts = dict(c.fetchall())
     signed   = status_counts.get("signed_into_law", 0)
     terminal = sum(status_counts.get(s, 0) for s in TERMINAL_STATUSES)
-    active   = sum(status_counts.get(s, 0) for s in ["introduced", "in_committee"])
+    active   = sum(status_counts.get(s, 0) for s in ["introduced", "in_committee", "awaiting_mayor"])
 
     c.execute("""
         SELECT sponsor, COUNT(*) as n FROM legislation

@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Statuses where a bill can still be acted on — perspectives and news are only
 # generated for active bills; historical bills get summaries and tags only.
-ACTIVE_STATUSES = {"introduced", "in_committee"}
+ACTIVE_STATUSES = {"introduced", "in_committee", "awaiting_mayor"}
 
 
 def is_active_bill(bill: "Legislation") -> bool:

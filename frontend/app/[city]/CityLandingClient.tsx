@@ -502,7 +502,7 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
             <h2 className="type-eyebrow text-muted-foreground">
               What&apos;s being decided right now
             </h2>
-            <Link href={`/${city}/legislation?analyzed=true&status=introduced,in_committee`} className="text-sm text-primary hover:underline">
+            <Link href={`/${city}/legislation?analyzed=true&status=introduced,in_committee,awaiting_mayor`} className="text-sm text-primary hover:underline">
               Browse all bills →
             </Link>
           </div>
@@ -546,7 +546,7 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
           ))}
         </div>
         <Link
-          href={`/${city}/legislation?analyzed=true&status=introduced,in_committee`}
+          href={`/${city}/legislation?analyzed=true&status=introduced,in_committee,awaiting_mayor`}
           className="btn-primary-hover inline-block px-5 py-2.5 rounded-lg border border-foreground bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90"
         >
           Read what&apos;s in play →

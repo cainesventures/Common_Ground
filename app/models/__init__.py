@@ -55,6 +55,7 @@ class LegislationStatus(str, PyEnum):
     """Status of legislation."""
     INTRODUCED = "introduced"
     IN_COMMITTEE = "in_committee"
+    AWAITING_MAYOR = "awaiting_mayor"
     PASSED_CHAMBER = "passed_chamber"
     PASSED_BOTH = "passed_both"
     SIGNED_INTO_LAW = "signed_into_law"

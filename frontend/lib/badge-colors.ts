@@ -4,6 +4,7 @@
 export const STATUS_COLORS: Record<string, string> = {
   introduced:       'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   in_committee:     'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+  awaiting_mayor:   'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
   active:           'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
   passed:           'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
   signed:           'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',

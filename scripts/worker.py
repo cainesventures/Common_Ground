@@ -65,11 +65,11 @@ DEFAULT_PARALLELISM = 10  # GPU-accelerated Ollama (RTX 5060, 8B model) handles 
 MAX_RETRIES = 3          # give up on full_text fetch after this many failures
 PERSPECTIVES_TARGET = 17 # upper bound — actual target is get_relevant_perspectives(bill)
 
-ACTIVE_STATUSES = {"introduced", "in_committee"}
+ACTIVE_STATUSES = {"introduced", "in_committee", "awaiting_mayor"}
 # Kept in step with worker_core.TERMINAL_STATUSES. "lapsed" is Legistar's own
 # word for a bill that died when the council term ended.
 TERMINAL_STATUSES = {"signed_into_law", "failed", "vetoed", "withdrawn", "tabled", "lapsed"}
-ALL_STATUSES = {"introduced", "in_committee", "signed_into_law", "failed", "vetoed", "passed_chamber", "passed_both"}
+ALL_STATUSES = {"introduced", "in_committee", "awaiting_mayor", "signed_into_law", "failed", "vetoed", "passed_chamber", "passed_both"}
 
 # Steps that apply only to Legistar (local) bills
 LEGISTAR_PREFIX = "legistar_phila_"

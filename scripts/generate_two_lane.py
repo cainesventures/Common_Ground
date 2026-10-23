@@ -311,7 +311,7 @@ def pick_bills(n, bill_number=None, all_active=False, redo=False):
         # actually describes them -- the same class scripts/
         # clear_ungrounded_headlines.py had to clean up after, where the model
         # invented plausible legislation out of an empty Legistar record.
-        where = ("status in ('introduced','in_committee') "
+        where = ("status in ('introduced','in_committee','awaiting_mayor') "
                  "and summary is not null and length(summary) > 40 "
                  "and skip_reason is null "
                  "and summary not like '%no title, sponsor%' "

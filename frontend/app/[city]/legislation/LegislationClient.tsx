@@ -63,6 +63,7 @@ interface MonthCount { month: number; count: number }
 const STATUSES = [
   { value: 'introduced',    label: 'Introduced' },
   { value: 'in_committee',  label: 'In Committee' },
+  { value: 'awaiting_mayor', label: 'Awaiting Mayor' },
   { value: 'active',        label: 'Active' },
   { value: 'passed',        label: 'Passed' },
   { value: 'signed',        label: 'Signed' },

@@ -13,6 +13,7 @@ router = APIRouter(prefix="/api/insights", tags=["insights"])
 STATUS_ORDER = [
     "introduced",
     "in_committee",
+    "awaiting_mayor",
     "died_in_committee",
     "lapsed",
     "signed_into_law",
@@ -25,6 +26,7 @@ STATUS_ORDER = [
 STATUS_LABELS = {
     "introduced":      "Introduced",
     "in_committee":    "In Committee",
+    "awaiting_mayor":  "Awaiting Mayor",
     "died_in_committee": "Died in Committee",
     "lapsed":          "Lapsed",
     "signed_into_law": "Signed into Law",
@@ -99,7 +101,7 @@ async def get_status_by_year(
         if year not in by_year:
             by_year[year] = {}
         status = row.status or "unknown"
-        if year < term_start and status in ("introduced", "in_committee"):
+        if year < term_start and status in ("introduced", "in_committee", "awaiting_mayor"):
             status = "died_in_committee"
         by_year[year][status] = by_year[year].get(status, 0) + row.count
 
@@ -202,12 +204,12 @@ async def get_insights_summary(db: Session = Depends(get_db)):
     # non-terminal bills died when their term ended.
     active = db.query(func.count(Legislation.id)).filter(
         Legislation.level == "local",
-        Legislation.status.in_(["introduced", "in_committee"]),
+        Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
         extract("year", Legislation.introduced_date) >= term_start,
     ).scalar()
     died_in_committee = db.query(func.count(Legislation.id)).filter(
         Legislation.level == "local",
-        Legislation.status.in_(["introduced", "in_committee"]),
+        Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
         extract("year", Legislation.introduced_date) < term_start,
     ).scalar()
     this_year = db.query(func.count(Legislation.id)).filter(

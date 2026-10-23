@@ -56,6 +56,9 @@ STATUS_MAP: Dict[str, str] = {
     "tabled": "failed",
     "failed": "failed",
     # Still in play
+    # Passed Council and sent to the Mayor, who can sign or veto. Live, not
+    # concluded: a veto can still kill it, and a Council override revive it.
+    "in mayor's office": "awaiting_mayor",
     "held in committee": "in_committee",
     "in committee": "in_committee",
     "referred": "in_committee",

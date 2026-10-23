@@ -701,7 +701,7 @@ function DataHealthTable({ rows }: { rows: CompletenessRow[] }) {
 }
 
 // ── Bill Pipeline ─────────────────────────────────────────────────────────────
-const ACTIVE_STATUSES = ['introduced', 'in_committee']
+const ACTIVE_STATUSES = ['introduced', 'in_committee', 'awaiting_mayor']
 const ARCHIVE_STATUSES = ['signed_into_law', 'failed', 'vetoed']
 
 function BillPipelineSection({ mode = 'active', authorized, reloadKey, onReload, onFilterChange }: { mode?: 'active' | 'archive'; authorized: boolean; reloadKey: number; onReload: () => void; onFilterChange?: (f: { year: string; month: string; date_from: string; date_to: string }) => void }) {

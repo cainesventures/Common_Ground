@@ -7,6 +7,7 @@ export const contentType = 'image/png'
 const STATUS_LABELS: Record<string, string> = {
   introduced:      'Introduced',
   in_committee:    'In Committee',
+  awaiting_mayor:  'Awaiting Mayor',
   signed_into_law: 'Signed into Law',
   failed:          'Failed',
   vetoed:          'Vetoed',

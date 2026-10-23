@@ -20,6 +20,7 @@ BASE_URL = "https://webapi.legistar.com/v1"
 
 # Map Legistar status names to our internal status enum values.
 STATUS_MAP: Dict[str, str] = {
+    "mayor's office": "awaiting_mayor",
     "new": "introduced",
     "referred": "in_committee",
     "in committee": "in_committee",

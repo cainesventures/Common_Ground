@@ -39,7 +39,7 @@ DB = "common_ground_test.db"
 CHECKPOINT = "scripts/.regen_headlines_checkpoint.json"
 
 # Statuses where the bill is still in play. Everything else should read as past tense.
-ACTIVE_STATUSES = {"introduced", "in_committee"}
+ACTIVE_STATUSES = {"introduced", "in_committee", "awaiting_mayor"}
 
 # The tell for the defect: a concluded bill whose headline claims immediacy.
 URGENCY_RE = re.compile(

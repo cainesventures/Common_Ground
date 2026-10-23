@@ -266,7 +266,7 @@ def main():
     member_ids = [r[0] for r in conn.execute("SELECT id FROM councilmembers")]
     conn.close()
 
-    ACTIVE = ("introduced", "in_committee")
+    ACTIVE = ("introduced", "in_committee", "awaiting_mayor")
 
     def is_featured(b: dict) -> bool:
         return b["two_lane_state"] == "argued" or b["status"] in ACTIVE

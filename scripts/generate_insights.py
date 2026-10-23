@@ -85,7 +85,7 @@ FLOOR = ("summary is not null and length(summary) > 40 "
          "and summary not like '%no title, sponsor%' "
          "and summary not like '%contains no title%'")
 
-CONCLUDED = "status not in ('introduced','in_committee')"
+CONCLUDED = "status not in ('introduced','in_committee','awaiting_mayor')"
 
 
 def _now() -> str:

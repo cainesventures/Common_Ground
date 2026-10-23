@@ -723,6 +723,7 @@ const DistrictMap = dynamic(
 const STATUS_COLORS: Record<string, string> = {
   introduced:      'bg-blue-100 text-blue-800',
   in_committee:    'bg-yellow-100 text-yellow-800',
+  awaiting_mayor:  'bg-violet-100 text-violet-800',
   signed_into_law: 'bg-green-100 text-green-800',
   failed:          'bg-red-100 text-red-800',
   vetoed:          'bg-orange-100 text-orange-800',

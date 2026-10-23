@@ -810,7 +810,7 @@ async def spotlight_bills(
         )
         .filter(
             Legislation.level == "local",
-            Legislation.status.in_(["introduced", "in_committee"]),
+            Legislation.status.in_(["introduced", "in_committee", "awaiting_mayor"]),
             Legislation.two_lane_state == "argued",
             Legislation.case_for.isnot(None),
             Legislation.case_against.isnot(None),
@@ -2517,7 +2517,7 @@ async def generate_perspective(
     if not is_active_bill(leg):
         raise HTTPException(
             status_code=422,
-            detail=f"Perspectives are only generated for active bills (introduced, in_committee). This bill status is '{leg.status}'.",
+            detail=f"Perspectives are only generated for active bills (introduced, in_committee, awaiting_mayor). This bill status is '{leg.status}'.",
         )
 
     try:

@@ -135,7 +135,7 @@ def select_personas(conn, personas, limit):
                l.sponsor, l.status, l.summary, l.full_text, l.description
         from bill_perspectives p join legislation l on l.id = p.bill_id
         where p.perspective_type in ({marks})
-          and l.status in ('introduced', 'in_committee')
+          and l.status in ('introduced', 'in_committee', 'awaiting_mayor')
         order by l.introduced_date desc""", personas).fetchall()
     return rows[:limit] if limit else rows
 
@@ -153,7 +153,7 @@ def select_targets(conn, limit):
                l.sponsor, l.status, l.summary, l.full_text, l.description
         from bill_perspectives p join legislation l on l.id = p.bill_id
         where (p.assessment is null or trim(p.assessment) = '')
-          and l.status in ('introduced', 'in_committee')
+          and l.status in ('introduced', 'in_committee', 'awaiting_mayor')
         order by l.introduced_date desc""").fetchall()
     return rows[:limit] if limit else rows
 
@@ -169,7 +169,7 @@ def purge_concluded(conn) -> int:
         delete from bill_perspectives
         where (assessment is null or trim(assessment) = '')
           and bill_id in (select id from legislation
-                          where status not in ('introduced', 'in_committee'))""")
+                          where status not in ('introduced', 'in_committee', 'awaiting_mayor'))""")
     conn.commit()
     return cur.rowcount
 
