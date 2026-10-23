@@ -223,6 +223,23 @@ DEPLOY_MARKERS = _read_deploy_markers()
 logger.info("Deploy markers: %s", DEPLOY_MARKERS)
 
 
+# TEMPORARY (2026-10-22): shows a caller which IP headers reach the backend on
+# their own request, to fix the rate-limit key. Remove once read.
+@app.get("/api/debug-client-ip")
+async def debug_client_ip(request: Request):
+    from fastapi.responses import JSONResponse
+    from app.rate_limit import client_identifier
+    names = ("x-forwarded-for", "x-real-ip", "cf-connecting-ip", "true-client-ip",
+             "x-vercel-forwarded-for", "x-vercel-ip", "x-envoy-external-address",
+             "forwarded", "x-client-ip", "cf-ray", "x-vercel-id")
+    return JSONResponse(
+        {"headers": {n: request.headers.get(n) for n in names if request.headers.get(n)},
+         "peer": request.client.host if request.client else None,
+         "limiter_key": client_identifier(request)},
+        headers={"Cache-Control": "no-store, private"},
+    )
+
+
 @app.get("/health")
 @app.head("/health")
 async def health():
