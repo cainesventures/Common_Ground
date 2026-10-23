@@ -571,12 +571,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_7998887</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_7992227</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
@@ -1107,6 +1101,48 @@
   <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8289256</loc>
     <lastmod>2026-10-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8297095</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8297094</loc>
+    <lastmod>2026-10-22</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8296988</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8296987</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8296986</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8296985</loc>
+    <lastmod>2026-10-23</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8296952</loc>
+    <lastmod>2026-10-23</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
