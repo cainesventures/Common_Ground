@@ -564,9 +564,16 @@ class LegislationIngestionService:
                             existing.id = parsed["id"]
 
                 if existing:
+                    previous_title = existing.title
                     for key, value in parsed.items():
                         if value is not None:
                             setattr(existing, key, value)
+                    # A re-fetch brings the search grid's title, cut at 600
+                    # chars. Keep the full title we already had (or recover it
+                    # from full text) instead of truncating it again.
+                    if parsed.get("title"):
+                        from app.integrations.legistar_scraper import best_title
+                        existing.title = best_title(parsed["title"], previous_title, existing.full_text)
                     existing.updated_at = datetime.utcnow()
                     updated += 1
                 else:
