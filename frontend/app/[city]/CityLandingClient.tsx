@@ -463,11 +463,6 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
         </div>
       </section>
 
-      {/* ── Your district ── */}
-      <div id="near-you" className="scroll-mt-20">
-        <NearYou city={city} />
-      </div>
-
       {/* ── Founders Quote ── */}
       <FoundersQuote />
 
@@ -540,6 +535,12 @@ export default function CityLandingClient({ latestPost }: { latestPost?: LatestP
           </div>
         </section>
       )}
+
+      {/* ── Your district ── below the live bills, so the page leads with
+          what Council is doing and the personal view follows it. */}
+      <div id="near-you" className="scroll-mt-20">
+        <NearYou city={city} />
+      </div>
 
       {/* ── Both sides callout ── */}
       <section className="max-w-3xl mx-auto border rounded-xl px-8 py-10 text-center bg-muted/30">

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useMyDistrict } from '@/lib/my-district'
+import { NearYou } from '@/components/NearYou'
 import { Term } from '@/components/Term'
 import type { CouncilmemberWithTenure as Member } from '@/lib/types'
 import { useParams } from 'next/navigation'
@@ -11,8 +11,6 @@ import dynamic from 'next/dynamic'
 import { api } from '@/lib/api'
 import { CITY } from '@/lib/city'
 import { lastName } from '@/lib/names'
-import { errorMessage } from '@/lib/utils'
-import type { DistrictGeoJSON } from '@/lib/types'
 
 // One source of truth for the map's height: the reserved box, the chunk-loading
 // placeholder and the map itself all read this, so none of them can disagree
@@ -30,129 +28,8 @@ const DistrictMap = dynamic(
 )
 
 // Point-in-polygon (ray-casting). GeoJSON coords are [lng, lat].
-function pointInPolygon(lat: number, lng: number, ring: number[][]): boolean {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const xi = ring[i][0], yi = ring[i][1]  // lng, lat
-    const xj = ring[j][0], yj = ring[j][1]
-    if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
-      inside = !inside
-    }
-  }
-  return inside
-}
 
-function getDistrictNum(props: Record<string, unknown>): number | null {
-  const val = props?.DISTRICT ?? props?.District ?? props?.district ??
-              props?.DIST_NUM ?? props?.districtNum ?? props?.OBJECTID ?? null
-  if (val === null || val === undefined) return null
-  const n = Number(val)
-  return isNaN(n) ? null : n
-}
 
-function findDistrictFromGeoJSON(lat: number, lng: number, geojson: DistrictGeoJSON): number | null {
-  for (const feature of (geojson.features ?? [])) {
-    const num = getDistrictNum(feature?.properties ?? {})
-    if (num === null) continue
-    const geom = feature.geometry
-    const rings: number[][][] =
-      geom?.type === 'Polygon'      ? [(geom.coordinates as number[][][])[0]] :
-      geom?.type === 'MultiPolygon' ? (geom.coordinates as number[][][][]).map((p) => p[0]) : []
-    for (const ring of rings) {
-      if (pointInPolygon(lat, lng, ring)) return num
-    }
-  }
-  return null
-}
-
-function FindMyCouncilmember({ members, onFound }: { members: Member[]; onFound: (id: string) => void }) {
-  const { city } = useParams<{ city: string }>()
-  const [address, setAddress] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<Member | null>(null)
-  // Remembered, so the home page opens on this district next time.
-  const { save } = useMyDistrict()
-
-  const handleFind = async () => {
-    if (!address.trim()) return
-    setLoading(true); setError(null); setResult(null)
-    try {
-      const geoAbort = new AbortController()
-      const geoTimeout = setTimeout(() => geoAbort.abort(), 8000)
-      const geoRes = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address + ', Philadelphia, PA')}&format=json&limit=1`,
-        { headers: { 'User-Agent': 'CommonGround/1.0 civic-app' }, signal: geoAbort.signal }
-      )
-      clearTimeout(geoTimeout)
-      const geoData = await geoRes.json()
-      if (!geoData.length) { setError('Address not found. Try including street number and street name.'); return }
-      const lat = parseFloat(geoData[0].lat)
-      const lng = parseFloat(geoData[0].lon)
-
-      const gjRes = await fetch('/api/councilmembers/districts-geojson')
-      const geojson = await gjRes.json()
-      const districtNum = findDistrictFromGeoJSON(lat, lng, geojson)
-      if (!districtNum) { setError('Could not match that address to a Philadelphia district.'); return }
-
-      const districtStr = `District ${districtNum}`
-      const member = members.find((m) => m.district === districtStr)
-      if (!member) { setError(`Found District ${districtNum} but no matching council member on file.`); return }
-
-      setResult(member)
-      save({ address: address.trim(), district: districtNum })
-      onFound(member.id)
-    } catch (e: unknown) {
-      setError(errorMessage(e, 'Something went wrong.'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="border rounded-lg p-4 space-y-3">
-      <p className="text-sm font-semibold">Find my councilmember</p>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Enter your street address"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleFind()}
-          className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-        />
-        <button
-          onClick={handleFind}
-          disabled={loading || !address.trim()}
-          className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50 hover:opacity-90 transition-opacity"
-        >
-          {loading ? 'Looking…' : 'Find'}
-        </button>
-      </div>
-      {/* The direct answer to pressing "Find", so it has to be announced --
-          and a failed lookup is worth interrupting for. */}
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
-      {result && (
-        <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 border">
-          {result.photo_url ? (
-            <Image src={result.photo_url} alt={result.name} width={40} height={40} className="w-10 h-10 rounded-full object-cover object-top shrink-0" />
-          ) : (
-            <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-              <span className="text-sm font-bold text-muted-foreground">{result.name[0]}</span>
-            </div>
-          )}
-          <div>
-            <p className="text-sm font-semibold">{result.name}</p>
-            <p className="text-xs text-muted-foreground">{result.district}</p>
-          </div>
-          <a href={`/${city}/councilmembers/${result.id}`} className="ml-auto text-xs text-primary hover:underline">
-            View profile →
-          </a>
-        </div>
-      )}
-    </div>
-  )
-}
 
 function SponsorshipChart({ members }: { members: Member[] }) {
   const { city } = useParams<{ city: string }>()
@@ -253,8 +130,11 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
       .finally(() => setLoading(false))
   }, [initialMembers])
 
-  const handleFound = (id: string) => {
+  // Highlight the reader's member; scroll to the card only right after a
+  // lookup, not on every visit with a saved district.
+  const handleFound = (id: string, fresh = true) => {
     setHighlightedId(id)
+    if (!fresh) return
     setTimeout(() => {
       document.getElementById(`member-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 100)
@@ -304,7 +184,7 @@ export default function CouncilmembersClient({ initialMembers }: { initialMember
       </div>
 
       {!loading && members.length > 0 && (
-        <FindMyCouncilmember members={members} onFound={handleFound} />
+        <NearYou city={city} onMember={handleFound} />
       )}
 
       {!loading && members.length > 0 && (

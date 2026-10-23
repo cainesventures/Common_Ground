@@ -19,13 +19,18 @@ import type { Bill, Councilmember } from '@/lib/types'
  * return visit opens on the reader's own member and their live bills. It
  * takes no side: it shows what the member has in play and how to reach them.
  */
-export function NearYou({ city }: { city: string }) {
+export function NearYou({ city, onMember }: {
+  city: string
+  /** Called with the reader's member; fresh = they just looked it up (vs. a saved district). */
+  onMember?: (memberId: string, fresh: boolean) => void
+}) {
   const { mine, ready, save, clear } = useMyDistrict()
   const [members, setMembers] = useState<Councilmember[]>([])
   const [bills, setBills] = useState<Bill[] | null>(null)
   const [address, setAddress] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fresh, setFresh] = useState(false)
 
   useEffect(() => {
     if (!mine) return
@@ -36,10 +41,14 @@ export function NearYou({ city }: { city: string }) {
 
   useEffect(() => {
     if (!member) return
+    onMember?.(member.id, fresh)
     setBills(null)
     api.getCouncilmemberBillsByOutcome(member.id, 'active', 1, 3)
       .then((d) => setBills(d?.results ?? []))
       .catch(() => setBills([]))
+  // Keyed on the member only: re-running when the parent re-creates onMember
+  // would refetch the bills and re-scroll the page.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [member])
 
   const find = async (e: React.FormEvent) => {
@@ -50,6 +59,7 @@ export function NearYou({ city }: { city: string }) {
     const result = await lookupDistrict(a)
     setBusy(false)
     if (typeof result === 'string') { setError(result); return }
+    setFresh(true)
     save({ address: a, district: result })
     setAddress('')
   }
