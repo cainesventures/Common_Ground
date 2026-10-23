@@ -16,8 +16,8 @@ import { fmtStatus } from '@/lib/utils'
 import { CITY } from '@/lib/city'
 import { LoginModal } from '@/components/LoginModal'
 import { ShareBar } from '@/components/ShareBar'
-import { ShareStoryButton } from '@/components/ShareStoryButton'
 import { Term } from '@/components/Term'
+import { ThumbsUp, ThumbsDown, Minus } from 'lucide-react'
 import { NotifyButton } from '@/components/NotifyButton'
 import { STATUS_TERM, billTypeTerm } from '@/lib/civic-glossary'
 import { siteUrl } from '@/lib/site'
@@ -1110,10 +1110,10 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           )}
 
           {/* Vote CTA — prominent, right after the summary */}
-          <div className="border rounded-lg p-5 space-y-3">
+          <div className="rounded-xl border bg-card p-5 space-y-4">
             <div>
-              <h2 className="text-sm font-semibold">What do you think?</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Cast your vote and see how the community stands.</p>
+              <h2 className="font-semibold">Where do you stand?</h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Add your view and see how other readers lean. One vote per person.</p>
             </div>
             <VotePanel billId={id} onCountsChange={setVoteCounts} onVoteChange={setYourVote} inline />
           </div>
@@ -1241,14 +1241,13 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         icon was the only option anywhere, which left the dynamic OG image for
         this page with essentially no way of being used.
       */}
-      <div className="border-t pt-5 space-y-3">
+      <div className="border-t pt-5">
         <ShareBar
           url={shareUrl}
           title={leg.plain_title || leg.headline || leg.title || `Bill ${leg.bill_number ?? ''}`}
           event="bill_shared"
           eventProps={{ bill_id: id }}
         />
-        <ShareStoryButton billId={id} billNumber={leg.bill_number} label="Share as an image for stories" />
       </div>
 
       {/* Admin floating panel — always visible */}
@@ -1465,10 +1464,15 @@ function VoteSentimentBar({ voteCounts }: { voteCounts: VoteTally }) {
 
 // ── Vote Panel ────────────────────────────────────────────────────────────────
 
+// Each option is tinted by its meaning so the three read as choices, not as
+// disabled grey boxes. Active fills keep white text at 4.5:1+.
 const VOTE_OPTIONS = [
-  { value: 'support', label: 'Support', active: 'bg-green-700 text-white border-green-700', inactive: 'hover:border-green-400 hover:text-green-700' },
-  { value: 'neutral', label: 'Neutral', active: 'bg-gray-600 text-white border-gray-600', inactive: 'hover:border-gray-400 hover:text-gray-700' },
-  { value: 'oppose',  label: 'Oppose',  active: 'bg-red-600 text-white border-red-600',   inactive: 'hover:border-red-400 hover:text-red-700' },
+  { value: 'support', label: 'Support', Icon: ThumbsUp, active: 'bg-green-700 text-white border-green-700',
+    inactive: 'text-green-800 border-green-200 bg-green-50/60 hover:bg-green-100 hover:border-green-300 dark:text-green-300 dark:border-green-900 dark:bg-green-950/30 dark:hover:bg-green-900/40' },
+  { value: 'neutral', label: 'Neutral', Icon: Minus, active: 'bg-gray-600 text-white border-gray-600',
+    inactive: 'text-foreground border-border bg-muted/40 hover:bg-muted' },
+  { value: 'oppose',  label: 'Oppose',  Icon: ThumbsDown, active: 'bg-red-600 text-white border-red-600',
+    inactive: 'text-red-800 border-red-200 bg-red-50/60 hover:bg-red-100 hover:border-red-300 dark:text-red-300 dark:border-red-900 dark:bg-red-950/30 dark:hover:bg-red-900/40' },
 ] as const
 
 function _getOrCreateVoterToken(): string {
@@ -1552,7 +1556,7 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
         )}
 
         <div className="flex gap-2">
-          {VOTE_OPTIONS.map(({ value, label, active, inactive }) => {
+          {VOTE_OPTIONS.map(({ value, label, Icon, active, inactive }) => {
             const count = counts[value] ?? 0
             const isSelected = myVote === value
             return (
@@ -1561,10 +1565,11 @@ function VotePanel({ billId, onCountsChange, onVoteChange, inline }: { billId: s
                 onClick={() => handleVote(value)}
                 aria-pressed={isSelected}
                 disabled={loading}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2.5 rounded-lg border text-sm font-medium transition-all ${
-                  isSelected ? active : `border-border text-muted-foreground ${inactive}`
+                className={`flex-1 flex flex-col items-center gap-1 py-3 rounded-xl border text-sm font-semibold transition-all active:scale-[0.98] ${
+                  isSelected ? active : inactive
                 } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
               >
+                <Icon className="w-5 h-5" aria-hidden="true" />
                 <span>{label}</span>
                 {total > 0 && (
                   <span className={`text-xs font-normal ${isSelected ? 'opacity-80' : 'text-muted-foreground'}`}>

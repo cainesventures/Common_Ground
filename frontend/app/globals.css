@@ -181,6 +181,15 @@
   --ring: #3b82f6;
 }
 
+/* Tailwind v4 gives a bare `border` the current text color (v3 used gray-200).
+   Without this rule every `border` card outline rendered near-black in light
+   mode and near-white in dark: the heavy outlines the live review flagged. */
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    border-color: var(--border);
+  }
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

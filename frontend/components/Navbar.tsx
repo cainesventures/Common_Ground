@@ -118,22 +118,25 @@ export function Navbar() {
 
   return (
     <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
-      <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
+      {/* Wider than the page (max-w-6xl vs 5xl): the logo, six links, Donate,
+          search, theme and sign-in did not fit in 1024px, so labels wrapped
+          ("This / Week", "Sign / in") and the logo touched the first link. */}
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-6">
         {/* Logo */}
         <Link href="/" className="font-bold text-lg tracking-tight shrink-0">
           Open Common Ground
         </Link>
 
         {/* Desktop links */}
-        <div className="hidden lg:flex items-center gap-6">
+        <div className="hidden lg:flex items-center gap-5">
           {navLinks.map((l) => (
-            <Link key={l.href} href={l.href} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Link key={l.href} href={l.href} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm whitespace-nowrap transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
             </Link>
           ))}
           <Link
             href="/donate"
-            className={`text-sm font-semibold px-3 py-1.5 rounded-md border transition-colors ${
+            className={`text-sm font-semibold whitespace-nowrap px-3 py-1.5 rounded-md border transition-colors ${
               pathname === '/donate'
                 ? 'bg-foreground text-background border-foreground'
                 : 'border-foreground/20 text-foreground hover:bg-muted'
@@ -144,7 +147,7 @@ export function Navbar() {
         </div>
 
         {/* Right side: theme + auth + hamburger */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           {/* Outside the md-only auth block so the toggle is reachable on mobile
               too. Before this it existed only inside /profile, behind sign-in. */}
           <button
@@ -155,7 +158,7 @@ export function Navbar() {
             // pill matching the Donate button's height and border, set apart
             // from it by lg:ml-4. The keyboard shortcut still works; it is
             // listed in the palette's footer rather than crowding this box.
-            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 lg:ml-4 xl:w-40 xl:border xl:border-foreground/20 xl:px-3"
+            className="inline-flex items-center gap-2 h-8 rounded-md text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors px-2 xl:w-36 xl:border xl:border-foreground/20 xl:px-3"
           >
             <Search className="w-4 h-4 shrink-0" aria-hidden="true" />
             <span className="hidden xl:inline">Search</span>
@@ -192,7 +195,7 @@ export function Navbar() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={startGoogleSignIn}
-                  className="inline-flex items-center justify-center rounded-lg px-3 h-8 text-sm font-medium border hover:bg-muted transition-colors"
+                  className="inline-flex items-center justify-center whitespace-nowrap rounded-lg px-3 h-8 text-sm font-medium border hover:bg-muted transition-colors"
                 >
                   Sign in
                 </button>
