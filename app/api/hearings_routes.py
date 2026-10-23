@@ -80,13 +80,10 @@ async def stream_refresh_hearings(
             await asyncio.sleep(0)
 
             for file_number in meeting["bill_file_numbers"]:
-                stripped = file_number.replace("-", "")
+                # Exact match, as in hearing_service.refresh_upcoming_hearings.
                 bill = (
                     db.query(Legislation)
-                    .filter(
-                        Legislation.bill_number.ilike(f"%{file_number}%")
-                        | Legislation.bill_number.ilike(f"%{stripped}%")
-                    )
+                    .filter(Legislation.bill_number == file_number.replace("-", ""))
                     .first()
                 )
                 if bill and (bill.next_hearing_date is None or meeting["date"] < bill.next_hearing_date):

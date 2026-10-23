@@ -33,14 +33,12 @@ def refresh_upcoming_hearings(db: Session) -> dict:
     bills_matched = 0
     for meeting in meetings:
         for file_number in meeting["bill_file_numbers"]:
-            # Strip dashes for flexible matching: "24-0001" → "240001"
-            stripped = file_number.replace("-", "")
+            # Exact match. This was ILIKE '%number%', which with the junk
+            # numbers the old agenda parser produced ("000000") could attach a
+            # hearing to an arbitrary bill.
             bill = (
                 db.query(Legislation)
-                .filter(
-                    Legislation.bill_number.ilike(f"%{file_number}%")
-                    | Legislation.bill_number.ilike(f"%{stripped}%")
-                )
+                .filter(Legislation.bill_number == file_number.replace("-", ""))
                 .first()
             )
             if bill:

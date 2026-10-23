@@ -18,6 +18,7 @@ import { LoginModal } from '@/components/LoginModal'
 import { ShareBar } from '@/components/ShareBar'
 import { ShareStoryButton } from '@/components/ShareStoryButton'
 import { Term } from '@/components/Term'
+import { NotifyButton } from '@/components/NotifyButton'
 import { STATUS_TERM, billTypeTerm } from '@/lib/civic-glossary'
 import { siteUrl } from '@/lib/site'
 import { useTabs } from '@/lib/use-tabs'
@@ -64,15 +65,20 @@ function buildGcalUrl(opts: { date: string; time?: string; body?: string; locati
   return `https://calendar.google.com/calendar/render?${params}`
 }
 
-function HearingBanner({ date, time, body, location, meetingUrl, billTitle, billNumber }: {
-  date: string; time?: string; body?: string; location?: string; meetingUrl?: string; billTitle: string; billNumber: string
+function HearingBanner({ billId, date, time, body, location, meetingUrl, billTitle, billNumber }: {
+  billId: string; date: string; time?: string; body?: string; location?: string; meetingUrl?: string; billTitle: string; billNumber: string
 }) {
   const d = new Date(date)
   const formattedDate = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
   const gcalUrl = buildGcalUrl({ date, time, body, location, billTitle, billNumber })
   return (
     <div className="border border-amber-300 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700 rounded-lg p-4 space-y-1">
-      <p className="font-semibold text-sm text-amber-900 dark:text-amber-200">Upcoming Hearing</p>
+      <div className="flex items-start justify-between gap-3">
+        <p className="font-semibold text-sm text-amber-900 dark:text-amber-200">
+          Upcoming <Term id="public_hearing">public hearing</Term>
+        </p>
+        <NotifyButton billId={billId} />
+      </div>
       {body && <p className="text-sm text-amber-800 dark:text-amber-300">{body}</p>}
       <p className="text-sm text-amber-700 dark:text-amber-300">{formattedDate}{time ? ` at ${time}` : ''}</p>
       {location && <p className="text-xs text-amber-600 dark:text-amber-400">{location}</p>}
@@ -898,6 +904,10 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
             }
           </div>
           <div className="flex items-center gap-1 shrink-0 mt-1">
+            {/* Alerts only make sense while the bill can still move. */}
+            {leg.status && ['introduced', 'in_committee', 'awaiting_mayor'].includes(leg.status) && (
+              <NotifyButton billId={id} compact />
+            )}
             <div className="relative">
               <button
                 onClick={() => setExportOpen(o => !o)}
@@ -1088,6 +1098,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           {/* Upcoming Hearing Banner — most time-sensitive, first */}
           {leg.next_hearing_date && (
             <HearingBanner
+              billId={id}
               date={leg.next_hearing_date}
               time={leg.next_hearing_time ?? undefined}
               body={leg.next_hearing_body ?? undefined}

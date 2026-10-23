@@ -39,3 +39,10 @@ lxml==6.1.3
 psycopg2-binary==2.9.13
 sentry-sdk[fastapi]==2.72.0
 slowapi==0.1.10
+# Web Push for hearing reminders and bill status alerts (app/services/webpush.py).
+# Used directly rather than through pywebpush, which hard-requires aiohttp and
+# ~8 transitive packages the backend does not otherwise need. tzdata: the slim
+# image has no zoneinfo database, and hearing times are Philadelphia-local.
+http-ece==1.2.1
+py-vapid==1.9.4
+tzdata==2025.2

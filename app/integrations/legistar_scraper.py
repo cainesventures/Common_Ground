@@ -99,6 +99,11 @@ def best_title(current: Optional[str], detail_title: Optional[str] = None,
     return current
 
 
+def agenda_file_numbers(text: str) -> List[str]:
+    """Six-digit Council file numbers in agenda text, in order, deduplicated."""
+    return list(dict.fromkeys(re.findall(r"(?<![\d-])\d{6}(?![\d-])", text or "")))
+
+
 def _parse_date(raw: str) -> Optional[datetime]:
     if not raw or raw.strip() in ("", "N/A", "-"):
         return None
@@ -707,16 +712,33 @@ class PhilaLegistarScraper:
         now = datetime.utcnow()
 
         class AgendaParser(HTMLParser):
-            """Extract bill file-number-like tokens from agenda HTML."""
+            """Extract bill file numbers from agenda HTML.
+
+            The agenda is a PDF rendered to HTML, so its <style> block is full
+            of numbers ("z-index:1000000", "#004080") and attachment names glue
+            a version suffix on ("Signature26073700"). The old pattern took
+            all of that as file numbers, so almost nothing matched a bill.
+            Style/script text is skipped and agenda_file_numbers() keeps only
+            standalone six-digit numbers ("260737").
+            """
             def __init__(self):
                 super().__init__()
                 self.text_chunks: List[str] = []
+                self._skip = 0
+            def handle_starttag(self, tag, attrs):
+                if tag in ("style", "script"):
+                    self._skip += 1
+            def handle_endtag(self, tag):
+                if tag in ("style", "script") and self._skip:
+                    self._skip -= 1
             def handle_data(self, data: str):
-                self.text_chunks.append(data)
+                if not self._skip:
+                    self.text_chunks.append(data)
             def bill_numbers(self) -> List[str]:
-                text = " ".join(self.text_chunks)
-                # Philly bill numbers: "240001", "24-0001", "2024-0001"
-                return list(dict.fromkeys(_re.findall(r'\b\d{2,4}-?\d{4,5}\b', text)))
+                # Joined with no separator: the PDF render splits words across
+                # positioned spans, and a space would cut "26073700" into
+                # "26" + "073700", a fake six-digit number.
+                return agenda_file_numbers("".join(self.text_chunks))
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=self.headless)
@@ -770,8 +792,7 @@ class PhilaLegistarScraper:
                                     import fitz
                                     doc = fitz.open(stream=resp.content, filetype="pdf")
                                     text = " ".join(page.get_text() for page in doc)
-                                    import re as _re2
-                                    bill_file_numbers = list(dict.fromkeys(_re2.findall(r'\b\d{2,4}-?\d{4,5}\b', text)))
+                                    bill_file_numbers = agenda_file_numbers(text)
                                 except Exception:
                                     pass
                         except Exception as e:

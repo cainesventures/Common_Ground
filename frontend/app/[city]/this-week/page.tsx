@@ -6,7 +6,7 @@ import { siteUrl } from '@/lib/site'
 import { BillCard } from '@/components/BillCard'
 import type { Bill } from '@/lib/types'
 
-type Week = { start: string; end: string; prev: string; next: string; introduced: Bill[]; decided: Bill[] }
+type Week = { start: string; end: string; prev: string; next: string; introduced: Bill[]; decided: Bill[]; hearings?: Bill[] }
 
 async function getWeek(end?: string): Promise<Week | null> {
   const qs = end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? `?end=${end}` : ''
@@ -86,6 +86,35 @@ export default async function ThisWeekPage({
           ))}
         </div>
       </header>
+
+      {(w.hearings?.length ?? 0) > 0 && (
+        <section className="space-y-4" aria-labelledby="hearings">
+          <div>
+            <h2 id="hearings" className="type-section">Coming up: public hearings</h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              Committees hear testimony before voting. Open any bill and tap the bell to get a reminder the day before.
+            </p>
+          </div>
+          {Object.entries(
+            (w.hearings ?? []).reduce<Record<string, Bill[]>>((acc, b) => {
+              const k = `${b.next_hearing_date?.slice(0, 10)}|${b.next_hearing_time ?? ''}|${b.next_hearing_body ?? ''}`
+              ;(acc[k] ||= []).push(b)
+              return acc
+            }, {}),
+          ).map(([k, bills]) => {
+            const [date, time, body] = k.split('|')
+            return (
+              <div key={k} className="space-y-2">
+                <p className="text-sm font-semibold">
+                  {fmt(date, { weekday: 'long', month: 'long', day: 'numeric' })}{time ? `, ${time}` : ''}
+                  {body && <span className="font-normal text-muted-foreground">{` · ${body}`}</span>}
+                </p>
+                <div className="space-y-2">{bills.map((b) => <BillCard key={b.id} bill={b} citySlug={city} />)}</div>
+              </div>
+            )
+          })}
+        </section>
+      )}
 
       {enacted.length > 0 && (
         <section className="space-y-3" aria-labelledby="enacted">

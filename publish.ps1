@@ -21,6 +21,7 @@
 #
 # Steps:
 #  1. scripts/fetch_bills.py          - incremental Legistar scrape (since last ingest date)
+#  1b. scripts/refresh_hearings.py    - upcoming committee hearings (Legistar calendar)
 #  2. scripts/worker.py               - Ollama enrichment (full_text, analyze, headline, metadata, perspectives)
 #  3. scripts/generate_two_lane.py    - the case for / against for newly active bills (Ollama)
 #  4. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
@@ -193,6 +194,15 @@ if (-not $SkipFetch) {
     Log "Fetch complete."
 } else {
     Log "Step 1/9 - Skipping fetch."
+}
+
+# ── Step 1b: Upcoming hearings ───────────────────────────────────────────────
+# Non-fatal: a Legistar calendar hiccup should not block the publish. It only
+# means the hearing banner and reminders show yesterday's schedule.
+if (-not $SkipFetch) {
+    Log "Step 1b - Refreshing upcoming hearings from the Legistar calendar..."
+    python scripts/refresh_hearings.py
+    if ($LASTEXITCODE -ne 0) { Log "WARNING: hearing refresh failed; continuing with the previous schedule." }
 }
 
 # ── Step 2: Enrich with Ollama ───────────────────────────────────────────────

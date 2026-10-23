@@ -430,6 +430,38 @@ class Donation(UserBase):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class PushSubscription(UserBase):
+    """A browser's Web Push endpoint. No account needed: the subscription is
+    the identity, and it is deleted when the push service says it is gone."""
+    __tablename__ = "push_subscriptions"
+
+    id = Column(String, primary_key=True)
+    endpoint = Column(Text, nullable=False, unique=True)
+    p256dh = Column(String, nullable=False)
+    auth = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_sent_at = Column(DateTime, nullable=True)
+
+
+class PushWatch(UserBase):
+    """One device following one bill. last_status / last_hearing_notified hold
+    what the reader was last told, so each change is sent exactly once.
+
+    bill_id is a logical reference to legislation.id in content.db (no FK).
+    """
+    __tablename__ = "push_watches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(String, ForeignKey("push_subscriptions.id", ondelete="CASCADE"),
+                             nullable=False, index=True)
+    bill_id = Column(String, nullable=False, index=True)  # logical ref -> legislation.id (content.db)
+    last_status = Column(String, nullable=True)
+    last_hearing_notified = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("subscription_id", "bill_id", name="uq_push_watch"),)
+
+
 # =============================================================================
 # Backwards-compatible aliases
 # =============================================================================

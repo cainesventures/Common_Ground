@@ -820,6 +820,9 @@ async def legislation_week(
             "introduced_date": leg.introduced_date.isoformat() if leg.introduced_date else None,
             "final_date": leg.final_date.isoformat() if leg.final_date else None,
             "two_lane_state": leg.two_lane_state,
+            "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
+            "next_hearing_time": leg.next_hearing_time,
+            "next_hearing_body": leg.next_hearing_body,
         }
 
     base = db.query(Legislation).filter(Legislation.level == "local", Legislation.analyzed_at.isnot(None))
@@ -836,7 +839,17 @@ async def legislation_week(
         .order_by(Legislation.final_date.desc())
         .all()
     )
+    # Upcoming hearings are always "from today", whatever week is shown: they
+    # are the part of the page a reader can still act on.
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    hearings = (
+        db.query(Legislation)
+        .filter(Legislation.level == "local", Legislation.next_hearing_date >= today)
+        .order_by(Legislation.next_hearing_date, Legislation.next_hearing_body)
+        .all()
+    )
     return {
+        "hearings": [row(b) for b in hearings],
         "start": start_d.date().isoformat(),
         "end": end_d.date().isoformat(),
         "prev": (start_d - timedelta(days=1)).date().isoformat(),

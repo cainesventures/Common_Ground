@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.database import init_db, get_db
 from app.rate_limit import limiter
-from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes, insights_routes, admin_routes
+from app.api import legislation_routes, auth_routes, user_routes, councilmember_routes, metrics_routes, donation_routes, hearings_routes, election_routes, insights_routes, admin_routes, notification_routes
 
 settings = get_settings()
 
@@ -96,6 +96,7 @@ NEVER_EDGE_CACHE = (
     "/api/legislation/bluesky/",
     "/api/legislation/stream/",
     "/api/hearings/stream/",
+    "/api/notifications/",
 )
 # The vote tallies under /{id}/votes change whenever anyone votes, not on
 # publish, and include the caller's own vote when logged in. Cloudflare ignores
@@ -172,6 +173,41 @@ app.include_router(hearings_routes.router)
 app.include_router(election_routes.router)
 app.include_router(insights_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(notification_routes.router)
+
+
+# Hearing reminders and status alerts. A loop inside the API process rather
+# than a cron service: prod is a single uvicorn process (no duplicate sends),
+# it costs nothing extra, and it keeps sending on days the dev machine's
+# publish does not run. Off entirely when the VAPID keys are not set.
+@app.on_event("startup")
+async def _start_notification_loop():
+    import asyncio
+    import logging as _logging
+    from app.services import webpush
+    from app.services.notification_service import dispatch
+    from app.models.database import SessionLocal
+
+    if not webpush.configured():
+        return
+
+    def _run_once():
+        db = SessionLocal()
+        try:
+            return dispatch(db)
+        finally:
+            db.close()
+
+    async def _loop():
+        await asyncio.sleep(60)  # let startup (and any DB restore) settle
+        while True:
+            try:
+                await asyncio.to_thread(_run_once)
+            except Exception as e:  # never let the loop die
+                _logging.getLogger(__name__).warning("notification dispatch failed: %s", e)
+            await asyncio.sleep(30 * 60)
+
+    asyncio.create_task(_loop())
 
 
 @app.get("/")
