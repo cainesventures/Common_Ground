@@ -97,6 +97,11 @@ NEVER_EDGE_CACHE = (
     "/api/legislation/stream/",
     "/api/hearings/stream/",
 )
+# The vote tallies under /{id}/votes change whenever anyone votes, not on
+# publish, and include the caller's own vote when logged in. Cloudflare ignores
+# Vary: Authorization (measured 2026-10-22: a request with a Bearer token got
+# the cached anonymous copy), so these must never be edge-cached.
+NEVER_EDGE_CACHE_SUFFIXES = ("/votes",)
 
 # Headers that mean "this request is authenticated". Authorization is not
 # enough on its own: require_bot_token reads X-Bot-Token, so a bot request
@@ -117,7 +122,7 @@ async def public_cache_headers(request: Request, call_next):
     response = await call_next(request)
 
     path = request.url.path
-    if path.startswith(NEVER_EDGE_CACHE):
+    if path.startswith(NEVER_EDGE_CACHE) or path.endswith(NEVER_EDGE_CACHE_SUFFIXES):
         response.headers["Cache-Control"] = "private, no-store"
         return response
 

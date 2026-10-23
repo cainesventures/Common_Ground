@@ -212,6 +212,15 @@ def test_credentialed_read_is_not_cacheable(client):
     assert "s-maxage" not in r.headers.get("cache-control", "").lower()
 
 
+def test_vote_tallies_are_never_edge_cached(client):
+    """Tallies change on every vote and include the caller's own vote, and
+    Cloudflare serves a cached anonymous copy even to a Bearer request."""
+    for path in ("/api/legislation/some-bill/votes", "/api/councilmembers/1/votes"):
+        r = client.get(path)
+        cc = r.headers.get("cache-control", "").lower()
+        assert "s-maxage" not in cc and "no-store" in cc, path
+
+
 def test_bot_token_read_is_not_cacheable(client):
     """require_bot_token reads X-Bot-Token, not Authorization — missing that
     once made a protected response publicly cacheable."""
