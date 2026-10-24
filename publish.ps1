@@ -281,6 +281,16 @@ git add frontend/public/sitemap.xml `
         frontend/public/sitemap-bills-archive.xml `
         frontend/public/data/legislative_history.json
 $staged = git diff --cached --name-only
+# Data commits belong on main. If the repo is on a feature branch, a plain
+# `git push` has no upstream and fails -- which on 2026-10-23 aborted the run
+# before step 8, so the uploaded DB never went live. Skip the commit instead;
+# the files stay modified and the next publish from main picks them up.
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($staged -and $branch -ne "main") {
+    git reset -q -- frontend/public
+    Log "WARNING: repo is on '$branch', not main - skipping the sitemap/narrative commit. The data still goes live below."
+    $staged = $null
+}
 if ($staged) {
     $stamp = Get-Date -Format "yyyy-MM-dd"
     git commit -m "Data update ${stamp}: refresh sitemap and legislative narrative"
@@ -300,8 +310,13 @@ if ($staged) {
     } finally {
         $ErrorActionPreference = $prevEAP
     }
-    if ($LASTEXITCODE -ne 0) { Fail "Git push failed." }
-    Log "Pushed - Vercel will redeploy in ~2 min."
+    # Not fatal: the DB is already uploaded, and failing here would skip the
+    # Railway restore below. The commit stays local and goes out next push.
+    if ($LASTEXITCODE -ne 0) {
+        Log "WARNING: git push failed - sitemap/narrative not deployed yet; continuing so the data still goes live."
+    } else {
+        Log "Pushed - Vercel will redeploy in ~2 min."
+    }
 } else {
     Log "No sitemap/narrative changes to push."
 }
