@@ -315,6 +315,7 @@ export interface YearStatusRow {
   total: number
   introduced: number
   in_committee: number
+  awaiting_mayor?: number
   died_in_committee: number
   signed_into_law: number
   failed: number

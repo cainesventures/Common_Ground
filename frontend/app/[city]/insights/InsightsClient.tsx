@@ -45,6 +45,7 @@ interface Summary {
 const FUNNEL_COLORS: Record<string, string> = {
   introduced:        '#3b82f6',
   in_committee:      '#f59e0b',
+  awaiting_mayor:    '#8b5cf6',
   died_in_committee: '#94a3b8',
   signed_into_law:   '#10b981',
   not_passed:        '#6b7280',
@@ -98,16 +99,17 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string 
 
 // ── Status Funnel Chart ───────────────────────────────────────────────────────
 
-const FUNNEL_STAGES = ['introduced', 'in_committee', 'died_in_committee', 'signed_into_law', 'not_passed'] as const
+const FUNNEL_STAGES = ['introduced', 'in_committee', 'awaiting_mayor', 'died_in_committee', 'signed_into_law', 'not_passed'] as const
 type FunnelStage = typeof FUNNEL_STAGES[number]
 
 // "died_in_committee" is derived server-side from non-terminal bills of prior
-// council terms — in the DB those rows are still introduced/in_committee, so
+// council terms — in the DB those rows are still introduced/in_committee/awaiting_mayor, so
 // the drill-down queries those statuses (the year filter scopes them to dead ones).
 const FUNNEL_STATUS_MAP: Record<FunnelStage, string> = {
   introduced:        'introduced',
   in_committee:      'in_committee',
-  died_in_committee: 'introduced,in_committee',
+  awaiting_mayor:    'awaiting_mayor',
+  died_in_committee: 'introduced,in_committee,awaiting_mayor',
   signed_into_law:   'signed_into_law',
   not_passed:        'failed,vetoed,withdrawn,tabled',
 }
@@ -115,6 +117,7 @@ const FUNNEL_STATUS_MAP: Record<FunnelStage, string> = {
 const FUNNEL_LABELS: Record<FunnelStage, string> = {
   introduced:        'Introduced',
   in_committee:      'In Committee',
+  awaiting_mayor:    'Awaiting Mayor',
   died_in_committee: 'Died in Committee',
   signed_into_law:   'Signed into Law',
   not_passed:        'Not Passed',
@@ -129,6 +132,7 @@ function bucketRow(row: YearStatusRow): Record<FunnelStage, number> {
   return {
     introduced:        row.introduced || 0,
     in_committee:      row.in_committee || 0,
+    awaiting_mayor:    row.awaiting_mayor || 0,
     died_in_committee: row.died_in_committee || 0,
     signed_into_law:   row.signed_into_law || 0,
     not_passed:        (row.failed || 0) + (row.vetoed || 0) + (row.withdrawn || 0) + (row.tabled || 0),
@@ -174,7 +178,7 @@ function StatusFunnelChart({
   const innerW = CHART_W - PAD.left - PAD.right
   const innerH = CHART_H - PAD.top - PAD.bottom
   const maxVal = bucketed ? Math.max(...FUNNEL_STAGES.map(s => bucketed[s]), 1) : 1
-  // Bars, not a line. These five are separate outcomes, not a sequence, and a
+  // Bars, not a line. These six are separate outcomes, not a sequence, and a
   // line joining them drew a trend between categories that has no order.
   const band = innerW / FUNNEL_STAGES.length
   const barW = Math.min(band * 0.6, 72)
@@ -261,7 +265,7 @@ function StatusFunnelChart({
             </svg>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {FUNNEL_STAGES.map(s => (
               <button key={s} onClick={() => handleStageClick(s)}
                 className={`rounded-lg border p-3 text-left transition-all ${selectedStage === s ? 'border-foreground/40 bg-muted shadow-sm' : 'bg-muted/30 hover:bg-muted/60'}`}>

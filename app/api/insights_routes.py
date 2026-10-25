@@ -385,6 +385,7 @@ async def get_committee_activity(
             func.sum(case((Legislation.status == "signed_into_law", 1), else_=0)).label("signed"),
             func.sum(case((Legislation.status == "in_committee", 1), else_=0)).label("in_committee"),
             func.sum(case((Legislation.status == "introduced", 1), else_=0)).label("introduced"),
+            func.sum(case((Legislation.status == "awaiting_mayor", 1), else_=0)).label("awaiting_mayor"),
             func.sum(case((Legislation.status.in_(TERMINAL), 1), else_=0)).label("terminal"),
         )
         .filter(
@@ -413,6 +414,7 @@ async def get_committee_activity(
             "signed_into_law": signed,
             "in_committee": int(row.in_committee or 0),
             "introduced": int(row.introduced or 0),
+            "awaiting_mayor": int(row.awaiting_mayor or 0),
             "not_passed": terminal - signed,
             "pass_rate": round(signed / terminal, 3) if terminal else 0.0,
         })
