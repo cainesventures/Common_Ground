@@ -342,9 +342,11 @@ def _step_analyze(bill, db, label: str, log) -> str:
 
     try:
         from scripts.normalize_tags import normalize_tags
+        from app.services.tag_checks import drop_unsupported_subject_tags
         import json as _json
         if bill.tags:
-            bill.tags = _json.dumps(normalize_tags(bill.tags))
+            tags = drop_unsupported_subject_tags(normalize_tags(bill.tags), bill.title, bill.bill_number)
+            bill.tags = _json.dumps(tags)
     except Exception as e:
         log.warning(f"{label} tag normalization failed: {e}")
 

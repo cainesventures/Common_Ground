@@ -18,6 +18,12 @@ import Link from 'next/link'
 
 import type { SubjectOutput } from './SubjectOutputSection'
 
+// The one claim the payload cannot carry: that the two deadliest subjects are
+// about the rules governing Council. Checked against the keys, so if retagging
+// ever moves a different subject into the top two, the panel stays off rather
+// than saying it about the wrong ones.
+const RULES_FOR_COUNCIL = new Set(['ethics', 'elections'])
+
 export function KeyFinding({ data, city }: { data: SubjectOutput | null; city: string }) {
   const rows = data?.by_tag ?? []
   if (rows.length < 4) return null
@@ -28,6 +34,7 @@ export function KeyFinding({ data, city }: { data: SubjectOutput | null; city: s
 
   // Only worth stating if the contrast is actually there.
   if (!deadliest[0] || !biggest || deadliest[0].signed >= biggest.signed) return null
+  if (!deadliest.every(r => RULES_FOR_COUNCIL.has(r.key))) return null
 
   const ratio = Math.round(biggest.signed / Math.max(deadliest[0].signed, 1))
 
