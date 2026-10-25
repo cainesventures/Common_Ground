@@ -2,8 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import ReactMarkdown from 'react-markdown'
-import { getAllSlugs, getPost, formatPostDate } from '@/lib/blog'
+import { getAllSlugs, getPost, formatPostDate, topicTags, type RelatedBill } from '@/lib/blog'
 import { ShareBar } from '@/components/ShareBar'
+import { BlogAlertButton } from '@/components/BlogAlertButton'
 import { jsonLdString } from '@/lib/structured-data'
 
 // Fully static: every post is prerendered; unknown slugs 404 without the server.
@@ -71,6 +72,15 @@ export default async function BlogPostPage({
 
   const shareUrl = `https://opencommonground.com/blog/${post.slug}`
 
+  // Runs of bills sharing a group become one headed list. A post with no groups
+  // yields a single unnamed run, which renders exactly as the flat list did.
+  const billGroups: { name?: string; bills: RelatedBill[] }[] = []
+  for (const b of post.related_bills) {
+    const last = billGroups[billGroups.length - 1]
+    if (last && last.name === b.group) last.bills.push(b)
+    else billGroups.push({ name: b.group, bills: [b] })
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
       <script
@@ -89,7 +99,7 @@ export default async function BlogPostPage({
           <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 font-medium text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-200">
             {post.stance}
           </span>
-          {post.tags.map((t) => (
+          {topicTags(post).map((t) => (
             <span key={t} className="rounded-full bg-muted px-2.5 py-0.5">
               {t}
             </span>
@@ -117,50 +127,56 @@ export default async function BlogPostPage({
         <section className="mt-12 border-t pt-8">
           <h2 className="type-section mb-1">The bills behind this piece</h2>
           <p className="text-sm text-muted-foreground mb-5">
-            Every claim above traces to the public legislative record. Each row shows the bill&apos;s
-            outcome and, where one was recorded, the final roll-call vote. &ldquo;No roll call&rdquo;
-            means it passed without a recorded tally, typically a voice vote.
+            Every claim above traces to the public legislative record. Each row shows the year the
+            bill was introduced, its outcome and, where one was recorded, the final roll-call vote.
+            &ldquo;No roll call&rdquo; means no recorded vote appears in the record at any stage.
           </p>
-          <ul className="space-y-2">
-            {post.related_bills.map((b) => {
-              // Three states, not two. The old test treated "Lapsed" as a success and
-              // "In committee" as a failure, which inverts the meaning on any post about
-              // bills that died quietly or are still pending.
-              const o = b.outcome.toLowerCase()
-              const dead = /lapsed|fail|veto|defeat|withdrawn|died|tabled/.test(o)
-              const passed = /signed|enacted|adopted|approved|passed/.test(o)
-              const badgeClass = dead
-                ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                : passed
-                  ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-                  : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
-              return (
-                <li key={b.bill_number}>
-                  <a
-                    href={b.url}
-                    className="group flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
-                  >
-                    <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
-                      {b.year}
-                    </span>
-                    <span className="flex-1 text-sm group-hover:underline underline-offset-4">
-                      {b.title}
-                    </span>
-                    <span className="shrink-0 flex items-center gap-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+          {billGroups.map((g, gi) => (
+            <div key={g.name ?? gi} className={gi > 0 ? 'mt-6' : undefined}>
+              {g.name && <h3 className="text-sm font-semibold mb-2">{g.name}</h3>}
+              <ul className="space-y-2">
+                {g.bills.map((b) => {
+                  // Three states, not two. The old test treated "Lapsed" as a success and
+                  // "In committee" as a failure, which inverts the meaning on any post about
+                  // bills that died quietly or are still pending. Passing is tested first so
+                  // "Enacted over veto" reads as law, not as a veto.
+                  const o = b.outcome.toLowerCase()
+                  const passed = /signed|enacted|adopted|approved|passed/.test(o)
+                  const dead = !passed && /lapsed|fail|veto|defeat|withdrawn|died|tabled/.test(o)
+                  const badgeClass = dead
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : passed
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300'
+                      : 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200'
+                  return (
+                    <li key={b.bill_number}>
+                      <a
+                        href={b.url}
+                        className="group flex items-center gap-3 rounded-lg border bg-card px-4 py-3 transition-colors hover:border-foreground/30"
                       >
-                        {b.outcome}
-                      </span>
-                      <span className="w-16 text-right text-xs text-muted-foreground tabular-nums">
-                        {b.vote ?? 'no roll call'}
-                      </span>
-                    </span>
-                  </a>
-                </li>
-              )
-            })}
-          </ul>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">
+                          {b.year}
+                        </span>
+                        <span className="flex-1 text-sm group-hover:underline underline-offset-4">
+                          {b.title}
+                        </span>
+                        <span className="shrink-0 flex items-center gap-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeClass}`}
+                          >
+                            {b.outcome}
+                          </span>
+                          <span className="w-16 text-right text-xs text-muted-foreground tabular-nums">
+                            {b.vote ?? 'no roll call'}
+                          </span>
+                        </span>
+                      </a>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          ))}
         </section>
       )}
 
@@ -170,6 +186,7 @@ export default async function BlogPostPage({
           something, share it where the conversation already lives.
         </p>
         <ShareBar url={shareUrl} title={post.title} eventProps={{ slug: post.slug }} />
+        <BlogAlertButton known={getAllSlugs()} />
       </footer>
     </div>
   )

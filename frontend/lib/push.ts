@@ -1,9 +1,10 @@
 'use client'
 
 /**
- * Browser side of hearing reminders and status alerts (see public/sw.js and
- * app/api/notification_routes.py). No account: the push subscription is the
- * identity, so a reader can follow a bill without signing in.
+ * Browser side of hearing reminders, status alerts and new-post alerts (see
+ * public/sw.js and app/api/notification_routes.py). No account: the push
+ * subscription is the identity, so a reader can follow a bill or the blog
+ * without signing in.
  */
 
 export type PushSupport = 'supported' | 'unsupported' | 'needs-install'
@@ -50,8 +51,8 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? reg.pushManager.getSubscription() : null
 }
 
-/** Subscribe (prompting for permission if needed) and follow one bill. */
-export async function followBill(billId: string): Promise<'on' | 'denied'> {
+/** This device's push subscription, created (prompting for permission) if needed. */
+async function subscribeDevice(): Promise<PushSubscription | 'denied'> {
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return 'denied'
   const reg = await registration()
@@ -62,6 +63,13 @@ export async function followBill(billId: string): Promise<'on' | 'denied'> {
     if (!key) throw new Error('Notifications are not set up yet')
     sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) })
   }
+  return sub
+}
+
+/** Subscribe (prompting for permission if needed) and follow one bill. */
+export async function followBill(billId: string): Promise<'on' | 'denied'> {
+  const sub = await subscribeDevice()
+  if (sub === 'denied') return 'denied'
   const res = await fetch('/api/notifications/watch', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -90,4 +98,41 @@ export async function isFollowing(billId: string): Promise<boolean> {
     body: JSON.stringify({ endpoint: sub.endpoint, bill_id: billId }),
   })
   return res.ok ? Boolean((await res.json()).watching) : false
+}
+
+/**
+ * Subscribe and get one alert per new blog post. `known` is every post the
+ * reader can already see, so the first alert is the next post, not this one.
+ */
+export async function followBlog(known: string[]): Promise<'on' | 'denied'> {
+  const sub = await subscribeDevice()
+  if (sub === 'denied') return 'denied'
+  const res = await fetch('/api/notifications/blog/follow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ subscription: sub.toJSON(), known }),
+  })
+  if (!res.ok) throw new Error(`blog follow failed (${res.status})`)
+  return 'on'
+}
+
+export async function unfollowBlog(): Promise<void> {
+  const sub = await currentSubscription()
+  if (!sub) return
+  await fetch('/api/notifications/blog/unfollow', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: sub.endpoint }),
+  })
+}
+
+export async function isFollowingBlog(): Promise<boolean> {
+  const sub = await currentSubscription()
+  if (!sub) return false
+  const res = await fetch('/api/notifications/blog/status', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint: sub.endpoint }),
+  })
+  return res.ok ? Boolean((await res.json()).following) : false
 }

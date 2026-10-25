@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { getAllPosts, formatPostDate } from '@/lib/blog'
+import { getAllPosts, formatPostDate, topicTags } from '@/lib/blog'
 import { ShareBar } from '@/components/ShareBar'
+import { BlogAlertButton } from '@/components/BlogAlertButton'
 
 export const metadata: Metadata = {
   title: 'Blog, Open Common Ground',
@@ -30,6 +31,7 @@ export default function BlogIndexPage() {
           Opinionated deep dives into Philadelphia legislation, grounded in the actual bills and
           votes, with a point of view. One writer, no comment section.
         </p>
+        <BlogAlertButton known={posts.map((p) => p.slug)} className="mt-5" />
       </header>
 
       {posts.length === 0 ? (
@@ -53,7 +55,7 @@ export default function BlogIndexPage() {
                   </h2>
                   <p className="type-body text-muted-foreground">{post.dek}</p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {post.tags.map((t) => (
+                    {topicTags(post).map((t) => (
                       <span
                         key={t}
                         className="rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"

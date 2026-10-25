@@ -14,6 +14,9 @@ export interface RelatedBill {
   outcome: string // e.g. "Signed into law", "Died in committee"
   vote: string | null // roll-call tally where recorded; null = no recorded roll call
   url: string
+  // Optional subheading. Consecutive bills with the same group render under one
+  // heading, so a post can split a long evidence list into the sets it compares.
+  group?: string
 }
 
 export interface BlogPost {
@@ -48,6 +51,16 @@ export function getPost(slug: string): BlogPost | null {
 
 export function getAllSlugs(): string[] {
   return (data.posts ?? []).map((p) => p.slug)
+}
+
+/**
+ * Tags to show as topic pills. The stance has its own badge, so a tag that
+ * repeats it ("Opinion" beside the Opinion badge) is left out of the display.
+ * Metadata still gets the full list.
+ */
+export function topicTags(post: BlogPost): string[] {
+  const stance = post.stance.trim().toLowerCase()
+  return post.tags.filter((t) => t.trim().toLowerCase() !== stance)
 }
 
 /** The Legistar id inside a related-bill URL, e.g. ".../legistar_phila_2360998". */

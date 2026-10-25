@@ -1,5 +1,5 @@
 /*
- * Service worker for hearing reminders and bill status alerts.
+ * Service worker for hearing reminders, bill status alerts and new-post alerts.
  *
  * Push and notification clicks only. It deliberately has no fetch handler and
  * caches nothing, so it can never serve a stale page or interfere with the

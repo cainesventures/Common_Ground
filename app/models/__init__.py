@@ -462,6 +462,26 @@ class PushWatch(UserBase):
     __table_args__ = (UniqueConstraint("subscription_id", "bill_id", name="uq_push_watch"),)
 
 
+class PushTopicFollow(UserBase):
+    """One device following a site-wide feed rather than a bill. The only topic
+    today is "blog": an alert when a new post goes live.
+
+    seen is a JSON list of the post slugs this device already knows about, so
+    each new post is sent exactly once. NULL means no baseline yet: the next
+    dispatch records the current posts and sends nothing.
+    """
+    __tablename__ = "push_topic_follows"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    subscription_id = Column(String, ForeignKey("push_subscriptions.id", ondelete="CASCADE"),
+                             nullable=False, index=True)
+    topic = Column(String, nullable=False)
+    seen = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (UniqueConstraint("subscription_id", "topic", name="uq_push_topic_follow"),)
+
+
 # =============================================================================
 # Backwards-compatible aliases
 # =============================================================================
