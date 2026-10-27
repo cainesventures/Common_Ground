@@ -102,8 +102,19 @@ SessionLocal = sessionmaker(
 )
 
 
-def get_db() -> Session:
-    """Dependency to get database session."""
+async def get_db() -> Session:
+    """Dependency to get database session.
+
+    Async on purpose, though nothing here awaits. FastAPI runs a sync
+    generator's setup and cleanup in its threadpool, and the cleanup hop yields
+    the event loop. Under a burst, the loop then runs every ready route body
+    (each checking out a connection) before any queued close(), and the route
+    that finds the pool empty blocks the loop itself while it waits, so no
+    connection can come back: the whole API freezes until pool_timeout, once
+    per stuck request (Sentry BACKEND-A, 2026-10-27, a crawler SSR'ing every
+    councilmember page at once). As an async generator, close() runs on the
+    loop as soon as the route returns, with no yield in between.
+    """
     db = SessionLocal()
     try:
         yield db

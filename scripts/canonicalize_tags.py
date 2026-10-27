@@ -10,7 +10,7 @@ import os
 # Add project root so we can import app config
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.database import get_db
+from app.models.database import SessionLocal
 from app.models import Legislation
 
 # ---------------------------------------------------------------------------
@@ -110,7 +110,7 @@ def canonicalize(tags_json: str) -> tuple[list, list]:
 def main():
     dry_run = "--dry-run" in sys.argv
 
-    db = next(get_db())
+    db = SessionLocal()
     bills = db.query(Legislation).filter(
         Legislation.tags.isnot(None),
         Legislation.tags != "",

@@ -49,7 +49,7 @@ def _decode_token(token: str) -> str:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
 
-def get_current_user(
+async def get_current_user(
     bearer_token: Optional[str] = Depends(_oauth2_scheme),
     access_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db),
@@ -58,6 +58,10 @@ def get_current_user(
 
     Accepts the JWT from either the Authorization: Bearer header or an
     ``access_token`` HttpOnly cookie.
+
+    Async for the same reason as get_db: a sync dependency runs in the
+    threadpool, so the connection its query checks out would be held across a
+    yield of the event loop. That is the pool deadlock get_db describes.
     """
     from app.models import User
 
@@ -83,7 +87,7 @@ def _is_admin_email(email: str) -> bool:
     return email.lower() in allowed
 
 
-def require_dev_tier(current_user=Depends(get_current_user)):
+async def require_dev_tier(current_user=Depends(get_current_user)):
     """FastAPI dependency: require dev tier OR admin-email allowlist, else 403."""
     if current_user.subscription_tier == "dev" or _is_admin_email(current_user.email):
         return current_user
@@ -117,7 +121,7 @@ def require_bot_token(x_bot_token: Optional[str] = Header(None)):
     return True
 
 
-def get_optional_user(
+async def get_optional_user(
     bearer_token: Optional[str] = Depends(_oauth2_scheme),
     access_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db),
@@ -125,6 +129,7 @@ def get_optional_user(
     """FastAPI dependency: return the authenticated User or None (no 401).
 
     Use on public endpoints that behave differently when the user is logged in.
+    Async for the reason given on get_current_user.
     """
     from app.models import User
 
