@@ -1,13 +1,11 @@
 """API routes for Philadelphia City Council members."""
 
-import json
 import logging
-import urllib.request
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -26,17 +24,15 @@ from app.services.councilmember_service import (
     sponsored_bill_counts,
 )
 
-# Known Philadelphia City Council district GeoJSON sources (tried in order)
-_DISTRICT_GEOJSON_URLS = [
-    # OpenDataPhilly / City of Philadelphia ArcGIS
-    "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/Council_Districts_2024/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
-    "https://services.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/City_Council_Districts/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
-    "https://services1.arcgis.com/fLeGjb7u4uXqeF9q/arcgis/rest/services/City_Council_Districts/FeatureServer/0/query?where=1%3D1&outFields=*&outSR=4326&f=geojson",
-    # OpenDataPhilly CKAN direct download
-    "https://opendata.arcgis.com/datasets/9298c2f3fa3241fbb176ff1cd84e2d26_0.geojson",
-]
-
-_geojson_cache: dict | None = None
+# City Council district boundaries (2024 redistricting), shipped with the app.
+# They used to be fetched live from ArcGIS on each process start, which made
+# every map depend on that one service being up: it blipped on 2026-10-24 and
+# the three "fallback" URLs all return 400 (Sentry BACKEND-5). The fetch also
+# blocked the event loop for up to 40s. Regenerate with
+# scripts/fetch_council_districts.py after the next redistricting.
+_DISTRICTS_GEOJSON = (
+    Path(__file__).resolve().parent.parent / "data" / "council_districts_2024.geojson"
+).read_bytes()
 
 
 def _next_election_year() -> int:
@@ -53,30 +49,8 @@ router = APIRouter(prefix="/api/councilmembers", tags=["councilmembers"])
 
 @router.get("/districts-geojson")
 async def get_districts_geojson():
-    """Proxy Philadelphia City Council district boundaries GeoJSON.
-
-    Tries multiple known sources and caches the first successful response
-    in memory for the lifetime of the process.
-    """
-    global _geojson_cache
-    if _geojson_cache is not None:
-        return JSONResponse(content=_geojson_cache)
-
-    last_error = None
-    for url in _DISTRICT_GEOJSON_URLS:
-        try:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = json.loads(resp.read())
-            if data.get("features"):
-                logger.info(f"Loaded district GeoJSON from {url} ({len(data['features'])} features)")
-                _geojson_cache = data
-                return JSONResponse(content=data)
-        except Exception as e:
-            last_error = e
-            logger.warning(f"District GeoJSON source failed ({url}): {e}")
-
-    raise HTTPException(status_code=502, detail=f"Could not fetch district boundaries: {last_error}")
+    """Philadelphia City Council district boundaries as GeoJSON."""
+    return Response(content=_DISTRICTS_GEOJSON, media_type="application/json")
 
 
 @router.post("/backfill-emails")

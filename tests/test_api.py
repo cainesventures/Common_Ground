@@ -412,3 +412,19 @@ def test_subject_output_insight_endpoint(client):
     assert r.status_code == 200, r.text
     body = r.json()
     assert "by_category" in body and "by_tag" in body
+
+
+# ---------------------------------------------------------------------------
+# Council district boundaries
+# ---------------------------------------------------------------------------
+
+def test_districts_geojson_serves_all_ten_districts(client):
+    """Served from app/data, not fetched live (Sentry BACKEND-5). The map and
+    the address lookup both read the district number from `district`."""
+    r = client.get("/api/councilmembers/districts-geojson")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    data = r.json()
+    assert data["type"] == "FeatureCollection"
+    assert sorted(int(f["properties"]["district"]) for f in data["features"]) == list(range(1, 11))
+    assert all(f["geometry"]["type"] in ("Polygon", "MultiPolygon") for f in data["features"])
