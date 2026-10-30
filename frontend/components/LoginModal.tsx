@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { startGoogleSignIn } from '@/lib/auth'
 
 interface LoginModalProps {
@@ -46,7 +47,10 @@ export function LoginModal({ onClose, reason = 'Sign in to continue', title = 'S
     }
   }, [])
 
-  return (
+  // Portalled to <body>: rendered in place, an ancestor with a transform (the
+  // bill page has several) traps `fixed` inside it, so the backdrop covered
+  // only the content column and the sticky navbar sat over the dialog's top.
+  return createPortal(
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
@@ -78,6 +82,7 @@ export function LoginModal({ onClose, reason = 'Sign in to continue', title = 'S
           Cancel
         </button>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
