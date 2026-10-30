@@ -17,6 +17,8 @@ from app.config import get_settings
 from app.models import ContentBase, UserBase
 
 settings = get_settings()
+# SQL statement logging is opt-in; tying it to DEBUG flooded worker consoles.
+_sql_echo = os.getenv("SQL_ECHO", "").lower() in ("1", "true", "yes")
 
 
 def _resolve_users_url(content_url: str) -> str:
@@ -57,14 +59,14 @@ _is_sqlite_users = _users_url.startswith("sqlite")
 
 content_engine = create_engine(
     _content_url,
-    echo=settings.debug,
+    echo=_sql_echo,
     future=True,
     **({} if _is_sqlite_content else {"pool_size": 30, "max_overflow": 10, "pool_timeout": 60}),
 )
 
 users_engine = create_engine(
     _users_url,
-    echo=settings.debug,
+    echo=_sql_echo,
     future=True,
     **({} if _is_sqlite_users else {"pool_size": 30, "max_overflow": 10, "pool_timeout": 60}),
 )
