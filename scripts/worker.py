@@ -222,6 +222,10 @@ def process_bill(bill, db, dry_run: bool, only_step: str | None) -> str:
 
     any_done = False
     while True:
+        # A step can retire the bill (e.g. headline with no source text);
+        # without this the loop re-runs that step forever.
+        if bill.skip_reason:
+            break
         remaining = steps_needed()
         if not remaining:
             break
