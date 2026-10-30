@@ -8,6 +8,8 @@
 
 # PostHog personal API key (local analytics only, never commit)
 .posthog-token
+# Search Console service-account key (read-only, never commit)
+.gsc-key.json
 
 # Python
 __pycache__/

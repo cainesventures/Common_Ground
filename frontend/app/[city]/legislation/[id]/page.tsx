@@ -4,6 +4,8 @@ import { siteUrl } from '@/lib/site'
 import { getBill, MISSING } from './get-bill'
 import { billGraph, jsonLdProps } from '@/lib/structured-data'
 import { BillBlogCallout } from '@/components/blog/BillBlogCallout'
+import { BallotQuestionCallout } from '@/components/BallotQuestionCallout'
+import { getBallotQuestion } from '@/lib/ballot-questions'
 
 const TITLE_MAX = 70
 
@@ -30,11 +32,16 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
     // Legal titles run to 300+ characters; Google shows ~60. Prefer the plain
     // title, then the AI headline, and only fall back to the raw legal title,
     // trimmed at a word boundary.
+    // A bill that put a question on the ballot is searched for as the ballot
+    // question, so name it that way.
+    const ballot = getBallotQuestion(id)
     const rawTitle = bill?.plain_title || bill?.headline || bill?.title || 'Bill'
-    const title = truncateTitle(rawTitle)
-    const description = bill?.summary
-      ? bill.summary.slice(0, 160)
-      : `Philadelphia City Council bill ${bill?.bill_number ?? ''}, Open Common Ground`
+    const title = ballot ? ballot.seoTitle : truncateTitle(rawTitle)
+    const description = ballot
+      ? ballot.seoDescription
+      : bill?.summary
+        ? bill.summary.slice(0, 160)
+        : `Philadelphia City Council bill ${bill?.bill_number ?? ''}, Open Common Ground`
     const canonical = siteUrl(`/${city}/legislation/${id}`)
     return {
       title: `${title}, Open Common Ground`,
@@ -89,6 +96,7 @@ export default async function BillDetailPage({
   return (
     <>
       {graph && <script {...jsonLdProps(graph)} />}
+      <BallotQuestionCallout billId={id} />
       <BillBlogCallout billId={id} billNumber={initialBill?.bill_number} />
       <BillDetailClient initialBill={initialBill} />
     </>
