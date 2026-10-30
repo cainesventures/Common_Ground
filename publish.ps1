@@ -269,6 +269,13 @@ Log "Step 6/9 - Uploading DB to Backblaze B2..."
 if ($LASTEXITCODE -ne 0) { Fail "Litestream upload failed. Check B2 credentials and bucket." }
 Log "Upload complete."
 
+# Each upload is a full ~100 MB snapshot and Litestream never prunes old ones
+# here, so they filled 76% of the B2 free tier by Oct 2026. Keep only what a
+# restore needs. Non-fatal: the new snapshot is already uploaded.
+Log "Step 6/9 - Pruning superseded snapshots from B2..."
+python scripts/prune_b2.py
+if ($LASTEXITCODE -ne 0) { Warn "B2 prune failed; old snapshots remain. Publish continues." }
+
 # ── Step 7: Git push (Vercel auto-deploys on push) ───────────────────────────
 Log "Step 7/9 - Committing and pushing sitemap + narrative to GitHub..."
 # All four sitemap files, not just sitemap.xml. generate_sitemap.py now emits a
