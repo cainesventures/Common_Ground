@@ -9,6 +9,15 @@ import { getBallotQuestion } from '@/lib/ballot-questions'
 
 const TITLE_MAX = 70
 
+// Without these Next 15 renders this route on every request (Vercel showed 0
+// ISR writes and 242K invocations, almost all crawlers). An empty list keeps
+// builds fast; each page is rendered on first hit and then served from the
+// ISR cache, refreshed at most hourly.
+export const revalidate = 3600
+export function generateStaticParams() {
+  return []
+}
+
 /** Trim to a word boundary so a 300-character legal title reads as a title. */
 function truncateTitle(value: string): string {
   const clean = value.trim().replace(/\s+/g, ' ')

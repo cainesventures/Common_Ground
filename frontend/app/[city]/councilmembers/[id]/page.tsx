@@ -9,6 +9,15 @@ import { councilmemberGraph, jsonLdProps } from '@/lib/structured-data'
 // what the client would have fetched for page 1.
 const BILLS_PER_PAGE = 20
 
+// Without these Next 15 renders this route on every request (Vercel showed 0
+// ISR writes and 242K invocations, almost all crawlers). An empty list keeps
+// builds fast; each page is rendered on first hit and then served from the
+// ISR cache, refreshed at most hourly.
+export const revalidate = 3600
+export function generateStaticParams() {
+  return []
+}
+
 /**
  * Fetch a council member on the server, for both generateMetadata and the page
  * (Next dedupes the identical request). Seeding the client with this is what
