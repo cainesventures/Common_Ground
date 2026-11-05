@@ -825,7 +825,12 @@ async def legislation_week(
             "next_hearing_body": leg.next_hearing_body,
         }
 
-    base = db.query(Legislation).filter(Legislation.level == "local", Legislation.analyzed_at.isnot(None))
+    # Legistar sometimes files an empty placeholder ("(no title)", no sponsor,
+    # no text). It has nothing a reader can use, so keep it out of the digest.
+    base = db.query(Legislation).filter(
+        Legislation.level == "local", Legislation.analyzed_at.isnot(None),
+        Legislation.title != "(no title)",
+    )
     introduced = (
         base.filter(Legislation.introduced_date >= start_d, Legislation.introduced_date < upper)
         .order_by(Legislation.impact_score.desc().nullslast(), Legislation.introduced_date.desc())

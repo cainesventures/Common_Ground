@@ -117,7 +117,7 @@ export function Navbar() {
   ]
 
   return (
-    <nav className="border-b bg-background/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
+    <nav className="border-b bg-background lg:bg-background/80 backdrop-blur sticky top-0 z-50" ref={menuRef}>
       {/* Wider than the page (max-w-6xl vs 5xl): the logo, six links, Donate,
           search, theme and sign-in did not fit in 1024px, so labels wrapped
           ("This / Week", "Sign / in") and the logo touched the first link. */}
