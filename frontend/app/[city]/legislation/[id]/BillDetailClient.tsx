@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { ActionResult, VoteTally } from '@/lib/api-types'
-import { useParams, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -808,7 +808,6 @@ export default function BillDetailClient({
   initialMembers?: Councilmember[] | null
 }) {
   const { city, id } = useParams<{ city: string; id: string }>()
-  const searchParams = useSearchParams()
   // Seeded from the server so the bill renders during SSR instead of falling
   // into the `if (loading) return null` branch below, which is what left
   // crawlers with an empty page. The client still refetches on mount to pick up
@@ -831,11 +830,18 @@ export default function BillDetailClient({
   // pinned at 0 and the votes tab never showed a count.
   const [rollCallCount, setRollCallCount] = useState(initialBill?.roll_call_count ?? 0)
   const [stickyVisible, setStickyVisible] = useState(false)
-  const [activeTab, setActiveTab] = useState<TabKey>(() => {
-    const t = searchParams?.get('tab')
-    // ?tab=perspectives is no longer a tab; such a link lands on Summary.
-    return (t === 'votes' || t === 'news') ? t : 'summary'
-  })
+  const [activeTab, setActiveTab] = useState<TabKey>('summary')
+  // ?tab= is read after mount, NOT with useSearchParams(). This page is ISR, so
+  // the server render cannot know the query string, and useSearchParams() makes
+  // Next skip the server render of this whole component (BAILOUT_TO_CLIENT_SIDE
+  // _RENDERING). From c562ed4 until this fix every bill page reached crawlers as
+  // a nav bar and a footer. `next dev` renders per request and never shows it;
+  // only a production build does.
+  // ?tab=perspectives is no longer a tab; such a link lands on Summary.
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('tab')
+    if (t === 'votes' || t === 'news') setActiveTab(t)
+  }, [])
   const titleRef = useRef<HTMLHeadingElement>(null)
   const posthog = usePostHog()
 
