@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-04T14:02:37.059085Z",
+  "generated_at": "2026-11-06T01:37:37.429166Z",
   "years_covered": {
     "from": 2000,
     "to": 2026
@@ -27,7 +27,7 @@
       "note": "2,619 bills"
     }
   ],
-  "narrative": "Over the past 27 years, Philadelphia City Council has introduced an astonishing 8,707 bills, with an average of 322 bills per year. This wealth of data provides a unique window into the city's legislative history, revealing trends, patterns, and surprises that can inform and engage citizens. From 2000 to 2026, the council has signed 6,720 bills into law, a remarkable 79% success rate that underscores the council's effectiveness in getting legislation passed. This is no small feat, especially given the complexity and contentiousness of many issues.\n\nAs we dig deeper into the data, we see that certain issues have dominated the council's agenda over the years. Zoning has been a perennial favorite, with 2,619 bills introduced – more than twice as many as the next closest issue, planning. But other topics have risen to prominence as well, such as infrastructure (1,538 bills) and housing (1,257 bills). Notably, contested votes have been relatively rare, with only 361 bills drawing at least one Nay vote across all years combined. This suggests that the council has often been able to reach consensus on key issues, although there have been some notable exceptions.\n\nThis data is not just a historical curiosity – it's also a tool for civic engagement and participation. By understanding what issues have been debated and decided on in the past, Philadelphians can inform their own advocacy efforts and hold their elected officials accountable. Whether you're concerned about zoning, infrastructure, or social justice, this data can help you track the progress of your issue and identify opportunities for action. By tapping into this rich source of information, citizens can take a more active role in shaping the future of their city – and demanding a more responsive and effective government.",
+  "narrative": "Over the past 27 years, the Philadelphia City Council has introduced a staggering 8,707 bills, with an average of 322 bills per year. This incredible dataset spans from 2000 to 2026, providing a unique window into the legislative activities of the city's governing body. From zoning and planning to infrastructure and housing, this trove of information offers a fascinating glimpse into the inner workings of City Hall.\n\nAs we delve into the data, several big arcs emerge. Zoning and planning issues have dominated the council's agenda, with 2,619 and 1,949 bills, respectively. These issues have consistently topped the list since 2000, with only a brief dip in 2020 due to the pandemic. The 79% pass rate suggests that most bills are able to garner sufficient support, although the presence of 361 bills that drew at least one Nay vote reveals moments of tension and division. Conversely, the rarity of contested votes, with an average of only 10 per year, hints at a relatively harmonious council, at least on the surface.\n\nThis data is not merely a curiosity; it holds immense value for civic engagement. By understanding the council's priorities and challenges, Philadelphians can better advocate for their interests and participate in the democratic process. Tracking legislation allows citizens to hold their elected officials accountable, ensure that their voices are heard, and shape the policies that affect their lives. With this wealth of information, residents can engage with their council members, attend hearings, and demand more transparency and participation in the legislative process.",
   "top_issues": [
     {
       "tag": "zoning",
@@ -6671,12 +6671,12 @@
     {
       "year": 2026,
       "is_partial": true,
-      "headline": "Council Focuses on Budget, Immigrant Rights",
-      "narrative": "Philadelphia City Council's legislative activity in 2026 saw a significant drop in introduced bills, with 242 proposed laws, 60 fewer than the previous year. Despite this, 119 bills became law, with a median of 42 days from introduction to signing. Zoning and infrastructure dominated the agenda, with 103 and 27 bills respectively. Notably, development, land use, and public safety saw an increase in attention compared to the prior year. Contested votes were non-existent this year, with every roll call being unanimous.\n\nThe Council's focus on budgeting was evident with the passage of the City Budget for Next Year, a $4 billion budget for Fiscal Year 2027, and the Long-Term City Budget Plan 2027-2032, a six-year capital program with estimated costs totaling $22.1 billion. Additionally, several bills aimed at protecting immigrant rights, such as preventing police enforcement of federal immigration laws and requiring city workers to not partner with immigrant enforcement agencies, were signed into law. These measures demonstrate the Council's commitment to addressing the needs of all Philadelphians.",
+      "headline": "Council's 2026: Zoning, Budget Top Agenda",
+      "narrative": "Philadelphia City Council dominated by zoning and infrastructure issues this year, with 103 bills focused on zoning and 27 bills each on infrastructure and planning. While some issue areas like land use, development, public safety, and neighborhood development gained traction, others like planning, housing, business, and land-use declined. The median days from introduction to becoming law was 42, with 119 bills signed into law and 98% of bills that reached a final vote becoming law.\n\nThis year's legislative activity was also marked by a lack of controversy, with no bills receiving a single Nay vote throughout the year. The top sponsors were Council President Johnson with 47 bills, followed by Councilmember Young and Councilmember Squilla.",
       "key_themes": [
-        "Budget Dominates Agenda",
-        "Immigrant Rights Protected",
-        "Development on the Rise"
+        "Zoning Dominates Council Agenda",
+        "Infrastructure Bills Abound",
+        "Uncontested Votes Proliferate"
       ],
       "stats": {
         "year": 2026,
@@ -6725,11 +6725,11 @@
         ],
         "rising_tags": [
           {
-            "tag": "development",
+            "tag": "land use",
             "delta": 16
           },
           {
-            "tag": "land use",
+            "tag": "development",
             "delta": 16
           },
           {
@@ -6847,7 +6847,7 @@
         }
       ],
       "contested_bills": [],
-      "generated_at": "2026-11-04T14:02:29.476092Z"
+      "generated_at": "2026-11-06T01:37:23.112409Z"
     }
   ]
 }
