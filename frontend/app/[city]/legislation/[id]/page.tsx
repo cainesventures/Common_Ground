@@ -3,6 +3,7 @@ import BillDetailClient from './BillDetailClient'
 import { siteUrl } from '@/lib/site'
 import { getBill, MISSING } from './get-bill'
 import { getRelated } from './get-related'
+import { billIdsToPrerender } from '@/lib/sitemap-params'
 import { getCouncilmembers } from '../../councilmembers/get-councilmembers'
 import { billGraph, jsonLdProps } from '@/lib/structured-data'
 import { BillBlogCallout } from '@/components/blog/BillBlogCallout'
@@ -11,13 +12,14 @@ import { getBallotQuestion } from '@/lib/ballot-questions'
 
 const TITLE_MAX = 70
 
-// Without these Next 15 renders this route on every request (Vercel showed 0
-// ISR writes and 242K invocations, almost all crawlers). An empty list keeps
-// builds fast; each page is rendered on first hit and then served from the
-// ISR cache, refreshed at most hourly.
-export const revalidate = 3600
-export function generateStaticParams() {
-  return []
+// Every bill in the sitemap is built at deploy time (in the follow-up deploy;
+// see lib/sitemap-params.ts), so a crawler hit is a file, not a function run.
+// Caching on first hit (the Nov 2 fix) did not cut CPU: Google requests each
+// bill about once per pass, so nearly every hit was a first hit.
+// Must equal DATA_REVALIDATE in lib/backend.ts (segment config takes a literal).
+export const revalidate = 604800
+export function generateStaticParams({ params }: { params: { city: string } }) {
+  return billIdsToPrerender(params.city).map((id) => ({ id }))
 }
 
 /** Trim to a word boundary so a 300-character legal title reads as a title. */

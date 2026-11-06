@@ -11,12 +11,19 @@
  * for one ISR cycle rather than costing the reader the section.
  */
 import type { RelatedBills } from '@/lib/types'
+import { backendUrl, DATA_REVALIDATE, failDuringBuild } from '@/lib/backend'
 
 export async function getRelated(id: string): Promise<RelatedBills | null> {
+  const related = await lookupRelated(id)
+  if (related === null) failDuringBuild(`related bills for ${id}`)
+  return related
+}
+
+async function lookupRelated(id: string): Promise<RelatedBills | null> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}/related`,
-      { next: { revalidate: 3600 } },
+      backendUrl(`/api/legislation/${id}/related`),
+      { next: { revalidate: DATA_REVALIDATE } },
     )
     if (!res.ok) return null
     const data = await res.json()

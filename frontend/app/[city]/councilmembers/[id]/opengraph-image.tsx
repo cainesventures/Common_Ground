@@ -1,6 +1,9 @@
 import { ImageResponse } from 'next/og'
+import { backendUrl, DATA_REVALIDATE } from '@/lib/backend'
 
-export const runtime = 'edge'
+// Cached like the member page instead of drawn per request.
+// Must equal DATA_REVALIDATE in lib/backend.ts (segment config takes a literal).
+export const revalidate = 604800
 export const size = { width: 1200, height: 630 }
 export const contentType = 'image/png'
 
@@ -14,8 +17,8 @@ export default async function Image({ params }: { params: Promise<{ city: string
 
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}`,
-      { next: { revalidate: 3600 } }
+      backendUrl(`/api/councilmembers/${id}`),
+      { next: { revalidate: DATA_REVALIDATE } }
     )
     if (res.ok) {
       const data = await res.json()

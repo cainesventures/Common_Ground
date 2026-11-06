@@ -10,14 +10,21 @@
  * or a transient backend blip would tell crawlers a real bill had been removed.
  */
 import type { Bill } from '@/lib/types'
+import { backendUrl, DATA_REVALIDATE, failDuringBuild } from '@/lib/backend'
 
 export const MISSING = Symbol.for('bill.missing')
 
 export async function getBill(id: string): Promise<Bill | typeof MISSING | null> {
+  const bill = await lookupBill(id)
+  if (bill === null) failDuringBuild(`bill ${id}`)
+  return bill
+}
+
+async function lookupBill(id: string): Promise<Bill | typeof MISSING | null> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/legislation/${id}`,
-      { next: { revalidate: 3600 } },
+      backendUrl(`/api/legislation/${id}`),
+      { next: { revalidate: DATA_REVALIDATE } },
     )
     if (res.status === 404) return MISSING
     if (!res.ok) return null

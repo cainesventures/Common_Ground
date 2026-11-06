@@ -10,12 +10,19 @@
  * than serving an empty page.
  */
 import type { CouncilmemberWithTenure } from '@/lib/types'
+import { backendUrl, DATA_REVALIDATE, failDuringBuild } from '@/lib/backend'
 
 export async function getCouncilmembers(): Promise<CouncilmemberWithTenure[] | null> {
+  const members = await lookupCouncilmembers()
+  if (members === null) failDuringBuild('the council member list')
+  return members
+}
+
+async function lookupCouncilmembers(): Promise<CouncilmemberWithTenure[] | null> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers`,
-      { next: { revalidate: 3600 } },
+      backendUrl('/api/councilmembers'),
+      { next: { revalidate: DATA_REVALIDATE } },
     )
     if (!res.ok) return null
     const data = await res.json()

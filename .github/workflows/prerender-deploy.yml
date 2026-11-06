@@ -1,0 +1,64 @@
+name: Pre-rendered deploy
+
+# Bill pages were ~70% of the Vercel free tier's function CPU (Nov 2026):
+# Google crawls all ~8,700 every day or two, and a page that renders on request
+# costs CPU on every first hit. Building them at deploy time removes that, but
+# takes 10-15 minutes, too slow for every push. So Vercel's own git deploy stays
+# fast (~1.5 min, no bill pages built) and this job follows it with a second
+# production deploy of the same commit that builds every bill
+# (PRERENDER_BILLS=all; see frontend/lib/sitemap-params.ts). In between, bill
+# pages render on request as before.
+#
+# Run it by hand (Actions -> Pre-rendered deploy -> Run workflow) to rebuild
+# the bill pages without a push.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push supersedes this one: its own git deploy replaces production
+# anyway, and it gets its own pre-rendered deploy after that.
+concurrency:
+  group: prerender-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy with bill pages pre-built
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      VERCEL_ORG_ID: team_x6uKaWaFkQcbUsbbS96fbxrf
+      VERCEL_PROJECT_ID: prj_9xygpv8Gp60G5Ld8Et9E0QV2mhWX
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Vercel's git deploy of this commit
+        # It has to finish first. Whichever production deploy finishes last is
+        # the one that is live, so starting early could let the fast deploy
+        # land on top of this one and undo it.
+        run: |
+          q="projectId=$VERCEL_PROJECT_ID&teamId=$VERCEL_ORG_ID&target=production&limit=20"
+          for i in $(seq 1 60); do
+            state=$(curl -fsS -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com/v6/deployments?$q" \
+              | jq -r --arg sha "$GITHUB_SHA" \
+                '[.deployments[] | select(.meta.githubCommitSha == $sha)] | sort_by(.created) | .[0].state // "NONE"')
+            echo "git deploy of ${GITHUB_SHA:0:7}: $state"
+            case "$state" in
+              READY) exit 0 ;;
+              ERROR|CANCELED) echo "::error::Vercel's git deploy of this commit is $state; not building on top of it."; exit 1 ;;
+              NONE) if [ "$i" -ge 15 ]; then echo "::warning::No git deploy found for this commit after 5 minutes; deploying anyway."; exit 0; fi ;;
+            esac
+            sleep 20
+          done
+          echo "::error::Git deploy still not ready after 20 minutes."
+          exit 1
+
+      - name: Deploy with every bill pre-built
+        # From the repo root: the project's Root Directory setting is frontend/.
+        run: npx --yes vercel@64.7.0 deploy --prod --yes --token "$VERCEL_TOKEN" --build-env PRERENDER_BILLS=all

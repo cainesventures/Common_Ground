@@ -4,18 +4,18 @@ import { siteUrl } from '@/lib/site'
 import type { CouncilmemberProfile } from '@/lib/types'
 import type { LegislativeProfile } from '@/lib/api-types'
 import { councilmemberGraph, jsonLdProps } from '@/lib/structured-data'
+import { backendUrl, DATA_REVALIDATE, failDuringBuild } from '@/lib/backend'
+import { idsFromSitemaps } from '@/lib/sitemap-params'
 
 // Must match BILLS_PER_PAGE in the client, so the seeded first page is exactly
 // what the client would have fetched for page 1.
 const BILLS_PER_PAGE = 20
 
-// Without these Next 15 renders this route on every request (Vercel showed 0
-// ISR writes and 242K invocations, almost all crawlers). An empty list keeps
-// builds fast; each page is rendered on first hit and then served from the
-// ISR cache, refreshed at most hourly.
-export const revalidate = 3600
-export function generateStaticParams() {
-  return []
+// All members are built at deploy time: there are ~17, so it costs seconds.
+// Must equal DATA_REVALIDATE in lib/backend.ts (segment config takes a literal).
+export const revalidate = 604800
+export function generateStaticParams({ params }: { params: { city: string } }) {
+  return idsFromSitemaps(['sitemap-core.xml'], params.city, 'councilmembers').map((id) => ({ id }))
 }
 
 /**
@@ -31,10 +31,16 @@ export function generateStaticParams() {
 const MISSING = Symbol('missing')
 
 async function getMember(id: string): Promise<CouncilmemberProfile | typeof MISSING | null> {
+  const member = await lookupMember(id)
+  if (member === null) failDuringBuild(`council member ${id}`)
+  return member
+}
+
+async function lookupMember(id: string): Promise<CouncilmemberProfile | typeof MISSING | null> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}?bills_page=1&bills_limit=${BILLS_PER_PAGE}`,
-      { next: { revalidate: 3600 } },
+      backendUrl(`/api/councilmembers/${id}?bills_page=1&bills_limit=${BILLS_PER_PAGE}`),
+      { next: { revalidate: DATA_REVALIDATE } },
     )
     if (res.status === 404) return MISSING
     if (!res.ok) return null
@@ -62,8 +68,8 @@ async function getMember(id: string): Promise<CouncilmemberProfile | typeof MISS
 async function getLegislativeProfile(id: string): Promise<LegislativeProfile | null> {
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8000'}/api/councilmembers/${id}/legislative-profile`,
-      { next: { revalidate: 3600 } },
+      backendUrl(`/api/councilmembers/${id}/legislative-profile`),
+      { next: { revalidate: DATA_REVALIDATE } },
     )
     if (!res.ok) return null
     const data = await res.json()

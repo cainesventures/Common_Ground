@@ -27,8 +27,8 @@
 #  4. scripts/generate_legislative_narrative.py - regenerate 26-year narrative JSON (Ollama)
 #  5. scripts/generate_sitemap.py     - regenerate static sitemap.xml
 #  6. ANALYZE + litestream replicate  - refresh SQLite planner stats, then upload CONTENT DB snapshot to Backblaze B2 (path "db")
-#  7. git push                        - Vercel picks up new sitemap.xml + narrative JSON (~2 min)
-#  8. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
+#  7. railway redeploy                - Railway restores CONTENT db from B2 and restarts (~3 min)
+#  8. wait + git push                 - once prod serves the new DB, push; site live in ~2 min, bill pages pre-built ~15 min later
 #  9. cloudflare purge                - drop cached API reads so the new data is served immediately
 #
 # Step 9 needs CLOUDFLARE_API_TOKEN (Zone -> Cache Purge -> Purge) and
@@ -106,7 +106,7 @@ function Wait-Ollama {
 # Load .env
 $EnvFile = "$ROOT\.env"
 if (-not (Test-Path $EnvFile)) {
-    Fail ".env not found at $EnvFile. Step 8 needs RAILWAY_TOKEN and step 9 needs the Cloudflare pair."
+    Fail ".env not found at $EnvFile. Step 7 needs RAILWAY_TOKEN and step 9 needs the Cloudflare pair."
 }
 Get-Content $EnvFile | ForEach-Object {
     if ($_ -match '^\s*([^#][^=]+)=(.*)$') {
@@ -183,7 +183,7 @@ $ErrorActionPreference = $prevEAP
 if (-not $railwayOk) {
     Warn "Railway CLI not authenticated or project not linked."
     Warn "Fix: set a persistent RAILWAY_TOKEN in .env, or run: railway login && railway link"
-    Warn "Step 8 (redeploy) will be SKIPPED - the DB uploaded in step 6 will NOT go live this run."
+    Warn "Step 7 (redeploy) will be SKIPPED - the DB uploaded in step 6 will NOT go live this run."
 }
 
 # ── Step 1: Fetch new bills from Legistar ────────────────────────────────────
@@ -276,75 +276,25 @@ Log "Step 6/9 - Pruning superseded snapshots from B2..."
 python scripts/prune_b2.py
 if ($LASTEXITCODE -ne 0) { Warn "B2 prune failed; old snapshots remain. Publish continues." }
 
-# ── Step 7: Git push (Vercel auto-deploys on push) ───────────────────────────
-Log "Step 7/9 - Committing and pushing sitemap + narrative to GitHub..."
-# All four sitemap files, not just sitemap.xml. generate_sitemap.py now emits a
-# sitemap index plus three segments (core / bills / bills-archive); staging only
-# the index would push a file whose children were stale or, on a fresh clone,
-# absent -- so robots.txt would point Google at an index referencing 404s.
-git add frontend/public/sitemap.xml `
-        frontend/public/sitemap-core.xml `
-        frontend/public/sitemap-bills.xml `
-        frontend/public/sitemap-bills-archive.xml `
-        frontend/public/data/legislative_history.json
-$staged = git diff --cached --name-only
-# Data commits belong on main. If the repo is on a feature branch, a plain
-# `git push` has no upstream and fails -- which on 2026-10-23 aborted the run
-# before step 8, so the uploaded DB never went live. Skip the commit instead;
-# the files stay modified and the next publish from main picks them up.
-$branch = (git rev-parse --abbrev-ref HEAD).Trim()
-if ($staged -and $branch -ne "main") {
-    git reset -q -- frontend/public
-    Log "WARNING: repo is on '$branch', not main - skipping the sitemap/narrative commit. The data still goes live below."
-    $staged = $null
-}
-if ($staged) {
-    $stamp = Get-Date -Format "yyyy-MM-dd"
-    git commit -m "Data update ${stamp}: refresh sitemap and legislative narrative"
-    if ($LASTEXITCODE -ne 0) { Fail "Git commit failed." }
+$pushed = $false
 
-    # `git push` writes its progress ("To https://github.com/...") to stderr even
-    # on success. If this script's own output is redirected or piped -- e.g. run
-    # as `.\publish.ps1 2>&1 | Tee-Object` -- that stderr is merged into the
-    # pipeline, and under $ErrorActionPreference="Stop" PowerShell turns it into
-    # a terminating NativeCommandError. The push succeeds and the script dies
-    # anyway, skipping the Railway redeploy, so the new DB never gets restored.
-    # Gate on $LASTEXITCODE instead, which is the real result.
-    $prevEAP = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    try {
-        git push
-    } finally {
-        $ErrorActionPreference = $prevEAP
-    }
-    # Not fatal: the DB is already uploaded, and failing here would skip the
-    # Railway restore below. The commit stays local and goes out next push.
-    if ($LASTEXITCODE -ne 0) {
-        Log "WARNING: git push failed - sitemap/narrative not deployed yet; continuing so the data still goes live."
-    } else {
-        Log "Pushed - Vercel will redeploy in ~2 min."
-    }
-} else {
-    Log "No sitemap/narrative changes to push."
-}
-
-# ── Step 8: Railway redeploy (picks up new DB from B2) ───────────────────────
+# ── Step 7: Railway redeploy (picks up new DB from B2) ───────────────────────
 # Whether the backend was actually told to restart. Step 9 must not purge the
 # edge cache without it: a purge against the still-running old instance refills
 # the cache from pre-publish data and pins it there for another hour, which is
 # worse than letting it expire on its own.
 $redeployOk = $false
 if ($railwayOk) {
-    Log "Step 8/9 - Triggering Railway redeploy..."
+    Log "Step 7/9 - Triggering Railway redeploy..."
     # Bump DB_RESTORE_VERSION so Railway knows to pull the new DB from B2.
     # Without this, Railway skips the restore on restarts (preserving user accounts).
     $version = Get-Date -Format "yyyyMMdd-HHmmss"
     # Native commands that write to stderr become a terminating
     # NativeCommandError under $ErrorActionPreference="Stop" whenever this
-    # script's output is redirected or piped (see the note at step 7). That
-    # would abort the run before the deploy and before .last_publish is
-    # written, so drop to "Continue" and gate on $LASTEXITCODE, which is the
-    # real result.
+    # script's output is redirected or piped (see the note at the git push in
+    # step 8). That would abort the run before the deploy and before
+    # .last_publish is written, so drop to "Continue" and gate on
+    # $LASTEXITCODE, which is the real result.
     # `set` is the current subcommand (the bare `--set` flag is now legacy);
     # --skip-deploys avoids a redundant deploy since we trigger one explicitly below.
     $prevEAP = $ErrorActionPreference
@@ -378,8 +328,116 @@ if ($railwayOk) {
     }
     $ErrorActionPreference = $prevEAP
 } else {
-    Warn "Step 8/9 - Skipping Railway redeploy (not logged in)."
+    Warn "Step 7/9 - Skipping Railway redeploy (not logged in)."
     Warn "Manual: railway.com -> opencommonground-api -> Redeploy"
+}
+
+# ── Step 8: Wait for the new DB, then push (Vercel rebuilds every bill page) ─
+# Bill pages are built at deploy time from the live backend
+# (frontend/app/[city]/legislation/[id]/bill-params.ts), so the push waits
+# until production serves the DB uploaded in step 6. Pushed any earlier, the
+# build bakes the previous data into ~8,700 pages until the next deploy, and
+# turns bills that are new in the sitemap into 404s.
+#
+# Wait for the backend to report OUR restore version, not merely to be
+# alive. /health now carries db_version, which is the contents of
+# .restore_version -- a file the Railway start command writes only after
+# `litestream restore` succeeds (railway.toml). So a match proves this
+# instance restored the snapshot uploaded minutes ago.
+#
+# The previous loop tested `status -eq "healthy"`, which the OLD container
+# answers identically, so it passed in ~15s regardless and the purge raced
+# the rollout. A version match cannot be satisfied by the old instance.
+$live = $false
+if ($redeployOk) {
+    Log "Step 8/9 - Waiting for the backend to report DB version $version..."
+    for ($i = 0; $i -lt 40; $i++) {
+        Start-Sleep 15
+        try {
+            $h = Invoke-RestMethod "https://api.opencommonground.com/health" -TimeoutSec 10
+            if ($h.db_version -eq $version) {
+                $live = $true
+                Log "Backend is serving DB version $version (commit $($h.commit))."
+                break
+            }
+            if ($i -eq 0 -and -not $h.PSObject.Properties.Match('db_version').Count) {
+                # An older build that predates the marker. Fall back to the
+                # liveness behaviour rather than waiting out the full 10
+                # minutes for a field it will never send.
+                Warn "This backend build does not report db_version; falling back to a liveness check."
+                if ($h.status -eq "healthy") { Start-Sleep 45; $live = $true; break }
+            }
+        } catch {
+            # Expected while the instance is restarting.
+        }
+    }
+    if ($live) {
+        Log "Letting the rollout settle..."
+        Start-Sleep 20
+    } else {
+        Warn "Backend never reported DB version $version within 10 min."
+        Warn "Check railway.com -> opencommonground-api -> Deployments, then re-run."
+    }
+}
+
+Log "Step 8/9 - Committing and pushing sitemap + narrative to GitHub..."
+# All four sitemap files, not just sitemap.xml. generate_sitemap.py now emits a
+# sitemap index plus three segments (core / bills / bills-archive); staging only
+# the index would push a file whose children were stale or, on a fresh clone,
+# absent -- so robots.txt would point Google at an index referencing 404s.
+git add frontend/public/sitemap.xml `
+        frontend/public/sitemap-core.xml `
+        frontend/public/sitemap-bills.xml `
+        frontend/public/sitemap-bills-archive.xml `
+        frontend/public/data/legislative_history.json
+$staged = git diff --cached --name-only
+# Data commits belong on main. If the repo is on a feature branch, a plain
+# `git push` has no upstream and fails -- which on 2026-10-23 aborted the run
+# before the Railway step, so the uploaded DB never went live. Skip the commit;
+# the files stay modified and the next publish from main picks them up.
+$branch = (git rev-parse --abbrev-ref HEAD).Trim()
+if ($staged -and $branch -ne "main") {
+    git reset -q -- frontend/public
+    Log "WARNING: repo is on '$branch', not main - skipping the sitemap/narrative commit. The data still went live in step 7."
+    $staged = $null
+}
+if ($staged) {
+    $stamp = Get-Date -Format "yyyy-MM-dd"
+    git commit -m "Data update ${stamp}: refresh sitemap and legislative narrative"
+    if ($LASTEXITCODE -ne 0) { Fail "Git commit failed." }
+
+    # `git push` writes its progress ("To https://github.com/...") to stderr even
+    # on success. If this script's own output is redirected or piped -- e.g. run
+    # as `.\publish.ps1 2>&1 | Tee-Object` -- that stderr is merged into the
+    # pipeline, and under $ErrorActionPreference="Stop" PowerShell turns it into
+    # a terminating NativeCommandError. The push succeeds and the script dies
+    # anyway, skipping the purge and .last_publish. Gate on $LASTEXITCODE
+    # instead, which is the real result.
+    if (-not $live) {
+        # Vercel would build every bill page from the old DB. The commit stays
+        # local and goes out with the next publish (or any push from main).
+        Warn "NOT pushing: production is not serving the new DB yet, so Vercel would"
+        Warn "build every bill page from the old one. Once /health reports the new"
+        Warn "db_version, run: git push"
+    } else {
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            git push
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+        # Not fatal: the data is already live. The commit stays local and goes
+        # out with the next push.
+        if ($LASTEXITCODE -ne 0) {
+            Log "WARNING: git push failed - site and bill pages not rebuilt yet; the commit goes out with the next push."
+        } else {
+            $pushed = $true
+            Log "Pushed - site live in ~2 min; bill pages pre-built ~15 min later (prerender-deploy workflow)."
+        }
+    }
+} else {
+    Log "No sitemap/narrative changes to push."
 }
 
 # ── Step 9: Purge the Cloudflare edge cache ──────────────────────────────────
@@ -393,11 +451,11 @@ $cfZone   = [Environment]::GetEnvironmentVariable("CLOUDFLARE_ZONE_ID", "Process
 # A purge is only safe once the new backend is live. Purging while the OLD
 # instance is still serving refills the edge from pre-publish data and pins it
 # there for a fresh hour -- strictly worse than letting it expire by itself. So
-# a failed redeploy skips the purge rather than racing it.
-$purgeBlocked = $railwayOk -and -not $redeployOk
+# unless step 8 saw the new DB version, skip the purge rather than race it.
+$purgeBlocked = $railwayOk -and -not $live
 
 if ($purgeBlocked) {
-    Warn "Step 9/9 - NOT purging: the backend was never redeployed, so the edge"
+    Warn "Step 9/9 - NOT purging: the backend is not serving the new DB, so the edge"
     Warn "would be refilled from pre-publish data and held for another hour."
     Warn "The new DB is already in B2. To finish the publish:"
     Warn "  railway redeploy --yes"
@@ -407,49 +465,6 @@ if ($purgeBlocked) {
     Warn "The edge will expire on its own within an hour."
 } else {
     Log "Step 9/9 - Purging Cloudflare cache..."
-
-    # Wait for the backend to report OUR restore version, not merely to be
-    # alive. /health now carries db_version, which is the contents of
-    # .restore_version -- a file the Railway start command writes only after
-    # `litestream restore` succeeds (railway.toml). So a match proves this
-    # instance restored the snapshot uploaded minutes ago.
-    #
-    # The previous loop tested `status -eq "healthy"`, which the OLD container
-    # answers identically, so it passed in ~15s regardless and the purge raced
-    # the rollout. A version match cannot be satisfied by the old instance.
-    if ($railwayOk) {
-        Log "Waiting for the backend to report DB version $version..."
-        $live = $false
-        for ($i = 0; $i -lt 40; $i++) {
-            Start-Sleep 15
-            try {
-                $h = Invoke-RestMethod "https://api.opencommonground.com/health" -TimeoutSec 10
-                if ($h.db_version -eq $version) {
-                    $live = $true
-                    Log "Backend is serving DB version $version (commit $($h.commit))."
-                    break
-                }
-                if ($i -eq 0 -and -not $h.PSObject.Properties.Match('db_version').Count) {
-                    # An older build that predates the marker. Fall back to the
-                    # liveness behaviour rather than waiting out the full 10
-                    # minutes for a field it will never send.
-                    Warn "This backend build does not report db_version; falling back to a liveness check."
-                    if ($h.status -eq "healthy") { Start-Sleep 45; $live = $true; break }
-                }
-            } catch {
-                # Expected while the instance is restarting.
-            }
-        }
-        if ($live) {
-            Log "Letting the rollout settle..."
-            Start-Sleep 20
-        } else {
-            Warn "Backend never reported DB version $version within 10 min."
-            Warn "NOT purging - the edge would be refilled from the old instance."
-            Warn "Check railway.com -> opencommonground-api -> Deployments, then re-run."
-            $purgeBlocked = $true
-        }
-    }
 
     if ($purgeBlocked) {
         Warn "Purge skipped. The new DB is in B2 and the version bump is set;"
@@ -500,7 +515,11 @@ if ($publishComplete) {
 } else {
     Log " Publish INCOMPLETE - the new DB is in B2 but may not be live."
 }
-Log " Vercel (frontend):  picks up new sitemap + narrative in ~2 min"
+if ($pushed) {
+    Log " Vercel (frontend):  live in ~2 min; bill pages pre-built ~15 min later"
+} else {
+    Log " Vercel (frontend):  NOT redeployed - see the warnings above"
+}
 if (-not $railwayOk) {
     Log " Railway (backend):  SKIPPED - the new DB is in B2 but is NOT live"
 } elseif ($redeployOk) {
