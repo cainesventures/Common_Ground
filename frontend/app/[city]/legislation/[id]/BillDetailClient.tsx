@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { ActionResult, VoteTally } from '@/lib/api-types'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -22,7 +22,8 @@ import { NotifyButton } from '@/components/NotifyButton'
 import { STATUS_TERM, billTypeTerm } from '@/lib/civic-glossary'
 import { siteUrl } from '@/lib/site'
 import { useTabs } from '@/lib/use-tabs'
-import type { Bill, Councilmember, DistrictGeoJSON, VoteRecord } from '@/lib/types'
+import type { Bill, Councilmember, DistrictGeoJSON, RelatedBillCard, RelatedBills as RelatedBillsData, VoteRecord } from '@/lib/types'
+import { lastName } from '@/lib/names'
 
 /** Does this bill have any news links? Cheap check for the tab filter, which
  *  runs before the full parse below. */
@@ -533,96 +534,240 @@ function StatusTimeline({ status }: { status: string }) {
 
 // ── Related bills ─────────────────────────────────────────────────────────────
 
-function RelatedBills({ billId, tags, sponsor }: { billId: string; tags: string[]; sponsor?: string }) {
+/** "land-use" -> "land use", for running text and link labels. */
+function tagLabel(tag: string): string {
+  return tag.replace(/[-_]+/g, ' ').trim()
+}
+
+/** A tag on fewer bills than this opens a list of almost nothing, so it is not
+ *  linked. Same threshold as MIN_TAG_BILLS in app/services/related_bills.py. */
+const MIN_TAG_BILLS = 3
+
+function RelatedCard({ bill, onClick }: { bill: RelatedBillCard; onClick: () => void }) {
   const { city } = useParams<{ city: string }>()
-  const [bills, setBills] = useState<Bill[]>([])
-
-  useEffect(() => {
-    const firstTag = tags[0]
-    if (!firstTag && !sponsor) return
-
-    const fetches: Promise<Bill[]>[] = []
-    if (firstTag) {
-      fetches.push(
-        api.searchLegislation('', 6, 0, '', '', firstTag, '', 0, 0, '', '')
-          .then((d) => d?.results ?? [])
-          .catch(() => [])
-      )
-    }
-    if (sponsor) {
-      const lastName = sponsor.split(',')[0].trim().split(' ').pop() ?? ''
-      fetches.push(
-        api.searchLegislation('', 6, 0, '', '', '', '', 0, 0, '', lastName)
-          .then((d) => d?.results ?? [])
-          .catch(() => [])
-      )
-    }
-
-    Promise.all(fetches).then((results) => {
-      const seen = new Set([billId])
-      const merged: Bill[] = []
-      for (const list of results) {
-        for (const b of list) {
-          if (!seen.has(b.id)) { seen.add(b.id); merged.push(b) }
-        }
-      }
-      setBills(merged.slice(0, 5))
-    })
-  }, [billId, tags, sponsor])
-
-  if (bills.length === 0) return null
-
+  const meta = [bill.bill_number, bill.status ? fmtStatus(bill.status) : null, bill.introduced_date?.slice(0, 4)]
+    .filter(Boolean)
+    .join(' · ')
   return (
-    <div>
-      <h2 className="text-lg font-semibold mb-3">Related Bills</h2>
-      <div className="space-y-2">
-        {bills.map((b) => (
-          <Link
-            key={b.id}
-            href={`/${city}/legislation/${b.id}`}
-            className="flex items-start gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all group"
-          >
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-mono text-muted-foreground">{b.bill_number}</p>
-              <p className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors mt-0.5">
-                {b.headline || b.plain_title || b.title}
-              </p>
-              {b.summary && (
-                <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{b.summary}</p>
-              )}
-            </div>
-            {b.impact_level && (
-              <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full capitalize font-medium mt-0.5 ${IMPACT_COLORS[b.impact_level] ?? ''}`}>{b.impact_level}</span>
-            )}
-          </Link>
-        ))}
+    <Link
+      href={`/${city}/legislation/${bill.id}`}
+      onClick={onClick}
+      className="flex items-start gap-3 border rounded-lg p-3 hover:border-primary/60 hover:shadow-sm transition-all group"
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          {bill.title}
+        </p>
+        {meta && <p className="text-xs text-muted-foreground mt-1">{meta}</p>}
       </div>
-    </div>
+      {bill.impact_level && (
+        <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded-full capitalize font-medium mt-0.5 ${IMPACT_COLORS[bill.impact_level] ?? ''}`}>{bill.impact_level}</span>
+      )}
+    </Link>
   )
 }
 
-function SponsorLinks({ sponsor, members }: { sponsor: string; members: Councilmember[] }) {
+/**
+ * What to read next: bills on the same subject, then the sponsor's other bills.
+ *
+ * Nearly every visitor arrives on a bill page from a search, and most leave
+ * after it (week of Nov 1 2026: 324 of 404 viewed one page). The list this
+ * replaced was fetched in the browser after load and matched on the first tag
+ * alone. This one is ranked on the server by tag rarity and seeded from the
+ * server render, so it is in the HTML and on screen with the rest of the page.
+ *
+ * Every click is recorded as related_bill_clicked, with its group and
+ * position, so whether this works, and where it should sit, can be read off
+ * the numbers.
+ */
+function RelatedBills({ billId, initial }: { billId: string; initial: RelatedBillsData | null }) {
+  const { city } = useParams<{ city: string }>()
+  const posthog = usePostHog()
+  const [related, setRelated] = useState<RelatedBillsData | null>(initial)
+
+  // Only when the server lookup failed; otherwise the seed is the answer.
+  useEffect(() => {
+    if (initial) return
+    api.getRelatedLegislation(billId)
+      .then((d) => setRelated(d?.data ?? null))
+      .catch(() => {})
+  }, [billId, initial])
+
+  if (!related) return null
+  const { subject, sponsor } = related
+  if (subject.bills.length === 0 && sponsor.bills.length === 0) return null
+
+  const track = (group: 'subject' | 'sponsor', targetId: string, position: number) =>
+    posthog?.capture('related_bill_clicked', { bill_id: billId, target_id: targetId, group, position })
+
+  const sponsorHref = sponsor.councilmember_id
+    ? `/${city}/councilmembers/${sponsor.councilmember_id}`
+    : sponsor.filter
+      ? `/${city}/legislation?sponsor=${encodeURIComponent(sponsor.filter)}`
+      : null
+
+  return (
+    <section aria-label="Related bills" className="space-y-6">
+      {subject.bills.length > 0 && (
+        <div>
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 className="text-lg font-semibold">More on this subject</h2>
+            {subject.tag && (
+              <Link
+                href={`/${city}/legislation?tag=${encodeURIComponent(subject.tag)}`}
+                onClick={() => posthog?.capture('explore_clicked', { bill_id: billId, kind: 'subject_all', tag: subject.tag })}
+                className="text-sm text-primary hover:underline text-right"
+              >
+                All {tagLabel(subject.tag)} bills →
+              </Link>
+            )}
+          </div>
+          <div className="space-y-2">
+            {subject.bills.map((b, i) => (
+              <RelatedCard key={b.id} bill={b} onClick={() => track('subject', b.id, i)} />
+            ))}
+          </div>
+        </div>
+      )}
+      {sponsor.bills.length > 0 && sponsor.name && (
+        <div>
+          <div className="flex items-baseline justify-between gap-3 mb-3">
+            <h2 className="text-lg font-semibold">More from {sponsor.name}</h2>
+            {sponsorHref && (
+              <Link
+                href={sponsorHref}
+                onClick={() => posthog?.capture('explore_clicked', { bill_id: billId, kind: 'sponsor_all' })}
+                aria-label={`All bills from ${sponsor.name}`}
+                className="text-sm text-primary hover:underline shrink-0"
+              >
+                See all →
+              </Link>
+            )}
+          </div>
+          <div className="space-y-2">
+            {sponsor.bills.map((b, i) => (
+              <RelatedCard key={b.id} bill={b} onClick={() => track('sponsor', b.id, i)} />
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * The search box and a few ways onward, at the foot of every tab.
+ *
+ * A reader who got what they came for on this bill is otherwise handed a share
+ * bar and a link back to the full list. Submitting goes to the list page's own
+ * search (?q=), which renders server-side, and fires the same search_performed
+ * event the list page does, tagged with where it came from.
+ */
+function KeepExploring({ billId }: { billId: string }) {
+  const { city } = useParams<{ city: string }>()
+  const router = useRouter()
+  const posthog = usePostHog()
+  const [q, setQ] = useState('')
+
+  const links = [
+    { href: `/${city}/this-week`, label: 'This week in Council', kind: 'this_week' },
+    { href: `/${city}/insights/subjects`, label: 'Bills by subject', kind: 'subjects' },
+    { href: `/${city}/councilmembers`, label: 'Find your councilmember', kind: 'councilmembers' },
+  ]
+
+  return (
+    <section aria-labelledby="keep-exploring-heading" className="rounded-xl border bg-muted/30 p-5 space-y-3">
+      <h2 id="keep-exploring-heading" className="font-semibold">Look up another bill</h2>
+      {/* action/method keep this working before hydration; with JS it is a
+          client-side navigation so the event is sent before the page changes. */}
+      <form
+        role="search"
+        action={`/${city}/legislation`}
+        method="get"
+        onSubmit={(e) => {
+          const query = q.trim()
+          if (!query) { e.preventDefault(); return }
+          e.preventDefault()
+          posthog?.capture('search_performed', { query, from: 'bill_page', bill_id: billId })
+          router.push(`/${city}/legislation?q=${encodeURIComponent(query)}`)
+        }}
+        className="flex gap-2"
+      >
+        <input
+          type="search"
+          name="q"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Topic, street, or bill number"
+          aria-label="Search Philadelphia City Council bills"
+          className="flex-1 min-w-0 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+        />
+        <button
+          type="submit"
+          className="px-4 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          Search
+        </button>
+      </form>
+      <p className="text-xs text-muted-foreground">Every City Council bill since 2000, summarized in plain English.</p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {links.map((l) => (
+          <li key={l.kind}>
+            <Link
+              href={l.href}
+              onClick={() => posthog?.capture('explore_clicked', { bill_id: billId, kind: l.kind })}
+              className="text-primary hover:underline"
+            >
+              {l.label} →
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+const SPONSOR_TITLE_RE = /^(Councilmember At-Large|Councilmember|Council President)\s+/
+
+/**
+ * The current member a sponsor string refers to, if any.
+ *
+ * Sponsor strings carry a title and a surname only, so this is a surname
+ * match, and the member must have been serving when the bill was introduced.
+ * Without that check a 2003 "Councilmember Johnson" bill linked to the profile
+ * of a member first elected in 2012. Same rule as app/services/related_bills.py.
+ */
+function memberForSponsor(part: string, members: Councilmember[], introducedYear: number | null): Councilmember | undefined {
+  const sn = lastName(part).toLowerCase()
+  return members.find((m) =>
+    lastName(m.name).toLowerCase() === sn &&
+    (!m.term_start || introducedYear === null || introducedYear >= m.term_start))
+}
+
+/**
+ * Every sponsor is a link: a current member's profile where there is one,
+ * otherwise the list of that sponsor's bills. Rendered from the server-seeded
+ * member list, so the links are in the HTML rather than appearing after a
+ * client fetch.
+ */
+function SponsorLinks({ sponsor, members, introducedYear }: { sponsor: string; members: Councilmember[]; introducedYear: number | null }) {
   const { city } = useParams<{ city: string }>()
   if (!sponsor) return null
-  // Split multiple sponsors by comma
   const parts = sponsor.split(',').map((s) => s.trim()).filter(Boolean)
   return (
     <p className="text-sm text-muted-foreground mt-1">
-      Sponsor:{' '}
+      {parts.length > 1 ? 'Sponsors' : 'Sponsor'}:{' '}
       {parts.map((part, i) => {
-        // Match by last name
-        const lastName = part.split(' ').pop()?.toLowerCase() ?? ''
-        const match = members.find((m) => m.name.toLowerCase().includes(lastName))
+        const match = memberForSponsor(part, members, introducedYear)
+        const href = match
+          ? `/${city}/councilmembers/${match.id}`
+          : `/${city}/legislation?sponsor=${encodeURIComponent(part.replace(SPONSOR_TITLE_RE, ''))}`
         return (
           <span key={i}>
             {i > 0 && ', '}
-            {match ? (
-              <Link href={`/${city}/councilmembers/${match.id}`} className="hover:underline text-foreground">
-                {part}
-              </Link>
-            ) : (
-              part
-            )}
+            <Link href={href} className="hover:underline text-foreground">
+              {part}
+            </Link>
           </span>
         )
       })}
@@ -653,7 +798,15 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'text',    label: 'Bill Text' },
 ]
 
-export default function BillDetailClient({ initialBill = null }: { initialBill?: Bill | null }) {
+export default function BillDetailClient({
+  initialBill = null,
+  initialRelated = null,
+  initialMembers = null,
+}: {
+  initialBill?: Bill | null
+  initialRelated?: RelatedBillsData | null
+  initialMembers?: Councilmember[] | null
+}) {
   const { city, id } = useParams<{ city: string; id: string }>()
   const searchParams = useSearchParams()
   // Seeded from the server so the bill renders during SSR instead of falling
@@ -661,7 +814,8 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
   // crawlers with an empty page. The client still refetches on mount to pick up
   // per-user state (tracking, admin) and any newer data.
   const [leg, setLeg] = useState<Bill | null>(initialBill)
-  const [members, setMembers] = useState<Councilmember[]>([])
+  // Seeded from the server so sponsor names render as links in the HTML.
+  const [members, setMembers] = useState<Councilmember[]>(initialMembers ?? [])
   const [loading, setLoading] = useState(!initialBill)
   const [tracked, setTracked] = useState(false)
   const [voteCounts, setVoteCounts] = useState<VoteTally>({ support: 0, neutral: 0, oppose: 0, total: 0 })
@@ -712,7 +866,10 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
     // Phase 1: load bill (includes vote_records inline)
     Promise.all([
       useSeed ? Promise.resolve({ data: initialBill }) : api.getLegislation(id),
-      api.getCouncilmembers().catch(() => ({ members: [] })),
+      // The server already sent the member list; only fetch it when it did not.
+      initialMembers?.length
+        ? Promise.resolve({ members: initialMembers })
+        : api.getCouncilmembers().catch(() => ({ members: [] })),
       loggedIn ? api.getTrackedBillIds().catch(() => ({ ids: [] })) : Promise.resolve({ ids: [] }),
       loggedIn ? api.getMe().catch(() => null) : Promise.resolve(null),
     ])
@@ -735,7 +892,7 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [id, loggedIn, initialBill])
+  }, [id, loggedIn, initialBill, initialMembers])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -977,7 +1134,13 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           </div>
         </div>
 
-        {leg.sponsor && <SponsorLinks sponsor={leg.sponsor} members={members} />}
+        {leg.sponsor && (
+          <SponsorLinks
+            sponsor={leg.sponsor}
+            members={members}
+            introducedYear={leg.introduced_date ? Number(String(leg.introduced_date).slice(0, 4)) || null : null}
+          />
+        )}
 
         {leg.introduced_date && (
           <p className="text-sm text-muted-foreground">
@@ -995,11 +1158,28 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
           </p>
         )}
 
+        {/* Each subject links to every bill that shares it, the first way
+            onward a reader sees. A tag too rare to open a useful list stays
+            plain text. */}
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2">
-            {tags.map((tag: string) => (
-              <span key={tag} className="text-xs bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded-full font-medium capitalize">{tag}</span>
-            ))}
+            {tags.map((tag: string) => {
+              const chip = 'text-xs bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded-full font-medium capitalize'
+              const count = initialRelated?.tag_counts?.[tag.toLowerCase()] ?? 0
+              return count >= MIN_TAG_BILLS ? (
+                <Link
+                  key={tag}
+                  href={`/${city}/legislation?tag=${encodeURIComponent(tag)}`}
+                  onClick={() => posthog?.capture('explore_clicked', { bill_id: id, kind: 'tag_chip', tag })}
+                  title={`Browse ${count.toLocaleString('en-US')} bills tagged ${tagLabel(tag)}`}
+                  className={`${chip} hover:bg-blue-100 hover:border-blue-300 dark:hover:bg-blue-900/50 transition-colors`}
+                >
+                  {tagLabel(tag)}
+                </Link>
+              ) : (
+                <span key={tag} className={chip}>{tagLabel(tag)}</span>
+              )
+            })}
           </div>
         )}
       </div>
@@ -1127,8 +1307,8 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
             />
           )}
 
-          {/* Related bills — discovery, shown right after the summary */}
-          <RelatedBills billId={id} tags={tags} sponsor={leg.sponsor ?? undefined} />
+          {/* Related bills: discovery, shown right after the summary */}
+          <RelatedBills billId={id} initial={initialRelated} />
 
           {/* Philadelphia Context */}
           {cityContext.length > 0 && (
@@ -1241,6 +1421,10 @@ export default function BillDetailClient({ initialBill = null }: { initialBill?:
         icon was the only option anywhere, which left the dynamic OG image for
         this page with essentially no way of being used.
       */}
+      {/* On every tab, not just Summary: the end of the bill text is exactly
+          where a reader decides whether to look at anything else. */}
+      <KeepExploring billId={id} />
+
       <div className="border-t pt-5">
         <ShareBar
           url={shareUrl}

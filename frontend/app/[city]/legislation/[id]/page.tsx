@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation'
 import BillDetailClient from './BillDetailClient'
 import { siteUrl } from '@/lib/site'
 import { getBill, MISSING } from './get-bill'
+import { getRelated } from './get-related'
+import { getCouncilmembers } from '../../councilmembers/get-councilmembers'
 import { billGraph, jsonLdProps } from '@/lib/structured-data'
 import { BillBlogCallout } from '@/components/blog/BillBlogCallout'
 import { BallotQuestionCallout } from '@/components/BallotQuestionCallout'
@@ -82,7 +84,21 @@ export default async function BillDetailPage({
   params: Promise<{ city: string; id: string }>
 }) {
   const { city, id } = await params
-  const initialBill = await getBill(id)
+  // In parallel: the bill, what to read next, and the member list that turns
+  // sponsor names into links. All three are in the server HTML, so the links
+  // out of this page are there for a crawler and there before a reader scrolls.
+  // The member list is one cached fetch shared by every bill page.
+  const [initialBill, initialRelated, allMembers] = await Promise.all([
+    getBill(id),
+    getRelated(id),
+    getCouncilmembers(),
+  ])
+  // Only the fields the page reads (sponsor links, the contact button, the
+  // district lookup). The list is serialized into every bill page's HTML, so
+  // photos, phone numbers and tenure figures would be dead weight.
+  const initialMembers = allMembers?.map(({ id: memberId, name, district, email, profile_url, term_start }) => ({
+    id: memberId, name, district, email, profile_url, term_start,
+  })) ?? null
   // layout.tsx is what actually makes this a 404; kept here too so the page is
   // correct on its own. A null is left alone -- the lookup failed for some
   // other reason and the client falls back to fetching, so a backend blip
@@ -107,7 +123,11 @@ export default async function BillDetailPage({
       {graph && <script {...jsonLdProps(graph)} />}
       <BallotQuestionCallout billId={id} />
       <BillBlogCallout billId={id} billNumber={initialBill?.bill_number} />
-      <BillDetailClient initialBill={initialBill} />
+      <BillDetailClient
+        initialBill={initialBill}
+        initialRelated={initialRelated}
+        initialMembers={initialMembers}
+      />
     </>
   )
 }

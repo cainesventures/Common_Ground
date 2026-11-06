@@ -30,6 +30,7 @@ import type {
   CouncilmemberProfile,
   MemberVoteRecord,
   Perspective,
+  RelatedBills,
   VoteRecord,
 } from './types'
 
@@ -42,6 +43,10 @@ interface Ok {
 
 export interface BillDetailResponse extends Ok {
   data: Bill
+}
+
+export interface RelatedBillsResponse extends Ok {
+  data: RelatedBills
 }
 
 /** `/search` and `/list` share this shape. */

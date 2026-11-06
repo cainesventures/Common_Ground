@@ -29,6 +29,7 @@ import type {
   PerspectivesResponse,
   PipelineStatsResponse,
   PublicStatsResponse,
+  RelatedBillsResponse,
   PredictionsResponse,
   RollCallResponse,
   SponsorLeaderboardResponse,
@@ -95,6 +96,9 @@ export const api = {
   // ── Legislation ───────────────────────────────────────────────────────────
   getLegislation: (id: string) =>
     apiFetch<BillDetailResponse>(`/api/legislation/${id}`),
+
+  getRelatedLegislation: (id: string) =>
+    apiFetch<RelatedBillsResponse>(`/api/legislation/${id}/related`),
 
   listLegislation: (limit = 20, offset = 0, level = '') =>
     apiFetch<BillListResponse>(`/api/legislation/list?limit=${limit}&offset=${offset}${level ? `&level=${level}` : ''}`),

@@ -2881,6 +2881,27 @@ async def sync_votes(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/{legislation_id}/related")
+async def get_related_legislation(
+    legislation_id: str,
+    db: Session = Depends(get_db)
+):
+    """Bills on the same subject and from the same sponsor, for the bill page.
+
+    Called by the bill page's server render (ISR, hourly), so the links are in
+    the HTML a crawler reads. See app/services/related_bills.py for the ranking.
+    """
+    from app.services.related_bills import related_bills
+    leg = db.query(Legislation).filter(Legislation.id == legislation_id).first()
+    if not leg:
+        raise HTTPException(status_code=404, detail="Legislation not found")
+    try:
+        return {"success": True, "data": related_bills(db, leg)}
+    except Exception as e:
+        logger.error(f"Error building related bills for {legislation_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/{legislation_id}")
 async def get_legislation(
     legislation_id: str,

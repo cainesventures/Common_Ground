@@ -222,3 +222,30 @@ export interface AuthUser {
   is_admin?: boolean
   subscription_tier?: string
 }
+
+/** A bill as the related lists show it: enough for a card, nothing more. */
+export interface RelatedBillCard {
+  id: string
+  bill_number: string | null
+  title: string | null
+  status: string | null
+  introduced_date: string | null
+  impact_level: string | null
+}
+
+/** `/api/legislation/{id}/related`, ranked server-side (app/services/related_bills.py). */
+export interface RelatedBills {
+  /** `tag` is the one the "see all" link filters on; null when no tag is common enough. */
+  subject: { tag: string | null; bills: RelatedBillCard[] }
+  sponsor: {
+    /** The first sponsor as written on the bill, e.g. "Council President Johnson". */
+    name: string | null
+    /** Title stripped, for the list page's ?sponsor= filter. */
+    filter: string | null
+    /** Set only when the sponsor is a current member who was serving at the time. */
+    councilmember_id: string | null
+    bills: RelatedBillCard[]
+  }
+  /** How many bills carry each of this bill's tags (lowercased keys). */
+  tag_counts: Record<string, number>
+}
