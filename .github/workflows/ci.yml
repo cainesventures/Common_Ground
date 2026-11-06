@@ -124,10 +124,10 @@ jobs:
         run: npm run lint
 
       - name: Build
-        # No backend is reachable here. That is fine: the only build-time data
-        # reads are generateStaticParams for /blog and /[city]/insights/[year],
-        # both of which read committed JSON from public/data. Bill pages are
-        # rendered on demand.
-        env:
-          NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+        # No backend is reachable here, so NEXT_PUBLIC_BACKEND_URL stays unset:
+        # that is what tells the build there is nothing to pre-render bill or
+        # member pages from, and that a failed backend lookup should fall back
+        # to client-side fetching instead of failing the build
+        # (frontend/lib/backend.ts, frontend/lib/sitemap-params.ts). Setting it,
+        # even to localhost, makes every member page fail to build.
         run: npm run build
