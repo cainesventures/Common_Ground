@@ -99,13 +99,13 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
         url: canonical,
         type: 'profile',
         siteName: 'Open Common Ground',
-        images: [{ url: `/${city}/councilmembers/${id}/opengraph-image`, width: 1200, height: 630 }],
+        images: [{ url: '/opengraph-image', width: 1200, height: 630 }],
       },
       twitter: {
         card: 'summary_large_image',
         title,
         description,
-        images: [`/${city}/councilmembers/${id}/opengraph-image`],
+        images: ['/opengraph-image'],
       },
     }
   } catch {
