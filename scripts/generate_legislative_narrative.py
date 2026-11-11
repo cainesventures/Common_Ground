@@ -422,7 +422,21 @@ Output ONLY the 3 paragraphs, nothing else."""
 
 def call_ollama(prompt: str, format_schema: dict | None = None) -> str:
     url = f"{OLLAMA_URL}/api/generate"
-    payload: dict = {"model": OLLAMA_MODEL, "prompt": prompt, "stream": False}
+    payload: dict = {
+        "model": OLLAMA_MODEL, "prompt": prompt, "stream": False,
+        # Unload soon after the last call instead of Ollama's default 5 min.
+        # Calls within a run are back to back, so the model stays loaded
+        # between them.
+        "keep_alive": "30s",
+    }
+    # Partial GPU offload. This script calls Ollama directly rather than
+    # through OllamaProvider, so it has to apply AI_NUM_GPU itself. With no
+    # num_gpu, Ollama puts all 33 layers of llama3.1:8b on the 8GB card,
+    # which starves the desktop (typing and cursor lag). 20 layers is the
+    # validated setting; AI_NUM_GPU=-1 restores full offload.
+    num_gpu = int(os.environ.get("AI_NUM_GPU") or 20)
+    if num_gpu >= 0:
+        payload["options"] = {"num_gpu": num_gpu}
     if format_schema:
         # Ollama enforces the JSON schema on the output (structured outputs)
         payload["format"] = format_schema
