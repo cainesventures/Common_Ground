@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { setToken, setUserHint } from '@/lib/auth'
+import { setToken, setUserHint, takeReturnPath } from '@/lib/auth'
 import posthog from 'posthog-js'
 import { api } from '@/lib/api'
 import Link from 'next/link'
@@ -30,8 +30,9 @@ function AuthCallbackInner() {
         if (user.email) setUserHint(user.email)
       }
     }).catch(() => {}).finally(() => {
-      // Hard redirect so the Navbar remounts and picks up the new token
-      window.location.href = '/'
+      // Hard redirect so the Navbar remounts and picks up the new token.
+      // replace() keeps the token URL out of history, so Back doesn't rerun this.
+      window.location.replace(takeReturnPath())
     })
   }, [params, router])
 
