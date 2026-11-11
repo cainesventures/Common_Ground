@@ -104,11 +104,16 @@ export function Navbar() {
   // section root, so the `href + '/'` guard is enough to avoid /blog ~ /blogfoo.
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
 
-  const navLinks = [
-    { href: `${p}/legislation`, label: 'Legislation' },
-    { href: `${p}/this-week`, label: 'This Week' },
+  // `noPrefetch` marks pages that render on every request (they read
+  // searchParams). The navbar is on every page, so prefetching them meant
+  // each page view ran three Vercel functions the visitor never asked for --
+  // measured 2026-11-10, against a Hobby CPU budget then at 96%. Static and
+  // pre-rendered pages keep the default prefetch.
+  const navLinks: { href: string; label: string; noPrefetch?: boolean }[] = [
+    { href: `${p}/legislation`, label: 'Legislation', noPrefetch: true },
+    { href: `${p}/this-week`, label: 'This Week', noPrefetch: true },
     { href: `${p}/councilmembers`, label: 'Council' },
-    { href: `${p}/insights`, label: 'Insights' },
+    { href: `${p}/insights`, label: 'Insights', noPrefetch: true },
     { href: '/budget', label: 'Budget' },
     { href: '/blog', label: 'Blog' },
     ...(user ? [{ href: `${p}/my-bills`, label: 'My Bills' }] : []),
@@ -130,7 +135,7 @@ export function Navbar() {
         {/* Desktop links */}
         <div className="hidden lg:flex items-center gap-5">
           {navLinks.map((l) => (
-            <Link key={l.href} href={l.href} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm whitespace-nowrap transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
+            <Link key={l.href} href={l.href} prefetch={l.noPrefetch ? false : undefined} aria-current={isActive(l.href) ? 'page' : undefined} className={`text-sm whitespace-nowrap transition-colors ${isActive(l.href) ? 'text-foreground font-semibold underline underline-offset-4 decoration-primary/60' : 'text-muted-foreground hover:text-foreground'}`}>
               {l.label}
             </Link>
           ))}
@@ -239,6 +244,7 @@ export function Navbar() {
             <Link
               key={l.href}
               href={l.href}
+              prefetch={l.noPrefetch ? false : undefined}
               aria-current={isActive(l.href) ? 'page' : undefined}
               className={`block px-3 py-2 rounded-md text-sm transition-colors ${
                 isActive(l.href) ? 'bg-muted font-medium text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'

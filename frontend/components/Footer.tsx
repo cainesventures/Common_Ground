@@ -45,9 +45,11 @@ export function Footer() {
             </p>
           </div>
           <nav className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
-            <Link href={`${p}/legislation`} className="hover:text-foreground transition-colors">Legislation</Link>
+            {/* No prefetch: these render on every request, so a prefetch is a
+                Vercel function run on every page view (see Navbar navLinks). */}
+            <Link href={`${p}/legislation`} prefetch={false} className="hover:text-foreground transition-colors">Legislation</Link>
             <Link href={`${p}/councilmembers`} className="hover:text-foreground transition-colors">Council</Link>
-            <Link href={`${p}/insights`} className="hover:text-foreground transition-colors">Insights</Link>
+            <Link href={`${p}/insights`} prefetch={false} className="hover:text-foreground transition-colors">Insights</Link>
             <Link href="/about" className="hover:text-foreground transition-colors">About</Link>
             <Link href="/donate" className="hover:text-foreground transition-colors">Donate</Link>
             <Link href="/legal" className="hover:text-foreground transition-colors">Legal &amp; Disclaimer</Link>
