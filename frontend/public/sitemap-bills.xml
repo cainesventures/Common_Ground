@@ -691,12 +691,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8042516</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8042502</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
@@ -733,12 +727,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8068070</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8155834</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
@@ -767,12 +755,6 @@
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8237668</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8237648</loc>
@@ -815,18 +797,6 @@
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8216678</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8216677</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
   </url>
   <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8216676</loc>
@@ -895,12 +865,6 @@
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8216636</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8216635</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>monthly</changefreq>
@@ -950,18 +914,6 @@
   </url>
   <url>
     <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8258442</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8258441</loc>
-    <lastmod>2026-10-02</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://opencommonground.com/philadelphia/legislation/legistar_phila_8258440</loc>
     <lastmod>2026-10-02</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.6</priority>
