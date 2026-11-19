@@ -823,6 +823,8 @@ async def legislation_week(
             "next_hearing_date": leg.next_hearing_date.isoformat() if leg.next_hearing_date else None,
             "next_hearing_time": leg.next_hearing_time,
             "next_hearing_body": leg.next_hearing_body,
+            "next_hearing_location": leg.next_hearing_location,
+            "next_hearing_url": leg.next_hearing_url,
         }
 
     # Legistar sometimes files an empty placeholder ("(no title)", no sponsor,
@@ -836,14 +838,20 @@ async def legislation_week(
         .order_by(Legislation.impact_score.desc().nullslast(), Legislation.introduced_date.desc())
         .all()
     )
+    # awaiting_mayor counts as passed: Council is done with it, and final_date
+    # is the day it passed. Leaving it out made the page report nothing passed
+    # in a week when Council passed 14 bills.
+    passed_statuses = ("signed_into_law", "awaiting_mayor")
     decided = (
         base.filter(
             Legislation.final_date >= start_d, Legislation.final_date < upper,
-            Legislation.status.in_(["signed_into_law", "failed", "vetoed"]),
+            Legislation.status.in_(passed_statuses + ("failed", "vetoed")),
         )
         .order_by(Legislation.final_date.desc())
         .all()
     )
+    passed = [b for b in decided if b.status in passed_statuses]
+    not_passed = [b for b in decided if b.status not in passed_statuses]
     # Upcoming hearings are always "from today", whatever week is shown: they
     # are the part of the page a reader can still act on.
     today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -860,7 +868,11 @@ async def legislation_week(
         "prev": (start_d - timedelta(days=1)).date().isoformat(),
         "next": (end_d + timedelta(days=7)).date().isoformat(),
         "introduced": [row(b) for b in introduced],
+        # "decided" kept for older cached pages; "passed" + "not_passed" are
+        # what the page reads. passed includes awaiting_mayor.
         "decided": [row(b) for b in decided],
+        "passed": [row(b) for b in passed],
+        "not_passed": [row(b) for b in not_passed],
     }
 
 

@@ -5,8 +5,15 @@ import { getCityConfig } from '@/lib/city'
 import { siteUrl } from '@/lib/site'
 import { BillCard } from '@/components/BillCard'
 import type { Bill } from '@/lib/types'
+import { WeekBySubject } from './WeekBySubject'
+import { HearingCalendar } from './HearingCalendar'
 
-type Week = { start: string; end: string; prev: string; next: string; introduced: Bill[]; decided: Bill[]; hearings?: Bill[] }
+type Week = {
+  start: string; end: string; prev: string; next: string
+  introduced: Bill[]; decided: Bill[]; hearings?: Bill[]
+  // Newer API fields. passed includes bills awaiting the Mayor's signature.
+  passed?: Bill[]; not_passed?: Bill[]
+}
 
 async function getWeek(end?: string): Promise<Week | null> {
   const qs = end && /^\d{4}-\d{2}-\d{2}$/.test(end) ? `?end=${end}` : ''
@@ -31,12 +38,13 @@ export async function generateMetadata({ params }: { params: Promise<{ city: str
   const config = getCityConfig(city)
   if (!config) return {}
   const title = `This Week in ${config.fullCouncilName}`
-  const description = `Every bill introduced and every bill decided in ${config.fullCouncilName} this week, in plain English.`
+  const description = `What ${config.fullCouncilName} worked on this week by subject, every bill introduced and passed, and the hearings coming up, in plain English.`
   return { title, description, alternates: { canonical: siteUrl(`/${city}/this-week`) }, openGraph: { title, description } }
 }
 
 /**
- * A weekly recap: what was introduced, what became law, what failed.
+ * A weekly recap: what Council focused on, what was introduced, what passed,
+ * what failed, and a calendar of the hearings coming up.
  *
  * A reason to come back on a rhythm (Council meets weekly) and a single link
  * worth sharing on a Friday, where a list of 8,693 bills is not. Server
@@ -63,8 +71,10 @@ export default async function ThisWeekPage({
     )
   }
 
-  const enacted = w.decided.filter((b) => b.status === 'signed_into_law')
-  const defeated = w.decided.filter((b) => b.status !== 'signed_into_law')
+  const passed = w.passed ?? w.decided.filter((b) => b.status === 'signed_into_law')
+  const defeated = w.not_passed ?? w.decided.filter((b) => b.status !== 'signed_into_law')
+  const enacted = passed.filter((b) => b.status === 'signed_into_law')
+  const awaiting = passed.filter((b) => b.status === 'awaiting_mayor')
   const isLatest = !week
   const nextIsFuture = new Date(`${w.next}T12:00:00`) > new Date()
 
@@ -77,9 +87,10 @@ export default async function ThisWeekPage({
         <div className="flex flex-wrap gap-2 pt-1">
           {[
             [w.introduced.length, 'introduced'],
+            [awaiting.length, 'passed, awaiting the Mayor'],
             [enacted.length, 'became law'],
             [defeated.length, 'failed or vetoed'],
-          ].map(([n, label]) => (
+          ].filter(([n, label]) => n !== 0 || label === 'introduced').map(([n, label]) => (
             <span key={String(label)} className="rounded-full border px-3 py-1 text-sm">
               <span className="font-semibold tabular-nums">{n}</span> {label}
             </span>
@@ -87,39 +98,24 @@ export default async function ThisWeekPage({
         </div>
       </header>
 
-      {(w.hearings?.length ?? 0) > 0 && (
-        <section className="space-y-4" aria-labelledby="hearings">
-          <div>
-            <h2 id="hearings" className="type-section">Coming up: public hearings</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Committees hear testimony before voting. Open any bill and tap the bell to get a reminder the day before.
-            </p>
-          </div>
-          {Object.entries(
-            (w.hearings ?? []).reduce<Record<string, Bill[]>>((acc, b) => {
-              const k = `${b.next_hearing_date?.slice(0, 10)}|${b.next_hearing_time ?? ''}|${b.next_hearing_body ?? ''}`
-              ;(acc[k] ||= []).push(b)
-              return acc
-            }, {}),
-          ).map(([k, bills]) => {
-            const [date, time, body] = k.split('|')
-            return (
-              <div key={k} className="space-y-2">
-                <p className="text-sm font-semibold">
-                  {fmt(date, { weekday: 'long', month: 'long', day: 'numeric' })}{time ? `, ${time}` : ''}
-                  {body && <span className="font-normal text-muted-foreground">{` · ${body}`}</span>}
-                </p>
-                <div className="space-y-2">{bills.map((b) => <BillCard key={b.id} bill={b} citySlug={city} />)}</div>
-              </div>
-            )
-          })}
-        </section>
-      )}
+      <WeekBySubject introduced={w.introduced} passed={passed} citySlug={city} />
+
+      <HearingCalendar hearings={w.hearings ?? []} citySlug={city} />
 
       {enacted.length > 0 && (
         <section className="space-y-3" aria-labelledby="enacted">
           <h2 id="enacted" className="type-section">Became law</h2>
           <div className="space-y-2">{enacted.map((b) => <BillCard key={b.id} bill={b} showDate citySlug={city} />)}</div>
+        </section>
+      )}
+
+      {awaiting.length > 0 && (
+        <section className="space-y-3" aria-labelledby="awaiting">
+          <div>
+            <h2 id="awaiting" className="type-section">Passed Council, awaiting the Mayor</h2>
+            <p className="text-sm text-muted-foreground mt-1">The Mayor can sign these or veto them.</p>
+          </div>
+          <div className="space-y-2">{awaiting.map((b) => <BillCard key={b.id} bill={b} showDate citySlug={city} />)}</div>
         </section>
       )}
 
