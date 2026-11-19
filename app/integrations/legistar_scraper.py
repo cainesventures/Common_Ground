@@ -709,7 +709,12 @@ class PhilaLegistarScraper:
         import re as _re
 
         results: List[Dict[str, Any]] = []
-        now = datetime.utcnow()
+        # Today in Philadelphia, as a date. Meeting dates parse to midnight, so
+        # comparing them to the current UTC time dropped every meeting held
+        # today, and after ~7pm Eastern (UTC midnight) tomorrow's as well: the
+        # Nov 18 2026 evening publish lost the next morning's Council session.
+        from zoneinfo import ZoneInfo
+        today = datetime.now(ZoneInfo("America/New_York")).date()
 
         class AgendaParser(HTMLParser):
             """Extract bill file numbers from agenda HTML.
@@ -763,7 +768,7 @@ class PhilaLegistarScraper:
                     location_text = cells[4].inner_text().strip() if len(cells) > 4 else ""
 
                     meeting_date = _parse_date(date_text)
-                    if not meeting_date or meeting_date < now:
+                    if not meeting_date or meeting_date.date() < today:
                         continue  # skip past meetings
 
                     # Find "Meeting details" and "Accessible Agenda" links in the row
