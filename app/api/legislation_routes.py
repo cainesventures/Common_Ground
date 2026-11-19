@@ -853,8 +853,12 @@ async def legislation_week(
     passed = [b for b in decided if b.status in passed_statuses]
     not_passed = [b for b in decided if b.status not in passed_statuses]
     # Upcoming hearings are always "from today", whatever week is shown: they
-    # are the part of the page a reader can still act on.
-    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # are the part of the page a reader can still act on. Today in
+    # Philadelphia: hearing dates are stored as local midnight, and a UTC
+    # "today" hid the day's meetings from ~7pm Eastern on.
+    from zoneinfo import ZoneInfo
+    today = datetime.now(ZoneInfo("America/New_York")).replace(
+        hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     hearings = (
         db.query(Legislation)
         .filter(Legislation.level == "local", Legislation.next_hearing_date >= today)
